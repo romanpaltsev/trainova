@@ -148,7 +148,11 @@ activemq-data/
 *.sage.py
 
 # Environments
+# .env.* закрыт целиком, примеры — исключения: секреты не должны попасть в git
 .env
+.env.*
+!.env.example
+!.env.prod.example
 .envrc
 .venv
 env/
@@ -217,3 +221,13 @@ __marimo__/
 
 # WSL / Windows
 *:Zone.Identifier
+# Секреты и бэкапы окружения (этап деплоя)
+rclone.conf
+deploy/secrets/
+*.dump
+*.dump.gz
+*.sql.gz
+
+# Собранная статика: нужен только сам каталог
+/staticfiles/*
+!/staticfiles/.gitkeep
