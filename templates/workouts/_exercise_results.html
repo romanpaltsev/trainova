@@ -1,0 +1,23 @@
+{% comment %}
+  Результаты поиска упражнений. Выбор отвечает пустым телом (модалка закрывается)
+  плюс OOB-обновлением региона упражнений — паттерн SportCreateView.
+{% endcomment %}
+{% for exercise in exercises %}
+  <button type="button" class="app-pick-row"
+          hx-post="{% url 'live_exercises' workout.pk %}"
+          hx-vals='{"exercise": "{{ exercise.pk }}"}'
+          hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
+    <span class="app-pick-name">{{ exercise.name }}</span>
+    {% if exercise.muscle_group %}<span class="app-pick-meta">{{ exercise.muscle_group }}</span>{% endif %}
+  </button>
+{% empty %}
+  {% if not offer_create %}<p class="text-secondary-app mb-0">Ничего не найдено.</p>{% endif %}
+{% endfor %}
+{% if offer_create %}
+  {% comment %}Название едет hidden-полем: в hx-vals кавычки пользователя сломали бы JSON.{% endcomment %}
+  <form hx-post="{% url 'live_exercises' workout.pk %}" hx-target="#modal" hx-swap="innerHTML"
+        hx-disabled-elt="find button">
+    <input type="hidden" name="name" value="{{ q }}">
+    <button type="submit" class="app-pick-row app-pick-create">+ Создать «{{ q }}»</button>
+  </form>
+{% endif %}

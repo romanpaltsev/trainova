@@ -26,7 +26,10 @@
       <p class="mb-3">
         {% if sport_filter %}По этому виду спорта тренировок пока нет.{% else %}Тренировок пока нет.{% endif %}
       </p>
-      <a class="btn btn-accent" href="{% url 'cardio_create' %}">Записать тренировку</a>
+      <button type="button" class="btn btn-accent"
+              hx-get="{% url 'workout_start' %}" hx-target="#modal" hx-swap="innerHTML">
+        Записать тренировку
+      </button>
     </div>
   {% endif %}
 </div>

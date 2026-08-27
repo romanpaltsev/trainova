@@ -1,0 +1,52 @@
+{% comment %}
+  Панель текущего подхода. Степперы сохраняют каждый тап сразу и свапают только
+  span со значением — кнопки не пересоздаются, серия быстрых тапов не теряется.
+  Общая sync-очередь сериализует тапы и «Подход выполнен».
+{% endcomment %}
+<div class="app-live-current">
+  <div class="app-live-current-head">
+    <span class="app-live-set-num">{{ set.display_number }}</span>
+    <span class="text-secondary-app">текущий подход</span>
+  </div>
+
+  {% if error %}<div class="invalid-feedback d-block mb-2">{{ error }}</div>{% endif %}
+
+  <div class="app-field-grid">
+    <div>
+      <div class="app-stepper-label">Вес, кг</div>
+      <div class="app-stepper">
+        <button type="button" class="app-stepper-btn" aria-label="Минус 2,5 кг"
+                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "weight", "dir": "down"}'
+                hx-target="#cs-weight" hx-swap="innerHTML"
+                hx-sync="closest .app-live-current:queue all">−</button>
+        <span id="cs-weight" class="num app-stepper-value">{{ set.weight_display }}</span>
+        <button type="button" class="app-stepper-btn" aria-label="Плюс 2,5 кг"
+                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "weight", "dir": "up"}'
+                hx-target="#cs-weight" hx-swap="innerHTML"
+                hx-sync="closest .app-live-current:queue all">+</button>
+      </div>
+      <div class="app-stepper-hint">шаг 2,5</div>
+    </div>
+    <div>
+      <div class="app-stepper-label">Повторы</div>
+      <div class="app-stepper">
+        <button type="button" class="app-stepper-btn" aria-label="Минус повтор"
+                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "reps", "dir": "down"}'
+                hx-target="#cs-reps" hx-swap="innerHTML"
+                hx-sync="closest .app-live-current:queue all">−</button>
+        <span id="cs-reps" class="num app-stepper-value">{{ set.reps }}</span>
+        <button type="button" class="app-stepper-btn" aria-label="Плюс повтор"
+                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "reps", "dir": "up"}'
+                hx-target="#cs-reps" hx-swap="innerHTML"
+                hx-sync="closest .app-live-current:queue all">+</button>
+      </div>
+      <div class="app-stepper-hint">шаг 1</div>
+    </div>
+  </div>
+
+  <button type="button" class="btn btn-accent w-100 app-btn-big"
+          hx-post="{% url 'set_done' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
+          hx-sync="closest .app-live-current:queue all" hx-disabled-elt="this">
+    Подход выполнен
+  </button>
+</div>

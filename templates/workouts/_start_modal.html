@@ -1,0 +1,42 @@
+{% comment %}Чузер «+»: продолжить активную тренировку, начать силовую или записать кардио.{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="start-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="start-modal-title">Новая тренировка</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    {% if active %}
+      <a class="btn btn-accent w-100 mb-2" href="{% url 'workout_live' active.pk %}">
+        Продолжить тренировку · идёт {{ active.elapsed_min }} мин
+      </a>
+    {% endif %}
+
+    <div class="app-pick-list">
+      {% if not active %}
+        {% for sport in strength_sports %}
+          <form method="post" action="{% url 'strength_start' %}">
+            {% csrf_token %}
+            <input type="hidden" name="sport" value="{{ sport.pk }}">
+            <button type="submit" class="app-pick-row">
+              <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
+              <span class="app-pick-name">{{ sport.name }}</span>
+              <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                   stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                   stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+          </form>
+        {% endfor %}
+      {% endif %}
+      <a class="app-pick-row" href="{% url 'cardio_create' %}">
+        <span class="app-pick-name">Кардио — записать</span>
+        <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </a>
+    </div>
+  </div>
+</div>

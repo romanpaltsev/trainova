@@ -35,7 +35,11 @@
   </script>
   {% block extra_head %}{% endblock %}
 </head>
-<body>
+{% comment %}
+  hx-headers наследуется всеми hx-запросами: кнопки живого режима шлют POST
+  без формы, и CSRF-токен едет заголовком.
+{% endcomment %}
+<body hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
   {% block body %}{% endblock %}
 
   <script src="{% static 'js/theme.js' %}"></script>

@@ -45,6 +45,13 @@
     <p class="app-workout-note text-secondary-app">{{ workout.note }}</p>
   {% endif %}
 {% if workout.sport.is_strength %}
+  <div class="app-workout-actions">
+    <form method="post" action="{% url 'workout_repeat' workout.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-quiet w-100">Повторить</button>
+    </form>
+    <a class="btn btn-quiet" href="{% url 'workout_summary' workout.pk %}">Открыть</a>
+  </div>
   </article>
 {% else %}
   </a>

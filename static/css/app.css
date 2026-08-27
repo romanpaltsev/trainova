@@ -141,13 +141,18 @@ body {
   border-top: 1px solid var(--app-line);
 }
 
-.app-bottom-nav a {
+/* Кнопка «+» — button, а не ссылка: она открывает модалку, а не страницу */
+.app-bottom-nav a,
+.app-bottom-nav button {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
   height: var(--app-bottom-nav-height);
+  padding: 0;
+  border: 0;
+  background-color: transparent;
   color: var(--app-text-secondary);
   font-size: 0.75rem;
   font-weight: 600;
@@ -576,6 +581,360 @@ body {
   white-space: nowrap;
 }
 
+/* ---------- Живой режим ---------- */
+
+.app-live-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.app-live-status {
+  color: var(--app-text-secondary);
+  font-size: 0.9375rem;
+}
+
+.app-rest {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.app-rest-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.app-rest-label {
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+}
+
+.app-rest-skip {
+  min-height: var(--app-tap-target);
+  padding: 0 0.25rem;
+  border: 0;
+  background-color: transparent;
+  color: var(--app-accent-text);
+  font-weight: 700;
+}
+
+.app-rest-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.25rem 0 0.875rem;
+}
+
+.app-rest-adjust {
+  flex: 0 0 auto;
+  border: 1px solid var(--app-line);
+  background-color: var(--app-raised);
+  color: var(--app-text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+/* Крупные цифры таймера: акцент как текст — только через --app-accent-text */
+.app-rest-time {
+  font-size: clamp(3rem, 18vw, 4.25rem);
+  line-height: 1;
+  color: var(--app-accent-text);
+}
+
+.app-progress {
+  height: 6px;
+  border-radius: var(--app-radius-pill);
+  background-color: var(--app-raised);
+  overflow: hidden;
+}
+
+.app-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: var(--app-radius-pill);
+  background-color: var(--app-accent);
+  transition: width 0.25s linear;
+}
+
+.app-live-exercise {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.app-live-exercise-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.app-live-exercise-name {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.app-live-exercise-meta {
+  color: var(--app-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-live-last {
+  margin: 0.25rem 0 0;
+  color: var(--app-text-secondary);
+  font-size: 0.9375rem;
+}
+
+.app-live-sets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.app-live-set {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: var(--app-tap-target);
+  padding: 0.625rem 1rem;
+  border: 0;
+  border-radius: var(--app-radius-field);
+  background-color: var(--app-raised);
+  color: var(--app-text);
+  font-weight: 700;
+  text-align: left;
+}
+
+/* Плановый (ещё не выполненный) подход читается как план, а не как факт */
+.app-live-set.is-planned {
+  border: 1px dashed var(--app-line);
+  background-color: transparent;
+  color: var(--app-text-secondary);
+}
+
+.app-live-set-num {
+  min-width: 1.25rem;
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+.app-live-set-check {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--app-accent-text);
+}
+
+/* Текущий подход: 1px акцента на белой карточке невидим — двойная линия, как у чипов */
+.app-live-current {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--app-accent);
+  border-radius: var(--app-radius-card);
+  box-shadow: inset 0 0 0 1px var(--app-accent);
+}
+
+.app-live-current-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-live-current .app-field-grid { margin-bottom: 0.75rem; }
+
+.app-stepper-label {
+  margin-bottom: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-secondary);
+  text-align: center;
+}
+
+.app-stepper {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border-radius: var(--app-radius-field);
+  background-color: var(--app-raised);
+}
+
+.app-stepper-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--app-tap-target);
+  height: var(--app-tap-target);
+  border: 0;
+  border-radius: calc(var(--app-radius-field) - 4px);
+  background-color: var(--app-card);
+  color: var(--app-text);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.app-stepper-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.5rem;
+  text-align: center;
+}
+
+.app-stepper-hint {
+  margin-top: 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--app-text-muted);
+  text-align: center;
+}
+
+.app-btn-big {
+  min-height: 56px;
+  font-size: 1.125rem;
+}
+
+.app-live-links {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.app-live-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--app-tap-target);
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+.app-live-link.is-accent { color: var(--app-accent-text); }
+
+.app-queue-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.75rem;
+  color: var(--app-text);
+  text-align: left;
+}
+
+.app-queue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.app-queue-name { font-weight: 800; }
+
+.app-queue-hint {
+  color: var(--app-text-secondary);
+  font-size: 0.875rem;
+}
+
+.app-pick-chevron {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--app-text-muted);
+}
+
+.app-live-add-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 56px;
+  margin-bottom: 1rem;
+  border: 1px dashed var(--app-line);
+  border-radius: var(--app-radius-card);
+  background-color: transparent;
+  color: var(--app-text-secondary);
+  font-weight: 700;
+}
+
+/* Списки выбора в модалках: старт тренировки, поиск упражнения */
+.app-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 50vh;
+  margin-top: 0.75rem;
+  overflow-y: auto;
+}
+
+/* Строки-формы (старт, «создать») ведут себя как обычные строки списка */
+.app-pick-list form { display: contents; }
+
+.app-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  min-height: var(--app-tap-target);
+  padding: 0.625rem 0.75rem;
+  border: 0;
+  border-radius: var(--app-radius-field);
+  background-color: transparent;
+  color: var(--app-text);
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+}
+
+.app-pick-row:hover {
+  background-color: var(--app-raised);
+  color: var(--app-text);
+}
+
+.app-pick-meta {
+  margin-left: auto;
+  color: var(--app-text-muted);
+  font-size: 0.875rem;
+}
+
+.app-pick-meta + .app-pick-chevron,
+.app-pick-name + .app-pick-chevron { margin-left: auto; }
+
+.app-pick-meta ~ .app-pick-chevron { margin-left: 0.5rem; }
+
+.app-pick-create {
+  border: 1px dashed var(--app-line);
+  color: var(--app-accent-text);
+  font-weight: 700;
+}
+
+/* Кнопки силовой карточки истории: широкая «Повторить», узкая «Открыть» */
+.app-workout-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.875rem;
+}
+
+.app-workout-actions form { flex: 1 1 auto; }
+
 /* ---------- Десктоп ---------- */
 
 @media (min-width: 768px) {
@@ -583,6 +942,13 @@ body {
   .app-form-actions { max-width: 26rem; }
   .app-computed { max-width: 34rem; }
   .app-workout { max-width: 44rem; }
+  /* Живой режим на десктопе — узкая колонна, как форма кардио */
+  .app-live-head,
+  .app-rest,
+  .app-live-exercise,
+  .app-queue-row,
+  .app-live-add-tile { max-width: 34rem; }
+  .app-rest-time { font-size: 4.5rem; }
   .app-modal-backdrop { align-items: center; }
   /* На широком экране карточка входа стоит по центру, а не прижата к верху */
   .app-auth { justify-content: center; padding-bottom: 4rem; }

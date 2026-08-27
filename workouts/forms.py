@@ -5,7 +5,7 @@ from datetime import datetime, time
 from django import forms
 from django.utils import timezone
 
-from workouts.models import CardioDetails, Sport, Workout
+from workouts.models import CardioDetails, Exercise, Sport, Workout
 
 MAX_DURATION_HOURS = 24
 # Время, которое ставим тренировке, записанной за прошедший день: точное время
@@ -185,3 +185,34 @@ class SportForm(forms.ModelForm):
         if commit:
             sport.save()
         return sport
+
+
+class ExerciseQuickForm(forms.ModelForm):
+    """Быстрое создание упражнения из живого режима: одно поле «название»."""
+
+    class Meta:
+        model = Exercise
+        fields = ("name",)
+        error_messages = {"name": {"required": "Введите название."}}
+
+    def __init__(self, *args, user, **kwargs):
+        self.user = user
+        super().__init__(*args, **kwargs)
+
+    def clean_name(self):
+        return self.cleaned_data["name"].strip()
+
+    def save_for_user(self):
+        """Вернуть видимое упражнение с таким именем или создать личное.
+
+        Посреди тренировки ввод существующего названия означает «добавь его»,
+        а не ошибку дубля — намеренное отличие от SportForm.
+        """
+        name = self.cleaned_data["name"]
+        existing = Exercise.objects.visible_to(self.user).filter(name__iexact=name).first()
+        if existing is not None:
+            return existing
+        exercise = self.save(commit=False)
+        exercise.owner = self.user
+        exercise.save()
+        return exercise

@@ -1,0 +1,100 @@
+{% comment %}
+  Регион упражнений живого режима: текущее упражнение, очередь «Дальше», выполненные.
+  Все действия свапают регион целиком (hx-target="#exercises"); карточку отдыха
+  обновляет только OOB-ответ «Подход выполнен».
+{% endcomment %}
+<div id="exercises"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% if current_group %}
+    <section class="app-card app-live-exercise">
+      <div class="app-live-exercise-head">
+        <h2 class="app-live-exercise-name">{{ current_group.exercise.name }}</h2>
+        <span class="app-sport-dot" style="--dot: var(--app-sport-strength)"></span>
+      </div>
+      <p class="app-live-last">{{ current_group.hint }}</p>
+
+      {% if current_group.done_sets %}
+        <div class="app-live-sets">
+          {% for set in current_group.done_sets %}
+            {% include "workouts/_live_done_set.html" %}
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% include "workouts/_live_current_set.html" with set=current_group.current_set %}
+
+      {% if current_group.upcoming %}
+        <div class="app-live-sets">
+          {% for set in current_group.upcoming %}
+            <div class="app-live-set is-planned">
+              <span class="app-live-set-num">{{ set.display_number }}</span>
+              <span class="app-live-set-value">
+                <span class="num">{{ set.weight_display }}</span> кг ×
+                <span class="num">{{ set.reps }}</span>
+              </span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="app-live-links">
+        <button type="button" class="app-live-link is-accent"
+                hx-post="{% url 'live_set_add' workout.pk %}"
+                hx-vals='{"exercise": "{{ current_group.exercise.pk }}"}'
+                hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+          + Добавить подход
+        </button>
+        <button type="button" class="app-live-link"
+                hx-post="{% url 'set_delete' current_group.current_set.pk %}"
+                hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+          Убрать подход
+        </button>
+      </div>
+    </section>
+  {% endif %}
+
+  {% if queue_groups %}
+    <h2 class="app-section-title">Дальше</h2>
+    {% for group in queue_groups %}
+      <button type="button" class="app-card app-queue-row"
+              hx-post="{% url 'live_exercise_select' workout.pk %}"
+              hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
+              hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+        <span class="app-queue-text">
+          <span class="app-queue-name">{{ group.exercise.name }}</span>
+          <span class="app-queue-hint">{{ group.hint }}</span>
+        </span>
+        <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+    {% endfor %}
+  {% endif %}
+
+  {% if not current_group and not done_groups %}
+    <p class="text-secondary-app">
+      Добавьте первое упражнение — подходы подставятся из прошлой тренировки.
+    </p>
+  {% endif %}
+
+  <button type="button" class="app-live-add-tile"
+          hx-get="{% url 'live_exercises' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
+    + Упражнение
+  </button>
+
+  {% if done_groups %}
+    <h2 class="app-section-title">Выполнено</h2>
+    {% for group in done_groups %}
+      <section class="app-card app-live-exercise">
+        <div class="app-live-exercise-head">
+          <h2 class="app-live-exercise-name">{{ group.exercise.name }}</h2>
+          <span class="app-live-exercise-meta">{{ group.hint }}</span>
+        </div>
+        <div class="app-live-sets">
+          {% for set in group.done_sets %}
+            {% include "workouts/_live_done_set.html" %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endfor %}
+  {% endif %}
+</div>

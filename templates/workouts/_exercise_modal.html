@@ -1,0 +1,32 @@
+{% comment %}
+  Модалка «+ Упражнение»: поиск с задержкой по видимым упражнениям; если точного
+  совпадения нет — то же поле служит названием для быстрого создания личного.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="exercise-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="exercise-modal-title">Упражнение</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    {% comment %}hx-sync="this:replace" отменяет устаревший запрос при быстром наборе.{% endcomment %}
+    <input type="search" name="q" value="{{ q }}" class="form-control"
+           placeholder="Найти или создать" autofocus autocomplete="off"
+           hx-get="{% url 'live_exercises' workout.pk %}"
+           hx-trigger="input changed delay:300ms"
+           hx-target="#exercise-results" hx-swap="innerHTML" hx-sync="this:replace">
+    {% if form %}
+      {% for error in form.name.errors %}
+        <div class="invalid-feedback d-block mt-2">{{ error }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <div id="exercise-results" class="app-pick-list">
+      {% include "workouts/_exercise_results.html" %}
+    </div>
+  </div>
+</div>

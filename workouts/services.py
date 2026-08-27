@@ -64,9 +64,7 @@ def create_planned_sets(workout, exercise):
             done=False,
         )
         for number, source in enumerate(previous, start=1)
-    ] or [
-        StrengthSet(workout=workout, exercise=exercise, set_number=1, weight_kg=0, reps=0)
-    ]
+    ] or [StrengthSet(workout=workout, exercise=exercise, set_number=1, weight_kg=0, reps=0)]
     StrengthSet.objects.bulk_create(rows)
     return rows
 
@@ -87,6 +85,9 @@ def exercise_groups(workout):
         groups[index[row.exercise_id]]["sets"].append(row)
     for group in groups:
         group["sets"].sort(key=lambda item: item.set_number)
+        # Номер на экране — позиция в списке: в set_number могут остаться пропуски.
+        for position, row in enumerate(group["sets"], start=1):
+            row.display_number = position
     return groups
 
 
@@ -107,7 +108,10 @@ def live_groups(workout):
         group["done_sets"] = [s for s in sets if s.done]
         if group["exercise"].pk == current_id:
             group["state"] = "current"
-            group["current_set"] = next(s for s in sets if not s.done)
+            pending = [s for s in sets if not s.done]
+            group["current_set"] = pending[0]
+            # Остальные плановые подходы показываются как план под текущим.
+            group["upcoming"] = pending[1:]
             group["hint"] = last_time_hint(last_sets(workout.user, group["exercise"]))
         elif group["exercise"].pk in pending_ids:
             group["state"] = "queue"
@@ -116,6 +120,17 @@ def live_groups(workout):
             group["state"] = "done"
             group["hint"] = done_hint(sets)
     return groups
+
+
+def live_context(workout):
+    """Контекст региона упражнений: группы, разложенные по статусам."""
+    groups = live_groups(workout)
+    return {
+        "workout": workout,
+        "current_group": next((g for g in groups if g["state"] == "current"), None),
+        "queue_groups": [g for g in groups if g["state"] == "queue"],
+        "done_groups": [g for g in groups if g["state"] == "done"],
+    }
 
 
 def last_time_hint(previous):

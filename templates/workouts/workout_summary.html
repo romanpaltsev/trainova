@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Тренировка · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'workout_history' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <div>
+    <h1 class="app-page-title mb-0">{{ workout.sport.name }}</h1>
+    <div class="text-secondary-app">{{ workout.started_at|date:"D, j b, H:i"|lower }}</div>
+  </div>
+</div>
+
+<section class="app-card app-live-exercise">
+  <dl class="app-metrics mb-0">
+    <div>
+      <dt>время</dt>
+      <dd class="num">{{ workout.duration_display }}</dd>
+    </div>
+    <div>
+      <dt>упражнений</dt>
+      <dd class="num">{{ groups|length }}</dd>
+    </div>
+    <div>
+      <dt>тоннаж</dt>
+      <dd class="num">{{ total_tonnage|floatformat:0 }} кг</dd>
+    </div>
+  </dl>
+</section>
+
+{% for group in groups %}
+  <section class="app-card app-live-exercise">
+    <div class="app-live-exercise-head">
+      <h2 class="app-live-exercise-name">{{ group.exercise.name }}</h2>
+      <span class="app-live-exercise-meta">{{ group.tonnage|floatformat:0 }} кг</span>
+    </div>
+    <div class="app-live-sets">
+      {% for set in group.sets %}
+        <div class="app-live-set">
+          <span class="app-live-set-num">{{ set.display_number }}</span>
+          <span class="app-live-set-value">
+            <span class="num">{{ set.weight_display }}</span> кг × <span class="num">{{ set.reps }}</span>
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endfor %}
+
+<div class="app-form-actions">
+  <form method="post" action="{% url 'workout_repeat' workout.pk %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-accent w-100">Повторить тренировку</button>
+  </form>
+  <a class="btn btn-danger-quiet w-100" href="{% url 'workout_delete' workout.pk %}">Удалить тренировку</a>
+</div>
+{% endblock %}

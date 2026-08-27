@@ -1,0 +1,37 @@
+{% comment %}
+  Карточка отдыха. Пересоздаётся только OOB-ответом «Подход выполнен»
+  (пересоздание с data-autostart = автостарт таймера); остальные действия
+  живого режима её не трогают, чтобы не сбивать тикающий отсчёт.
+{% endcomment %}
+<section id="rest-card" class="app-card app-rest"{% if oob %} hx-swap-oob="true"{% endif %}
+         x-data="restTimer()" data-workout="{{ workout.pk }}"
+         data-duration="{{ rest_seconds }}"{% if autostart %} data-autostart="1"{% endif %}>
+  <div class="app-rest-top">
+    <span class="app-rest-label">Отдых</span>
+    <button type="button" class="app-rest-skip" x-show="running" x-cloak @click="skip()">
+      Пропустить
+    </button>
+  </div>
+
+  <div class="app-rest-body">
+    {% comment %}Тикающий таймер: ±15 — разовая подкрутка, не сохраняется.{% endcomment %}
+    <button type="button" class="app-icon-btn app-rest-adjust" aria-label="Минус 15 секунд"
+            x-show="running" x-cloak @click="bump(-15)">−15</button>
+    {% comment %}Покой: ±15 меняют сохранённый отдых тренировки (rest_seconds).{% endcomment %}
+    <button type="button" class="app-icon-btn app-rest-adjust" aria-label="Минус 15 секунд"
+            x-show="!running" @click="adjust(-15)"
+            hx-post="{% url 'live_rest' workout.pk %}" hx-vals='{"delta": "-15"}'
+            hx-swap="none" hx-sync="closest .app-rest:queue all">−15</button>
+
+    <div class="num app-rest-time" x-text="display()">{{ rest_display }}</div>
+
+    <button type="button" class="app-icon-btn app-rest-adjust" aria-label="Плюс 15 секунд"
+            x-show="running" x-cloak @click="bump(15)">+15</button>
+    <button type="button" class="app-icon-btn app-rest-adjust" aria-label="Плюс 15 секунд"
+            x-show="!running" @click="adjust(15)"
+            hx-post="{% url 'live_rest' workout.pk %}" hx-vals='{"delta": "15"}'
+            hx-swap="none" hx-sync="closest .app-rest:queue all">+15</button>
+  </div>
+
+  <div class="app-progress"><div class="app-progress-bar" x-ref="bar"></div></div>
+</section>

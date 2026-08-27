@@ -129,7 +129,8 @@ def test_empty_feed_offers_to_record_workout(client, user):
     content = client.get(reverse("workout_history")).content.decode()
 
     assert "Тренировок пока нет" in content
-    assert reverse("cardio_create") in content
+    # Кнопка открывает чузер «+»: оттуда доступны и силовая, и кардио.
+    assert reverse("workout_start") in content
 
 
 def test_order_is_stable_when_started_at_is_identical(client, user):

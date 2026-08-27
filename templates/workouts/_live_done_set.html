@@ -1,0 +1,12 @@
+{% comment %}Строка выполненного подхода; тап возвращает подход в работу.{% endcomment %}
+<button type="button" class="app-live-set is-done" title="Вернуть подход в работу"
+        hx-post="{% url 'set_undo' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
+        hx-disabled-elt="this">
+  <span class="app-live-set-num">{{ set.display_number }}</span>
+  <span class="app-live-set-value">
+    <span class="num">{{ set.weight_display }}</span> кг × <span class="num">{{ set.reps }}</span>
+  </span>
+  <svg class="app-live-set-check" width="20" height="20" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+       aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+</button>

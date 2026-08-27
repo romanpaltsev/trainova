@@ -6,6 +6,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
+from django.utils import timezone
 from django.utils.timezone import localtime
 
 # Выше этой скорости показываем км/ч (вело, лыжи), ниже — мин/км (бег, ходьба).
@@ -221,6 +222,11 @@ class Workout(models.Model):
             return "—"
         hours, minutes = divmod(self.duration_min, 60)
         return f"{hours}:{minutes:02d}"
+
+    @property
+    def elapsed_min(self):
+        """Минуты с начала — тикающая длительность активной тренировки."""
+        return int((timezone.now() - self.started_at).total_seconds() // 60)
 
     @property
     def effective_rest_seconds(self):
