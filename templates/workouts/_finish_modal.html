@@ -21,7 +21,7 @@
       {% csrf_token %}
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-accent flex-fill"
-                @click="try { localStorage.removeItem('app-rest-{{ workout.pk }}') } catch (e) {}">
+                @click="clearRestTimer({{ workout.pk }})">
           Завершить
         </button>
         <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>

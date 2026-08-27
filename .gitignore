@@ -221,6 +221,9 @@ __marimo__/
 
 # WSL / Windows
 *:Zone.Identifier
+
+# Скриншоты и снапшоты Playwright при вёрстке
+.playwright-mcp/
 # Секреты и бэкапы окружения (этап деплоя)
 rclone.conf
 deploy/secrets/

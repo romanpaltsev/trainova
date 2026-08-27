@@ -184,8 +184,10 @@ if env("DJANGO_STATIC_MANIFEST"):
         "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
         "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
     }
-
-WHITENOISE_MAX_AGE = 31536000  # год: имена файлов содержат хэш содержимого
+    # Год кэша можно позволить только здесь: имена файлов содержат хэш содержимого.
+    # Без манифеста (разработка) кэшировать нельзя — правки статики не доходили бы
+    # до браузера.
+    WHITENOISE_MAX_AGE = 31536000
 
 
 # Безопасность за обратным прокси

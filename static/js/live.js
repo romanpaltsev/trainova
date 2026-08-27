@@ -44,6 +44,15 @@ const liveAudio = {
 
 document.addEventListener("pointerdown", () => liveAudio.unlock(), { once: true });
 
+// Забыть сохранённый отсчёт отдыха — вызывается из модалки завершения.
+function clearRestTimer(workoutId) {
+  try {
+    localStorage.removeItem(`app-rest-${workoutId}`);
+  } catch (e) {
+    /* приватный режим */
+  }
+}
+
 // «тренировка идёт · 42:16» в шапке живого экрана.
 function liveClock() {
   return {
