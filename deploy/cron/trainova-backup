@@ -1,0 +1,12 @@
+# Ежедневный бэкап базы «Дневника тренировок».
+# Установка: sudo cp deploy/cron/trainova-backup /etc/cron.d/trainova-backup
+# Права на файл в /etc/cron.d должны быть 644 и владелец root, иначе cron его игнорирует.
+#
+# Время 04:17 — не круглое специально: в 04:00 у хостеров пик фоновых задач.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+17 4 * * * root cd /opt/trainova && ./scripts/backup.sh >> /var/log/trainova-backup.log 2>&1
+
+# Продление сертификата: certbot сам решит, пора ли, и перезагрузит nginx.
+41 3 * * * root cd /opt/trainova && ./scripts/renew_cert.sh >> /var/log/trainova-cert.log 2>&1
