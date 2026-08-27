@@ -1,0 +1,96 @@
+/* Фирменные токены «Дневника тренировок».
+   Значения — из раздела «Дизайн» CLAUDE.md. Хардкод цветов вне этого файла запрещён. */
+
+:root,
+[data-bs-theme="light"] {
+  --app-bg: #F6F7F9;
+  --app-card: #FFFFFF;
+  --app-raised: #F0F2F5;
+  --app-line: rgba(15, 23, 32, 0.10);
+  --app-text: #16202B;
+  --app-text-secondary: #5A6675;
+  --app-text-muted: #8A95A5;
+  --app-accent: #C6F13E;
+  --app-on-accent: #141A08;
+  /* Акцент как цвет текста на фоне страницы: на светлой теме сам #C6F13E нечитаем */
+  --app-accent-text: #4F6B00;
+  --app-success: #006300;
+  --app-danger: #C4342B;
+
+  /* Виды спорта — цвет закреплён за видом, а не за порядком в наборе */
+  --app-sport-strength: #2a78d6;
+  --app-sport-bike: #eb6834;
+  --app-sport-run: #1baf7a;
+  --app-sport-ski: #eda100;
+
+  --app-shadow-card: 0 1px 2px rgba(15, 23, 32, 0.04);
+  --app-accent-glow: 0 6px 20px rgba(198, 241, 62, 0.28);
+}
+
+[data-bs-theme="dark"] {
+  --app-bg: #0D1015;
+  --app-card: #151A21;
+  --app-raised: #1B222B;
+  --app-line: rgba(255, 255, 255, 0.08);
+  --app-text: #EDF1F7;
+  --app-text-secondary: #9AA5B5;
+  --app-text-muted: #77828F;
+  --app-accent: #C6F13E;
+  --app-on-accent: #141A08;
+  --app-accent-text: #C6F13E;
+  --app-success: #0ca30c;
+  --app-danger: #E5645C;
+
+  --app-sport-strength: #3987e5;
+  --app-sport-bike: #d95926;
+  --app-sport-run: #199e70;
+  --app-sport-ski: #c98500;
+
+  --app-shadow-card: none;
+  --app-accent-glow: 0 6px 24px rgba(198, 241, 62, 0.22);
+}
+
+/* Радиусы, размеры, шрифты — общие для тем */
+:root {
+  --app-radius-card: 16px;
+  --app-radius-field: 12px;
+  --app-radius-pill: 999px;
+
+  --app-font-sans: "Manrope", system-ui, sans-serif;
+  --app-font-num: "Unbounded", system-ui, sans-serif;
+
+  --app-tap-target: 44px;
+  --app-header-height: 56px;
+  --app-bottom-nav-height: 64px;
+}
+
+/* Переопределение переменных Bootstrap нашими токенами */
+:root,
+[data-bs-theme="light"],
+[data-bs-theme="dark"] {
+  --bs-body-bg: var(--app-bg);
+  --bs-body-color: var(--app-text);
+  --bs-secondary-color: var(--app-text-secondary);
+  --bs-tertiary-color: var(--app-text-muted);
+  --bs-border-color: var(--app-line);
+  --bs-emphasis-color: var(--app-text);
+  --bs-heading-color: var(--app-text);
+  --bs-link-color: var(--app-text);
+  --bs-link-hover-color: var(--app-text);
+
+  --bs-primary: var(--app-accent);
+  --bs-primary-rgb: 198, 241, 62;
+  --bs-success: var(--app-success);
+  --bs-danger: var(--app-danger);
+  --bs-focus-ring-color: rgba(198, 241, 62, 0.35);
+
+  --bs-body-font-family: var(--app-font-sans);
+  --bs-body-font-size: 1rem;
+  --bs-body-font-weight: 400;
+
+  --bs-border-radius: var(--app-radius-field);
+  --bs-border-radius-sm: 10px;
+  --bs-border-radius-lg: var(--app-radius-card);
+  --bs-border-radius-xl: var(--app-radius-card);
+  --bs-border-radius-pill: var(--app-radius-pill);
+}
