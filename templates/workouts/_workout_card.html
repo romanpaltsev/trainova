@@ -1,0 +1,47 @@
+{% comment %}Карточка тренировки в ленте. Кардио открывается на правку по тапу.{% endcomment %}
+{% if workout.sport.is_strength %}
+  <article class="app-card app-workout" id="workout-{{ workout.pk }}">
+{% else %}
+  <a class="app-card app-workout app-workout-link" id="workout-{{ workout.pk }}"
+     href="{% url 'workout_edit' workout.pk %}">
+{% endif %}
+  <div class="app-workout-head">
+    <span class="app-workout-sport">
+      <span class="app-sport-dot" style="--dot: var(--app-sport-{{ workout.sport.color_key }})"></span>
+      {{ workout.sport.name }}
+    </span>
+    <span class="text-secondary-app">{{ workout.started_at|date:"D, j b"|lower }}</span>
+  </div>
+
+  <dl class="app-metrics">
+    <div>
+      <dt>время</dt>
+      <dd class="num">{{ workout.duration_display }}</dd>
+    </div>
+    {% if workout.sport.is_strength %}
+      <div>
+        <dt>подходов</dt>
+        <dd class="num">{{ workout.sets.count }}</dd>
+      </div>
+    {% else %}
+      {% with cardio=workout.cardio %}
+        <div>
+          <dt>дистанция</dt>
+          <dd class="num">{{ cardio.distance_display }} км</dd>
+        </div>
+        <div>
+          <dt>{{ cardio.metric_label }}</dt>
+          <dd class="num">{{ cardio.metric_display }}</dd>
+        </div>
+      {% endwith %}
+    {% endif %}
+  </dl>
+
+  {% if workout.note %}
+    <p class="app-workout-note text-secondary-app">{{ workout.note }}</p>
+  {% endif %}
+{% if workout.sport.is_strength %}
+  </article>
+{% else %}
+  </a>
+{% endif %}

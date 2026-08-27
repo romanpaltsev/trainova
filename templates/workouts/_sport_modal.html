@@ -1,0 +1,48 @@
+{% comment %}Модалка создания личного вида спорта. Закрытие — удалением себя из DOM.{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="sport-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="sport-modal-title">Свой вид спорта</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть"
+              @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <form hx-post="{% url 'sport_create' %}" hx-target="#modal" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <div class="app-alert app-alert-danger" role="alert">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+        {{ form.name }}
+        {% for error in form.name.errors %}
+          <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="mb-3">
+        <span class="form-label d-block">{{ form.category.label }}</span>
+        <div class="app-chips">
+          {% for radio in form.category %}
+            <input type="radio" name="{{ radio.data.name }}" id="{{ radio.id_for_label }}"
+                   value="{{ radio.data.value }}" class="app-chip-input"
+                   {% if radio.data.selected %}checked{% endif %}>
+            <label class="app-chip" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+          {% endfor %}
+        </div>
+        {% for error in form.category.errors %}
+          <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-accent flex-fill">Добавить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>

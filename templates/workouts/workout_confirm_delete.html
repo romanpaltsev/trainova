@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Удалить тренировку · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Удалить тренировку?</h1>
+
+<div class="app-card p-4">
+  <p class="mb-1">
+    <span class="app-sport-dot" style="--dot: var(--app-sport-{{ workout.sport.color_key }})"></span>
+    <strong>{{ workout.sport.name }}</strong> · {{ workout.started_at|date:"j E Y, H:i" }}
+  </p>
+  <p class="text-secondary-app">Действие нельзя отменить.</p>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="d-flex flex-column gap-2">
+      <button type="submit" class="btn btn-danger-quiet w-100">Удалить</button>
+      <a class="btn btn-quiet w-100" href="{% url 'workout_edit' workout.pk %}">Отмена</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

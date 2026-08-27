@@ -1,0 +1,22 @@
+{% comment %}
+  Чипы выбора вида спорта. При создании личного вида спорта модалка возвращает
+  этот же блок out-of-band, поэтому id и hx-swap-oob здесь, а не в родителе.
+{% endcomment %}
+<div id="sport-chips" class="app-chips"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for sport in sports %}
+    <input type="radio" name="sport" id="sport-{{ sport.pk }}" value="{{ sport.pk }}"
+           class="app-chip-input"
+           {% if selected_id|stringformat:"s" == sport.pk|stringformat:"s" %}checked{% endif %}>
+    <label class="app-chip" for="sport-{{ sport.pk }}">
+      <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
+      {{ sport.name }}
+    </label>
+  {% endfor %}
+
+  <button type="button" class="app-chip app-chip-add"
+          hx-get="{% url 'sport_create' %}" hx-target="#modal" hx-swap="innerHTML">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    Свой
+  </button>
+</div>

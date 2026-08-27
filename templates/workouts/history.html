@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}История · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">История</h1>
+
+{% if sports_used %}
+  <div class="app-chips app-filters">
+    <a class="app-chip {% if not sport_filter %}is-active{% endif %}" href="{% url 'workout_history' %}">Все</a>
+    {% for sport in sports_used %}
+      <a class="app-chip {% if sport_filter == sport.pk|stringformat:'s' %}is-active{% endif %}"
+         href="?sport={{ sport.pk }}">
+        <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
+        {{ sport.name }}
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div id="feed">
+  {% if groups %}
+    {% include "workouts/_history_page.html" %}
+  {% else %}
+    <div class="app-card app-empty">
+      <p class="mb-3">
+        {% if sport_filter %}По этому виду спорта тренировок пока нет.{% else %}Тренировок пока нет.{% endif %}
+      </p>
+      <a class="btn btn-accent" href="{% url 'cardio_create' %}">Записать тренировку</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

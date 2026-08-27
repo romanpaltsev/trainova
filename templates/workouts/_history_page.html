@@ -1,0 +1,20 @@
+{% comment %}
+  Страница ленты: группы по неделям и кнопка подгрузки. Отдаётся и как часть
+  history.html, и отдельно в ответ на HTMX-запрос следующей страницы.
+{% endcomment %}
+{% for group in groups %}
+  {% if not forloop.first or group.key != prev_week %}
+    <h2 class="app-week-title">{{ group.title }}</h2>
+  {% endif %}
+  {% for workout in group.items %}
+    {% include "workouts/_workout_card.html" %}
+  {% endfor %}
+{% endfor %}
+
+{% if page_obj.has_next %}
+  <button class="btn btn-quiet w-100 mt-2" id="load-more"
+          hx-get="?page={{ page_obj.next_page_number }}{% if sport_filter %}&sport={{ sport_filter }}{% endif %}&prev_week={{ last_week }}"
+          hx-target="#load-more" hx-swap="outerHTML">
+    Показать ещё
+  </button>
+{% endif %}

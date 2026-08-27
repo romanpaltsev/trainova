@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}{% if workout %}Правка тренировки{% else %}Новая тренировка{% endif %} · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'workout_history' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">{% if workout %}Правка тренировки{% else %}Новая тренировка{% endif %}</h1>
+</div>
+
+<form method="post" novalidate x-data="cardioForm()">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+    <div class="app-alert app-alert-danger" role="alert">
+      {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="mb-3">
+    <span class="form-label d-block">Вид спорта</span>
+    {% include "workouts/_sport_chips.html" with sports=form.fields.sport.queryset selected_id=form.sport.value %}
+    {% for error in form.sport.errors %}
+      <div class="invalid-feedback d-block">{{ error }}</div>
+    {% endfor %}
+  </div>
+
+  <div class="app-field-grid">
+    <div>
+      <label class="form-label" for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
+      {{ form.date }}
+      {% for error in form.date.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+    <div>
+      <span class="form-label d-block">Длительность</span>
+      <div class="app-duration">
+        <label class="visually-hidden" for="{{ form.duration_hours.id_for_label }}">Часы</label>
+        {{ form.duration_hours }}
+        <span class="app-duration-unit">ч</span>
+        <label class="visually-hidden" for="{{ form.duration_minutes.id_for_label }}">Минуты</label>
+        {{ form.duration_minutes }}
+        <span class="app-duration-unit">мин</span>
+      </div>
+      {% for error in form.duration_hours.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      {% for error in form.duration_minutes.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="app-field-grid">
+    <div>
+      <label class="form-label" for="{{ form.distance_km.id_for_label }}">{{ form.distance_km.label }}</label>
+      {{ form.distance_km }}
+      {% for error in form.distance_km.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+    <div>
+      <label class="form-label" for="{{ form.avg_heart_rate.id_for_label }}">
+        {{ form.avg_heart_rate.label }} <span class="text-muted-app">· необязательно</span>
+      </label>
+      {{ form.avg_heart_rate }}
+      {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="app-computed" x-show="metric" x-cloak>
+    <span class="text-secondary-app" x-text="metricLabel"></span>
+    <strong class="num" x-text="metric"></strong>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
+    {{ form.note }}
+  </div>
+
+  <div class="app-form-actions">
+    <button type="submit" class="btn btn-accent w-100">
+      {% if workout %}Сохранить изменения{% else %}Сохранить тренировку{% endif %}
+    </button>
+    {% if workout %}
+      <a class="btn btn-danger-quiet w-100" href="{% url 'workout_delete' workout.pk %}">Удалить тренировку</a>
+    {% endif %}
+  </div>
+</form>
+
+<div id="modal"></div>
+{% endblock %}
+
+{% block extra_scripts %}
+  {% load static %}
+  <script src="{% static 'js/cardio.js' %}"></script>
+{% endblock %}
