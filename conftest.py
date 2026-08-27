@@ -14,5 +14,11 @@ def user(db):
 
 
 @pytest.fixture
+def other_user(db):
+    """Второй пользователь — для проверок изоляции данных."""
+    return UserFactory()
+
+
+@pytest.fixture
 def password():
     return PASSWORD
