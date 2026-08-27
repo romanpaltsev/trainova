@@ -23,6 +23,19 @@ docker compose up         # применит миграции и подниме�
 docker compose exec web python manage.py createsuperuser
 ```
 
+Подтверждение email обязательно, поэтому свежесозданный суперюзер не сможет войти
+в приложение (в `/admin/` — сможет). Пометить его адрес подтверждённым:
+
+```bash
+docker compose exec web python manage.py shell -c "
+from allauth.account.models import EmailAddress
+from accounts.models import User
+u = User.objects.get(email='admin@example.com')
+EmailAddress.objects.update_or_create(
+    user=u, email=u.email, defaults={'verified': True, 'primary': True})
+"
+```
+
 ## Разработка
 
 ```bash
