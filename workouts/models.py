@@ -22,6 +22,14 @@ GLOBAL_SPORT_COLORS = {
 }
 
 
+def decimal_display(value):
+    """Число без лишних нулей и с запятой: 7,2 · 32,4 · 12,34 · 10."""
+    value = value.normalize()
+    if value == value.to_integral():
+        value = value.quantize(Decimal(1))
+    return f"{value}".replace(".", ",")
+
+
 class CatalogQuerySet(models.QuerySet):
     """Общее поведение гибридных справочников (Sport, Exercise)."""
 
@@ -131,6 +139,15 @@ class Exercise(CatalogItem):
         ]
 
 
+class WorkoutQuerySet(models.QuerySet):
+    def finished(self):
+        """Завершённые тренировки — только они попадают в историю и агрегаты."""
+        return self.filter(duration_min__isnull=False)
+
+    def in_progress(self):
+        return self.filter(duration_min__isnull=True)
+
+
 class Workout(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -145,7 +162,13 @@ class Workout(models.Model):
         related_name="workouts",
     )
     started_at = models.DateTimeField("начало")
-    duration_min = models.PositiveIntegerField("длительность, мин")
+    # NULL = тренировка ещё идёт (живой режим); длительность считается при завершении.
+    duration_min = models.PositiveIntegerField(
+        "длительность, мин",
+        null=True,
+        blank=True,
+        help_text="Пусто — тренировка ещё идёт.",
+    )
     note = models.TextField("заметка", blank=True)
     rest_seconds = models.PositiveSmallIntegerField(
         "отдых между подходами, сек",
@@ -153,6 +176,17 @@ class Workout(models.Model):
         blank=True,
         help_text="Пусто — берётся значение по умолчанию из профиля.",
     )
+    current_exercise = models.ForeignKey(
+        Exercise,
+        verbose_name="текущее упражнение",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Выбранное вручную упражнение живого режима.",
+    )
+
+    objects = models.Manager.from_queryset(WorkoutQuerySet)()
 
     class Meta:
         verbose_name = "тренировка"
@@ -162,16 +196,41 @@ class Workout(models.Model):
         # а пагинация может продублировать или потерять карточку.
         ordering = ["-started_at", "-id"]
         indexes = [models.Index(fields=["user", "-started_at"], name="workout_user_started_idx")]
+        constraints = [
+            # Гонку «две вкладки нажали старт» ловит база, а не check-then-create.
+            models.UniqueConstraint(
+                fields=["user"],
+                condition=Q(duration_min__isnull=True),
+                name="unique_active_workout_per_user",
+                violation_error_message="У вас уже есть незавершённая тренировка.",
+            )
+        ]
 
     def __str__(self):
         # localtime: started_at хранится в UTC, а показывать надо в TIME_ZONE проекта.
         return f"{self.sport} — {localtime(self.started_at):%d.%m.%Y %H:%M}"
 
     @property
+    def is_finished(self):
+        return self.duration_min is not None
+
+    @property
     def duration_display(self):
         """Длительность как 1:24 — так она показана в макетах."""
+        if self.duration_min is None:
+            return "—"
         hours, minutes = divmod(self.duration_min, 60)
         return f"{hours}:{minutes:02d}"
+
+    @property
+    def effective_rest_seconds(self):
+        """Отдых тренировки, а при пустом — значение по умолчанию из профиля.
+
+        Именно `is not None`: 0 — валидное «без отдыха».
+        """
+        if self.rest_seconds is not None:
+            return self.rest_seconds
+        return self.user.rest_seconds_default
 
 
 class StrengthSet(models.Model):
@@ -195,6 +254,8 @@ class StrengthSet(models.Model):
         validators=[MinValueValidator(0)],
     )
     reps = models.PositiveSmallIntegerField("повторения")
+    # False = плановый подход живого режима; при завершении тренировки такие удаляются.
+    done = models.BooleanField("выполнен", default=False)
 
     class Meta:
         verbose_name = "подход"
@@ -219,6 +280,12 @@ class StrengthSet(models.Model):
     def tonnage_kg(self):
         """Тоннаж подхода — вес, поднятый за все повторения."""
         return self.weight_kg * self.reps
+
+    @property
+    def weight_display(self):
+        """Вес как в макетах: 70 · 77,5 · 82,25. Форматирует всегда сервер, не JS."""
+        # str: до перечитывания из БД значение может быть числом, а не Decimal.
+        return decimal_display(Decimal(str(self.weight_kg)))
 
 
 class CardioDetails(models.Model):
@@ -258,10 +325,7 @@ class CardioDetails(models.Model):
         value = self.distance
         if value is None:
             return "—"
-        value = value.normalize()
-        if value == value.to_integral():
-            value = value.quantize(Decimal(1))
-        return f"{value}".replace(".", ",")
+        return decimal_display(value)
 
     @property
     def speed_kmh(self):

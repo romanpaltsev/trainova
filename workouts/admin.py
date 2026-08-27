@@ -34,7 +34,7 @@ class StrengthSetInline(admin.TabularInline):
     model = StrengthSet
     extra = 3
     autocomplete_fields = ("exercise",)
-    fields = ("exercise", "set_number", "weight_kg", "reps")
+    fields = ("exercise", "set_number", "weight_kg", "reps", "done")
 
 
 class CardioDetailsInline(admin.StackedInline):

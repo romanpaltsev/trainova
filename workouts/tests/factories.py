@@ -42,6 +42,9 @@ class StrengthSetFactory(factory.django.DjangoModelFactory):
     set_number = factory.Sequence(lambda n: n + 1)
     weight_kg = 80
     reps = 8
+    # Фабрика создаёт исторический (уже выполненный) подход; плановые строки живого
+    # режима в тестах создаются через эндпоинты или явным done=False.
+    done = True
 
 
 class CardioDetailsFactory(factory.django.DjangoModelFactory):

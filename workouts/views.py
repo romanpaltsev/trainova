@@ -37,7 +37,9 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         queryset = (
+            # Незавершённая (живой режим) в ленту не попадает: у неё нет длительности.
             Workout.objects.filter(user=self.request.user)
+            .finished()
             # cardio — обратная OneToOne, тянется тем же запросом
             .select_related("sport", "cardio")
             # Иначе каждая силовая карточка делала бы свой COUNT по подходам

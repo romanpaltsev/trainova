@@ -35,6 +35,11 @@ class User(AbstractUser):
     first_name = None
     last_name = None
     email = models.EmailField("email", unique=True)
+    rest_seconds_default = models.PositiveSmallIntegerField(
+        "отдых между подходами, сек",
+        default=90,
+        help_text="Используется, если у тренировки не задан свой отдых.",
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
