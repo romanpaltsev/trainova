@@ -53,5 +53,10 @@ docker compose exec web python manage.py seed
 
 Локально (без Docker) — `uv sync`, свой PostgreSQL и `DATABASE_URL` в `.env`.
 
+## Прод
+
+Деплой на VDS с HTTPS — [docs/deploy.md](docs/deploy.md), бэкапы и восстановление базы —
+[docs/backup.md](docs/backup.md). Прод-стек поднимается через `./scripts/prod.sh up -d`.
+
 Требования к продукту, дизайн-система и рабочие правила — в [CLAUDE.md](CLAUDE.md),
 макеты экранов — в `docs/design/`.
