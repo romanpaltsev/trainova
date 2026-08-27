@@ -1,0 +1,29 @@
+{# Поля формы в едином стиле. Honeypot-поле allauth рендерим скрытым и вне tab-порядка. #}
+{% if form.non_field_errors %}
+  <div class="app-alert app-alert-danger" role="alert">
+    {% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}
+  </div>
+{% endif %}
+
+{% for field in form %}
+  {% if field.name == honeypot_field %}
+    <div class="app-honeypot" aria-hidden="true">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      <input type="text" name="{{ field.html_name }}" id="{{ field.id_for_label }}"
+             tabindex="-1" autocomplete="off">
+    </div>
+  {% elif field.is_hidden %}
+    {{ field }}
+  {% else %}
+    <div class="mb-3">
+      <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}
+        <div class="form-text text-muted-app">{{ field.help_text }}</div>
+      {% endif %}
+      {% for error in field.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endfor %}

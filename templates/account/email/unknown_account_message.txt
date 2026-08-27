@@ -1,0 +1,5 @@
+{% extends "account/email/base_message.txt" %}
+
+{% block content %}{% autoescape off %}Кто-то запросил сброс пароля для этого адреса, но аккаунта с ним в «Дневнике тренировок» нет.
+
+Если это были вы — зарегистрируйтесь: {{ signup_url }}{% endautoescape %}{% endblock content %}

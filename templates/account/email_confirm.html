@@ -1,0 +1,30 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Подтверждение email · Дневник тренировок{% endblock %}
+{% block auth_title %}Подтверждение email{% endblock %}
+
+{% block auth_content %}
+  {% if confirmation %}
+    {% if can_confirm %}
+      <p class="text-secondary-app mb-3">
+        Подтвердите, что <strong>{{ confirmation.email_address.email }}</strong> — ваш адрес.
+      </p>
+      <form method="post" action="{% url 'account_confirm_email' confirmation.key %}">
+        {% csrf_token %}
+        {{ redirect_field }}
+        <button type="submit" class="btn btn-accent w-100">Подтвердить</button>
+      </form>
+    {% else %}
+      <p class="text-secondary-app mb-4">
+        Адрес {{ confirmation.email_address.email }} уже подтверждён другим аккаунтом.
+      </p>
+      <a class="btn btn-quiet w-100" href="{% url 'account_login' %}">Вернуться ко входу</a>
+    {% endif %}
+  {% else %}
+    <p class="text-secondary-app mb-4">
+      Ссылка подтверждения недействительна или устарела. Зарегистрируйтесь заново или
+      запросите новое письмо, попробовав войти.
+    </p>
+    <a class="btn btn-quiet w-100" href="{% url 'account_login' %}">Вернуться ко входу</a>
+  {% endif %}
+{% endblock %}

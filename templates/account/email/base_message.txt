@@ -1,0 +1,7 @@
+{% autoescape off %}Здравствуйте!
+
+{% block content %}{% endblock content %}
+
+—
+Дневник тренировок
+{% endautoescape %}

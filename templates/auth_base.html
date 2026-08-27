@@ -1,0 +1,28 @@
+{# Минимальный каркас для страниц входа/регистрации: центрированная карточка, без навигации. #}
+{% extends "_page.html" %}
+
+{% block body %}
+<div class="app-auth position-relative">
+  <div class="app-auth-theme">{% include "includes/theme_toggle.html" %}</div>
+
+  <a class="app-logo app-auth-brand" href="{% url 'account_login' %}">
+    {% include "includes/logo.html" %}
+    <span>Дневник тренировок</span>
+  </a>
+
+  <div class="app-card app-auth-card">
+    {% if messages %}
+      {% for message in messages %}
+        <div class="app-alert app-alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+
+    <h1 class="app-auth-title">{% block auth_title %}{% endblock %}</h1>
+    {% block auth_subtitle %}{% endblock %}
+
+    {% block auth_content %}{% endblock %}
+  </div>
+
+  {% block auth_footer %}{% endblock %}
+</div>
+{% endblock %}

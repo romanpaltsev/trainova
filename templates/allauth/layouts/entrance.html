@@ -1,0 +1,5 @@
+{# Страницы входа/регистрации allauth, которые мы не переопределили явно, #}
+{# всё равно рендерятся в нашем auth-каркасе. #}
+{% extends "auth_base.html" %}
+{% block title %}{% block head_title %}{% endblock %} · Дневник тренировок{% endblock %}
+{% block auth_content %}{% block content %}{% endblock %}{% endblock %}

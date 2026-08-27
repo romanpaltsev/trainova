@@ -1,0 +1,8 @@
+{% extends "account/email/base_message.txt" %}
+
+{% block content %}{% autoescape off %}Вы указали этот адрес при регистрации в «Дневнике тренировок».
+
+Чтобы подтвердить адрес и завершить регистрацию, перейдите по ссылке:
+{{ activate_url }}
+
+Если регистрировались не вы — просто проигнорируйте это письмо.{% endautoescape %}{% endblock content %}

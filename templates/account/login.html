@@ -1,0 +1,26 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Вход · Дневник тренировок{% endblock %}
+{% block auth_title %}Вход{% endblock %}
+
+{% block auth_subtitle %}
+  <p class="app-auth-subtitle">Войдите по email и паролю, чтобы продолжить.</p>
+{% endblock %}
+
+{% block auth_content %}
+  <form method="post" action="{% url 'account_login' %}" novalidate>
+    {% csrf_token %}
+    {% include "includes/form.html" %}
+    {{ redirect_field }}
+    <button type="submit" class="btn btn-accent w-100">Войти</button>
+  </form>
+  <div class="mt-3 text-center">
+    <a class="app-link" href="{% url 'account_reset_password' %}">Забыли пароль?</a>
+  </div>
+{% endblock %}
+
+{% block auth_footer %}
+  <div class="app-auth-footer">
+    Нет аккаунта? <a class="app-link app-link-accent" href="{% url 'account_signup' %}">Регистрация</a>
+  </div>
+{% endblock %}

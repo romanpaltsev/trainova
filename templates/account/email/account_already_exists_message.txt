@@ -1,0 +1,7 @@
+{% extends "account/email/base_message.txt" %}
+
+{% block content %}{% autoescape off %}Кто-то попытался зарегистрироваться в «Дневнике тренировок» с адресом {{ email }},
+но аккаунт с таким адресом уже есть.
+
+Если это были вы и вы забыли пароль — задайте новый по ссылке:
+{{ password_reset_url }}{% endautoescape %}{% endblock content %}

@@ -1,0 +1,15 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Подтвердите email · Дневник тренировок{% endblock %}
+{% block auth_title %}Подтвердите email{% endblock %}
+
+{% block auth_content %}
+  <p class="text-secondary-app mb-3">
+    Мы отправили письмо со ссылкой для подтверждения. Перейдите по ней, чтобы завершить
+    регистрацию и войти.
+  </p>
+  <p class="text-muted-app mb-4">
+    Письма нет? Проверьте папку «Спам» — иногда оно попадает туда.
+  </p>
+  <a class="btn btn-quiet w-100" href="{% url 'account_login' %}">Вернуться ко входу</a>
+{% endblock %}

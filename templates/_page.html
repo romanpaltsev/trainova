@@ -1,0 +1,47 @@
+{% load static %}<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Дневник тренировок{% endblock %}</title>
+  <meta name="theme-color">
+  <link rel="manifest" href="{% static 'manifest.json' %}">
+  <link rel="icon" href="{% static 'img/icon.svg' %}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="{% static 'img/icon-192.png' %}">
+
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
+  <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+
+  {% comment %}
+    Анти-FOUC: тема выставляется до первой отрисовки, иначе страница мигает светлым.
+    Скрипт идёт после стилей, чтобы взять цвет фона темы из токена, а не хардкодить его.
+  {% endcomment %}
+  <script>
+    (function () {
+      var choice = "system";
+      try { choice = localStorage.getItem("app-theme") || "system"; } catch (e) {}
+      var theme = choice === "light" || choice === "dark"
+        ? choice
+        : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var root = document.documentElement;
+      root.setAttribute("data-bs-theme", theme);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) {
+        meta.setAttribute("content", getComputedStyle(root).getPropertyValue("--app-bg").trim());
+      }
+    })();
+  </script>
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  {% block body %}{% endblock %}
+
+  <script src="{% static 'js/theme.js' %}"></script>
+  <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+  <script src="{% static 'vendor/htmx/htmx.min.js' %}"></script>
+  <script src="{% static 'vendor/alpine/alpine.min.js' %}" defer></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>

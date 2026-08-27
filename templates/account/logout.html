@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Выход · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Выйти?</h1>
+
+<div class="app-card p-4" style="max-width: 26rem;">
+  <p class="text-secondary-app">Вы выйдете из аккаунта на этом устройстве.</p>
+  <form method="post" action="{% url 'account_logout' %}">
+    {% csrf_token %}
+    {{ redirect_field }}
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-accent flex-fill">Выйти</button>
+      <a class="btn btn-quiet flex-fill" href="{% url 'dashboard' %}">Отмена</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

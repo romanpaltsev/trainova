@@ -1,0 +1,11 @@
+{% extends "auth_base.html" %}
+
+{% block title %}Нужно подтвердить email · Дневник тренировок{% endblock %}
+{% block auth_title %}Нужно подтвердить email{% endblock %}
+
+{% block auth_content %}
+  <p class="text-secondary-app mb-4">
+    Мы отправили письмо со ссылкой подтверждения. Перейдите по ней, чтобы продолжить.
+  </p>
+  <a class="btn btn-quiet w-100" href="{% url 'account_login' %}">Вернуться ко входу</a>
+{% endblock %}

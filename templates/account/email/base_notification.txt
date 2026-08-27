@@ -1,0 +1,11 @@
+{% extends "account/email/base_message.txt" %}
+
+{% block content %}{% autoescape off %}В вашем аккаунте произошло изменение:
+
+{% block notification_message %}{% endblock notification_message %}
+
+Если это были не вы — сразу смените пароль. Данные о запросе:
+
+- IP-адрес: {{ ip }}
+- Браузер: {{ user_agent }}
+- Дата: {{ timestamp }}{% endautoescape %}{% endblock content %}
