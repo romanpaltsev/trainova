@@ -1,0 +1,32 @@
+[project]
+name = "trainova"
+version = "0.1.0"
+description = "Дневник тренировок — веб-приложение для записи силовых и кардио-тренировок"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=5.2",
+    "django-allauth>=65.0",
+    "django-environ>=0.12",
+    "psycopg[binary]>=3.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "factory-boy>=3.3",
+    "ruff>=0.9",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+python_files = ["tests.py", "test_*.py"]
+addopts = "--reuse-db"
