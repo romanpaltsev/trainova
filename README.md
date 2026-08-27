@@ -44,6 +44,13 @@ uv run ruff check . && uv run ruff format .   # линт и формат
 uv run python manage.py makemigrations        # миграции
 ```
 
+Наполнить глобальные справочники (виды спорта и базовые упражнения зала).
+Команда идемпотентна — можно запускать повторно:
+
+```bash
+docker compose exec web python manage.py seed
+```
+
 Локально (без Docker) — `uv sync`, свой PostgreSQL и `DATABASE_URL` в `.env`.
 
 Требования к продукту, дизайн-система и рабочие правила — в [CLAUDE.md](CLAUDE.md),
