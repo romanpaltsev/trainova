@@ -1,0 +1,65 @@
+# Прод-стек для одного VDS: gunicorn за nginx, postgres и certbot для сертификатов.
+# Наружу открыты только 80 и 443; база и приложение доступны лишь внутри сети compose.
+
+# Своё имя проекта: иначе в одном каталоге прод-стек переиспользовал бы тома
+# dev-стека (trainova_pgdata) и падал бы на несовпадении пароля базы.
+name: trainova-prod
+
+services:
+  web:
+    build: .
+    env_file: .env.prod
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - web
+
+    environment:
+      DOMAIN: ${DOMAIN}
+      # Подставляем только DOMAIN, чтобы не затронуть $host и $remote_addr в конфиге.
+      NGINX_ENVSUBST_FILTER: "^DOMAIN$$"
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/nginx/app.conf.template:/etc/nginx/templates/app.conf.template:ro
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    restart: unless-stopped
+
+  # Не демон, а инструмент: запускается через `run --rm` из scripts/init_letsencrypt.sh
+  # и scripts/renew_cert.sh (крон). Так продление видно в логах крона, а не тонет
+  # в контейнере, чьи ошибки никто не читает.
+  certbot:
+    image: certbot/certbot
+    profiles: ["tools"]
+    volumes:
+      - certbot_conf:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+
+volumes:
+  pgdata:
+  certbot_conf:
+  certbot_www:

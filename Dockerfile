@@ -20,4 +20,7 @@ RUN uv sync --frozen --no-install-project
 COPY . .
 
 EXPOSE 8000
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+# По умолчанию — прод-режим (миграции, статика, gunicorn).
+# Dev-compose переопределяет command на runserver, поэтому образ один на оба режима.
+CMD ["/app/deploy/entrypoint.sh"]
