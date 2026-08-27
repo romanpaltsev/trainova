@@ -14,6 +14,12 @@ env = environ.Env(
     DJANGO_DEBUG=(bool, False),
     DJANGO_ALLOWED_HOSTS=(list, []),
     CSRF_TRUSTED_ORIGINS=(list, []),
+    # Прод-флаги: в разработке всё выключено, включает .env.prod.
+    DJANGO_STATIC_MANIFEST=(bool, False),
+    DJANGO_SECURE_SSL_REDIRECT=(bool, False),
+    DJANGO_SECURE_HSTS_SECONDS=(int, 0),
+    DJANGO_COOKIE_SECURE=(bool, False),
+    DJANGO_DB_CONN_MAX_AGE=(int, 0),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -41,6 +47,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Сразу после SecurityMiddleware — так статику отдаёт сам web-контейнер.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -75,6 +83,8 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 DATABASES = {"default": env.db("DATABASE_URL")}
 DATABASES["default"]["ATOMIC_REQUESTS"] = True
+# Переиспользование соединений: на gunicorn-воркерах экономит подключение на запрос.
+DATABASES["default"]["CONN_MAX_AGE"] = env("DJANGO_DB_CONN_MAX_AGE")
 
 
 # Пользователи и аутентификация
@@ -165,5 +175,50 @@ USE_TZ = True
 STATIC_URL = "static/"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+if env("DJANGO_STATIC_MANIFEST"):
+    # Хэши в именах файлов и заранее пожатые копии — включаем только там, где
+    # выполнен collectstatic. Тесты идут с DEBUG=False, и без флага они падали бы
+    # на отсутствующем манифесте.
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+    }
+
+WHITENOISE_MAX_AGE = 31536000  # год: имена файлов содержат хэш содержимого
+
+
+# Безопасность за обратным прокси
+
+# nginx передаёт схему в X-Forwarded-Proto, иначе Django считает запрос HTTP
+# и ломает CSRF на HTTPS-домене.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = env("DJANGO_SECURE_SSL_REDIRECT")
+SECURE_HSTS_SECONDS = env("DJANGO_SECURE_HSTS_SECONDS")
+SECURE_HSTS_INCLUDE_SUBDOMAINS = SECURE_HSTS_SECONDS > 0
+SECURE_HSTS_PRELOAD = SECURE_HSTS_SECONDS > 0
+SESSION_COOKIE_SECURE = env("DJANGO_COOKIE_SECURE")
+CSRF_COOKIE_SECURE = env("DJANGO_COOKIE_SECURE")
+SESSION_COOKIE_HTTPONLY = True
+X_FRAME_OPTIONS = "DENY"
+
+
+# Логи забирает docker, поэтому пишем в stdout
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "app": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "app"},
+    },
+    "root": {"handlers": ["console"], "level": "INFO"},
+    "loggers": {
+        "django.request": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "django.db.backends": {"level": "WARNING"},
+    },
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
