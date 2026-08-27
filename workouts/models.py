@@ -157,7 +157,10 @@ class Workout(models.Model):
     class Meta:
         verbose_name = "тренировка"
         verbose_name_plural = "тренировки"
-        ordering = ["-started_at"]
+        # -id как тайбрейкер: у двух тренировок одного прошедшего дня started_at
+        # совпадает (полдень), и без него порядок между запросами не определён,
+        # а пагинация может продублировать или потерять карточку.
+        ordering = ["-started_at", "-id"]
         indexes = [models.Index(fields=["user", "-started_at"], name="workout_user_started_idx")]
 
     def __str__(self):

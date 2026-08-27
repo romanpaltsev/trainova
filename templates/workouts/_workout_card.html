@@ -20,8 +20,12 @@
     </div>
     {% if workout.sport.is_strength %}
       <div>
-        <dt>подходов</dt>
-        <dd class="num">{{ workout.sets.count }}</dd>
+        <dt>упражнений</dt>
+        <dd class="num">{{ workout.exercises_count|default:0 }}</dd>
+      </div>
+      <div>
+        <dt>тоннаж</dt>
+        <dd class="num">{{ workout.tonnage|floatformat:0|default:"—" }} кг</dd>
       </div>
     {% else %}
       {% with cardio=workout.cardio %}

@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Count, F, Sum
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -37,8 +38,16 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = (
             Workout.objects.filter(user=self.request.user)
-            .select_related("sport")
-            .prefetch_related("cardio")
+            # cardio — обратная OneToOne, тянется тем же запросом
+            .select_related("sport", "cardio")
+            # Иначе каждая силовая карточка делала бы свой COUNT по подходам
+            .annotate(
+                exercises_count=Count("sets__exercise", distinct=True),
+                tonnage=Sum(F("sets__weight_kg") * F("sets__reps")),
+            )
+            # Сортировку задаём явно: в запросах с GROUP BY Django игнорирует
+            # Meta.ordering, а пагинации нужен детерминированный порядок.
+            .order_by("-started_at", "-id")
         )
         sport_id = self.request.GET.get("sport")
         if sport_id and sport_id.isdigit():

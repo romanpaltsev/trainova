@@ -3,11 +3,19 @@
 from datetime import timedelta
 
 import pytest
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
 from workouts.models import Sport
-from workouts.tests.factories import CardioDetailsFactory, SportFactory, WorkoutFactory
+from workouts.tests.factories import (
+    CardioDetailsFactory,
+    ExerciseFactory,
+    SportFactory,
+    StrengthSetFactory,
+    WorkoutFactory,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -122,3 +130,59 @@ def test_empty_feed_offers_to_record_workout(client, user):
 
     assert "Тренировок пока нет" in content
     assert reverse("cardio_create") in content
+
+
+def test_order_is_stable_when_started_at_is_identical(client, user):
+    """У двух тренировок одного прошедшего дня started_at совпадает — нужен тайбрейкер."""
+    client.force_login(user)
+    same_moment = timezone.now() - timedelta(days=1)
+    first = WorkoutFactory(user=user, started_at=same_moment)
+    second = WorkoutFactory(user=user, started_at=same_moment)
+
+    orders = {
+        tuple(w.pk for w in client.get(reverse("workout_history")).context["workouts"])
+        for _ in range(5)
+    }
+
+    assert orders == {(second.pk, first.pk)}
+
+
+def test_feed_does_not_scale_queries_with_cards(client, user, django_assert_num_queries):
+    """Число запросов не должно расти вместе с числом карточек."""
+    client.force_login(user)
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH)
+    bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+    for _ in range(3):
+        StrengthSetFactory(workout=WorkoutFactory(user=user, sport=strength), set_number=1)
+        CardioDetailsFactory(workout__user=user, workout__sport=bike)
+
+    with CaptureQueriesContext(connection) as few:
+        client.get(reverse("workout_history"))
+    for _ in range(2):
+        StrengthSetFactory(workout=WorkoutFactory(user=user, sport=strength), set_number=1)
+    with CaptureQueriesContext(connection) as more:
+        client.get(reverse("workout_history"))
+
+    assert len(more.captured_queries) == len(few.captured_queries)
+
+
+def test_strength_card_shows_exercises_and_tonnage(client, user):
+    client.force_login(user)
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH)
+    workout = WorkoutFactory(user=user, sport=strength, duration_min=62)
+    bench = ExerciseFactory(name="Жим лёжа")
+    StrengthSetFactory(workout=workout, exercise=bench, set_number=1, weight_kg=80, reps=8)
+    StrengthSetFactory(workout=workout, exercise=bench, set_number=2, weight_kg=80, reps=8)
+    StrengthSetFactory(
+        workout=workout,
+        exercise=ExerciseFactory(name="Присед"),
+        set_number=1,
+        weight_kg=100,
+        reps=5,
+    )
+
+    content = client.get(reverse("workout_history")).content.decode()
+
+    assert "упражнений" in content
+    assert "тоннаж" in content
+    assert "1780 кг" in content  # 80*8 + 80*8 + 100*5
