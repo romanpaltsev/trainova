@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
@@ -5,6 +7,19 @@ from django.db import models
 from django.db.models import Q
 from django.db.models.functions import Lower
 from django.utils.timezone import localtime
+
+# Выше этой скорости показываем км/ч (вело, лыжи), ниже — мин/км (бег, ходьба).
+# Порог, а не поле в Sport: набор полей справочника зафиксирован в CLAUDE.md,
+# а личных видов спорта может быть сколько угодно. Дубль порога есть в static/js/cardio.js.
+SPEED_THRESHOLD_KMH = Decimal("14")
+
+# Цветовой токен закреплён за видом спорта, а не за порядком в наборе.
+GLOBAL_SPORT_COLORS = {
+    "силовая": "strength",
+    "велосипед": "bike",
+    "бег": "run",
+    "лыжи": "ski",
+}
 
 
 class CatalogQuerySet(models.QuerySet):
@@ -82,6 +97,14 @@ class Sport(CatalogItem):
     def is_strength(self):
         return self.category == self.Category.STRENGTH
 
+    @property
+    def color_key(self):
+        """Ключ цветового токена --app-sport-*; для личных видов — по категории."""
+        known = GLOBAL_SPORT_COLORS.get(self.name.strip().lower())
+        if known:
+            return known
+        return "strength" if self.is_strength else "run"
+
 
 class Exercise(CatalogItem):
     name = models.CharField("название", max_length=80)
@@ -140,6 +163,12 @@ class Workout(models.Model):
     def __str__(self):
         # localtime: started_at хранится в UTC, а показывать надо в TIME_ZONE проекта.
         return f"{self.sport} — {localtime(self.started_at):%d.%m.%Y %H:%M}"
+
+    @property
+    def duration_display(self):
+        """Длительность как 1:24 — так она показана в макетах."""
+        hours, minutes = divmod(self.duration_min, 60)
+        return f"{hours}:{minutes:02d}"
 
 
 class StrengthSet(models.Model):
@@ -214,3 +243,60 @@ class CardioDetails(models.Model):
     def clean(self):
         if self.workout_id and self.workout.sport.is_strength:
             raise ValidationError("Детали кардио бывают только у кардио-тренировки.")
+
+    @property
+    def distance(self):
+        """Дистанция как Decimal: до перечитывания из БД значение может быть строкой."""
+        return Decimal(str(self.distance_km)) if self.distance_km else None
+
+    @property
+    def distance_display(self):
+        """Дистанция без лишних нулей и с запятой: 7,2 · 32,4 · 12,34 · 10."""
+        value = self.distance
+        if value is None:
+            return "—"
+        value = value.normalize()
+        if value == value.to_integral():
+            value = value.quantize(Decimal(1))
+        return f"{value}".replace(".", ",")
+
+    @property
+    def speed_kmh(self):
+        """Средняя скорость, км/ч."""
+        minutes = self.workout.duration_min
+        if not minutes or not self.distance:
+            return None
+        return (self.distance * 60 / Decimal(minutes)).quantize(Decimal("0.1"))
+
+    @property
+    def pace_seconds_per_km(self):
+        """Темп в секундах на километр."""
+        if not self.distance:
+            return None
+        return int(self.workout.duration_min * 60 / self.distance)
+
+    @property
+    def pace_display(self):
+        """Темп как 5:41."""
+        seconds = self.pace_seconds_per_km
+        if seconds is None:
+            return None
+        minutes, seconds = divmod(seconds, 60)
+        return f"{minutes}:{seconds:02d}"
+
+    @property
+    def shows_speed(self):
+        """Быстрые виды спорта удобнее читать в км/ч, медленные — в мин/км."""
+        speed = self.speed_kmh
+        return speed is not None and speed >= SPEED_THRESHOLD_KMH
+
+    @property
+    def metric_label(self):
+        return "скорость" if self.shows_speed else "темп"
+
+    @property
+    def metric_display(self):
+        if self.shows_speed:
+            return f"{self.speed_kmh} км/ч".replace(".", ",")
+        pace = self.pace_display
+        return f"{pace} /км" if pace else "—"
