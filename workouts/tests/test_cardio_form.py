@@ -1,5 +1,6 @@
 """Ввод, правка и удаление кардио-тренировки."""
 
+import re
 from datetime import timedelta
 from decimal import Decimal
 
@@ -214,3 +215,16 @@ def test_iso_date_from_browser_is_accepted(client, user, bike):
 
     assert response.status_code == 302
     assert timezone.localtime(Workout.objects.get(user=user).started_at).date() == yesterday
+
+
+def test_cancel_link_on_delete_page_always_leads_somewhere_reachable(client, user, bike):
+    """У силовой тренировки экрана правки нет, и «Отмена» не должна вести в 404."""
+    client.force_login(user)
+    cardio = WorkoutFactory(user=user, sport=bike)
+    strength = WorkoutFactory(user=user, sport__category=Sport.Category.STRENGTH)
+
+    for workout in (cardio, strength):
+        html = client.get(reverse("workout_delete", args=[workout.pk])).content.decode()
+        cancel = re.search(r'href="([^"]+)"[^>]*>\s*Отмена', html).group(1)
+
+        assert client.get(cancel).status_code == 200, f"«Отмена» ведёт в {cancel}"
