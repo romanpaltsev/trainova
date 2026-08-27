@@ -7,4 +7,5 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("", DashboardView.as_view(), name="dashboard"),
+    path("", include("workouts.urls")),
 ]
