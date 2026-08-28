@@ -138,6 +138,7 @@ window.appCharts = (function () {
               maxRotation: 0,
               autoSkip: true,
               autoSkipPadding: 16,
+              includeBounds: true,
             },
           },
           y: {
@@ -216,6 +217,7 @@ window.appCharts = (function () {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: { top: 8 } },
         scales: {
           x: {
             grid: { display: false },
@@ -226,6 +228,7 @@ window.appCharts = (function () {
               maxRotation: 0,
               autoSkip: true,
               autoSkipPadding: 16,
+              includeBounds: true,
             },
           },
           y: {
