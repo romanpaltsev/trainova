@@ -7,13 +7,12 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import Count, DecimalField, ExpressionWrapper, F, FloatField, Max, Sum
+from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, Max, Sum
 from django.db.models.functions import Coalesce
 from django.utils import formats, timezone
 
 from workouts.models import (
     SPEED_THRESHOLD_KMH,
-    CardioDetails,
     Exercise,
     Sport,
     StrengthSet,
@@ -54,36 +53,61 @@ def hours_display(minutes):
     return f"{hours}:{rest:02d}"
 
 
-def _window_totals(user, first_day, last_day):
-    start, end = day_bounds(first_day, last_day)
-    workouts = (
+def _empty_totals():
+    return {
+        "count": 0,
+        "minutes": 0,
+        "strength_count": 0,
+        "tonnage": Decimal(0),
+        "distance": Decimal(0),
+        "cardio_sports": [],
+    }
+
+
+def _split_windows(user, current_start, previous_start, last_day):
+    """Итоги двух соседних недельных окон за три запроса на оба окна.
+
+    Раньше каждое окно считалось пятью агрегатами, и три из них ещё и
+    переисполняли оконную выборку подзапросом. Тренировок за две недели — единицы,
+    поэтому дешевле забрать их строки один раз и разложить в Python; ту же логику
+    уже использует weekly_chart.
+    """
+    start, end = day_bounds(previous_start, last_day)
+    rows = list(
         Workout.objects.filter(user=user)
         .finished()
         .filter(started_at__gte=start, started_at__lt=end)
+        .values_list("id", "started_at", "duration_min", "sport_id", "cardio__distance_km")
     )
-    base = workouts.aggregate(count=Count("id"), minutes=Coalesce(Sum("duration_min"), 0))
-    strength_count = workouts.filter(sport__category=Sport.Category.STRENGTH).count()
-    # Инвариант живого режима: в завершённых тренировках только выполненные подходы.
-    tonnage = StrengthSet.objects.filter(workout__in=workouts).aggregate(
-        value=Coalesce(Sum(F("weight_kg") * F("reps"), output_field=DecimalField()), Decimal(0))
-    )["value"]
-    distance = CardioDetails.objects.filter(workout__in=workouts).aggregate(
-        value=Coalesce(Sum("distance_km"), Decimal(0))
-    )["value"]
-    cardio_sports = list(
-        Sport.objects.filter(workouts__in=workouts, category=Sport.Category.CARDIO)
-        .distinct()
-        .order_by("name")
-        .values_list("name", flat=True)
+    sports = Sport.objects.in_bulk({sport_id for *_, sport_id, _ in rows})
+    tonnage_by_workout = dict(
+        StrengthSet.objects.filter(workout_id__in=[row[0] for row in rows])
+        .values_list("workout_id")
+        .annotate(
+            # Инвариант живого режима: в завершённых тренировках только выполненные подходы.
+            value=Coalesce(Sum(F("weight_kg") * F("reps"), output_field=DecimalField()), Decimal(0))
+        )
     )
-    return {
-        "count": base["count"],
-        "minutes": base["minutes"],
-        "strength_count": strength_count,
-        "tonnage": tonnage,
-        "distance": distance,
-        "cardio_sports": cardio_sports,
-    }
+
+    windows = {"current": _empty_totals(), "previous": _empty_totals()}
+    cardio_names = {"current": set(), "previous": set()}
+    for workout_id, started_at, duration, sport_id, distance in rows:
+        local_date = timezone.localtime(started_at).date()
+        key = "current" if local_date >= current_start else "previous"
+        totals = windows[key]
+        totals["count"] += 1
+        totals["minutes"] += duration
+        totals["tonnage"] += tonnage_by_workout.get(workout_id, Decimal(0))
+        sport = sports[sport_id]
+        if sport.is_strength:
+            totals["strength_count"] += 1
+        else:
+            cardio_names[key].add(sport.name)
+            if distance:
+                totals["distance"] += distance
+    for key, names in cardio_names.items():
+        windows[key]["cardio_sports"] = sorted(names)
+    return windows
 
 
 def _delta(value, suffix=""):
@@ -102,8 +126,8 @@ def seven_day_summary(user, today=None):
     а деления на пустую прошлую неделю просто не существует.
     """
     today = today or timezone.localdate()
-    current = _window_totals(user, today - timedelta(days=6), today)
-    previous = _window_totals(user, today - timedelta(days=13), today - timedelta(days=7))
+    windows = _split_windows(user, today - timedelta(days=6), today - timedelta(days=13), today)
+    current, previous = windows["current"], windows["previous"]
     count_delta = current["count"] - previous["count"]
     minutes_delta = current["minutes"] - previous["minutes"]
     strength = current["strength_count"]
@@ -326,18 +350,32 @@ def exercise_progress(user, exercise):
     return progress
 
 
-def exercise_spotlight(user):
-    """Карточка-прожектор: топ-упражнение по рекорду со спарклайном веса."""
-    top = strength_records(user, limit=1)
+def exercise_spotlight(user, records=None):
+    """Карточка-прожектор: топ-упражнение по рекорду со спарклайном веса.
+
+    `records` можно передать готовыми: дашборд всё равно считает рекорды
+    для своего блока, и второй скан всех подходов там был лишним.
+    """
+    top = records if records is not None else strength_records(user, limit=1)
     if not top:
         return None
     exercise = Exercise.objects.get(pk=top[0]["exercise_id"])
-    progress = exercise_progress(user, exercise)
+    # Максимум веса по тренировке одним запросом: тянуть всю историю подходов
+    # ради 12 точек спарклайна незачем.
+    rows = (
+        StrengthSet.objects.filter(
+            exercise=exercise, workout__user=user, workout__duration_min__isnull=False
+        )
+        .values_list("workout_id")
+        .annotate(top_weight=Max("weight_kg"), started_at=Max("workout__started_at"))
+        .order_by("started_at")
+    )
+    weights = [float(row[1]) for row in rows]
     return {
         "exercise": exercise,
         "record_display": top[0]["weight_display"],
         "count_label": (
-            f"{len(progress)} {ru_plural(len(progress), 'тренировка', 'тренировки', 'тренировок')}"
+            f"{len(weights)} {ru_plural(len(weights), 'тренировка', 'тренировки', 'тренировок')}"
         ),
-        "sparkline": [group["max_weight"] for group in progress[-SPARKLINE_POINTS:]],
+        "sparkline": weights[-SPARKLINE_POINTS:],
     }

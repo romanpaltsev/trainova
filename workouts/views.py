@@ -171,7 +171,8 @@ def live_workout_or_404(request, pk):
     return get_object_or_404(
         Workout.objects.filter(user=request.user, sport__category=Sport.Category.STRENGTH)
         .in_progress()
-        .select_related("sport"),
+        # user — для отдыха по умолчанию и подсказок, иначе он тянется отдельным запросом
+        .select_related("sport", "user"),
         pk=pk,
     )
 
@@ -266,7 +267,7 @@ class LiveWorkoutView(LoginRequiredMixin, View):
 
     def get(self, request, pk):
         workout = get_object_or_404(
-            Workout.objects.filter(user=request.user).select_related("sport"), pk=pk
+            Workout.objects.filter(user=request.user).select_related("sport", "user"), pk=pk
         )
         if not workout.sport.is_strength:
             raise Http404("Живой режим есть только у силовых тренировок")
@@ -601,21 +602,22 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
         chart = stats.weekly_chart(user)
-        spotlight = stats.exercise_spotlight(user)
+        # Рекорды считаются один раз: прожектору нужен тот же топ, что и плиткам.
+        strength = stats.strength_records(user, limit=STRENGTH_RECORDS_LIMIT)
         context.update(
             {
                 "summary": stats.seven_day_summary(user),
                 "chart": chart,
                 "has_chart": bool(chart["datasets"]),
                 "latest": stats.latest_workouts(user),
-                "records": self.build_records(user),
-                "spotlight": spotlight,
+                "records": self.build_records(user, strength),
+                "spotlight": stats.exercise_spotlight(user, records=strength),
             }
         )
         return context
 
     @staticmethod
-    def build_records(user):
+    def build_records(user, strength):
         """Единый список плиток рекордов: топ силовых + кардио по видам.
 
         Первый силовой на десктопе уходит в карточку-прожектор (is_spotlight).
@@ -628,7 +630,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 "url": reverse("exercise_detail", args=[row["exercise_id"]]),
                 "is_spotlight": index == 0,
             }
-            for index, row in enumerate(stats.strength_records(user, limit=STRENGTH_RECORDS_LIMIT))
+            for index, row in enumerate(strength)
         ]
         records += [
             {

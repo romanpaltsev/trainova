@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
 
@@ -13,3 +14,8 @@ urlpatterns = [
     # Дашборд (name="dashboard") живёт в workouts: это витрина тренировок.
     path("", include("workouts.urls")),
 ]
+
+if settings.DEBUG_TOOLBAR:
+    from debug_toolbar.toolbar import debug_toolbar_urls
+
+    urlpatterns += debug_toolbar_urls()

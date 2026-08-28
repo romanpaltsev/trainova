@@ -21,6 +21,10 @@ env = environ.Env(
     DJANGO_SECURE_HSTS_SECONDS=(int, 0),
     DJANGO_COOKIE_SECURE=(bool, False),
     DJANGO_DB_CONN_MAX_AGE=(int, 0),
+    # Панель отладки включается отдельным флагом, а не по DEBUG: pytest-django
+    # выставляет DEBUG=False уже после импорта настроек, и блок «если DEBUG»
+    # оставался бы активным в тестах, искажая счётчики запросов.
+    DJANGO_DEBUG_TOOLBAR=(bool, False),
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
@@ -71,6 +75,15 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "allauth.account.middleware.AccountMiddleware",
 ]
+
+DEBUG_TOOLBAR = env("DJANGO_DEBUG_TOOLBAR")
+
+if DEBUG_TOOLBAR:
+    INSTALLED_APPS += ["debug_toolbar"]
+    MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    # INTERNAL_IPS бесполезен в Docker: запрос приходит с адреса шлюза бриджа,
+    # а не с 127.0.0.1 — поэтому решаем по флагу.
+    DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": lambda request: True}
 
 ROOT_URLCONF = "config.urls"
 
