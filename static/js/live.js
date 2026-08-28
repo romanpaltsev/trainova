@@ -80,7 +80,9 @@ function restTimer() {
     timerId: null,
 
     init() {
-      this.duration = parseInt(this.$el.dataset.duration, 10) || 90;
+      // Не «|| 90»: ноль — валидное «без отдыха», а не повод взять дефолт.
+      const parsed = parseInt(this.$el.dataset.duration, 10);
+      this.duration = Number.isNaN(parsed) ? 90 : parsed;
       this.remaining = this.duration;
       this.storageKey = `app-rest-${this.$el.dataset.workout}`;
       this.onVisible = () => {
@@ -89,15 +91,19 @@ function restTimer() {
       };
       document.addEventListener("visibilitychange", this.onVisible);
 
+      if (this.$el.dataset.autostart) {
+        // «Подход выполнен»: отдых всегда начинается заново, даже если прошлый
+        // отсчёт ещё тикал — сохранённый остаток здесь не восстанавливается.
+        this.clearSaved();
+        this.start(Date.now() + this.duration * 1000, this.duration);
+        return;
+      }
       const saved = this.restore();
       if (saved && saved.endTs > Date.now()) {
         // Перезагрузка страницы посреди отдыха: продолжаем с правильного места.
         this.start(saved.endTs, saved.total);
       } else {
         this.clearSaved();
-        if (this.$el.dataset.autostart) {
-          this.start(Date.now() + this.duration * 1000, this.duration);
-        }
       }
     },
 

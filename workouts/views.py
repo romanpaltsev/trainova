@@ -64,7 +64,7 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
             .order_by("-started_at", "-id")
         )
         sport_id = self.request.GET.get("sport")
-        if sport_id and sport_id.isdigit():
+        if sport_id and sport_id.isdecimal():
             queryset = queryset.filter(sport_id=int(sport_id))
         return queryset
 
@@ -190,7 +190,9 @@ def live_set_or_404(request, pk, *, undone_only=False, for_update=False):
     if for_update:
         # Быстрые тапы степперов сериализуются на строке: каждый шаг применяется
         # к свежему значению, N тапов = N шагов независимо от порядка прихода.
-        queryset = queryset.select_for_update()
+        # of=("self",) — иначе блокировались бы и присоединённые workout/exercise,
+        # включая глобальные упражнения, общие для всех пользователей.
+        queryset = queryset.select_for_update(of=("self",))
     return get_object_or_404(queryset, pk=pk)
 
 
@@ -243,7 +245,7 @@ class StrengthWorkoutStartView(LoginRequiredMixin, View):
 
     def post(self, request):
         sport_id = request.POST.get("sport", "")
-        if not sport_id.isdigit():
+        if not sport_id.isdecimal():
             raise Http404("Вид спорта не указан")
         sport = get_object_or_404(
             Sport.objects.visible_to(request.user).filter(category=Sport.Category.STRENGTH),
@@ -292,7 +294,7 @@ class LiveExerciseView(LoginRequiredMixin, View):
         workout = live_workout_or_404(request, pk)
         exercise_id = request.POST.get("exercise", "")
         if exercise_id:
-            if not exercise_id.isdigit():
+            if not exercise_id.isdecimal():
                 raise Http404("Упражнение не найдено")
             # Священное правило: чужое личное упражнение по прямому id — 404.
             exercise = get_object_or_404(
@@ -343,7 +345,7 @@ class LiveExerciseSelectView(LoginRequiredMixin, View):
     def post(self, request, pk):
         workout = live_workout_or_404(request, pk)
         exercise_id = request.POST.get("exercise", "")
-        if not exercise_id.isdigit():
+        if not exercise_id.isdecimal():
             raise Http404("Упражнение не найдено")
         exercise = get_object_or_404(
             Exercise.objects.filter(sets__workout=workout, sets__done=False).distinct(),
@@ -360,7 +362,7 @@ class LiveSetAddView(LoginRequiredMixin, View):
     def post(self, request, pk):
         workout = live_workout_or_404(request, pk)
         exercise_id = request.POST.get("exercise", "")
-        if not exercise_id.isdigit():
+        if not exercise_id.isdecimal():
             raise Http404("Упражнение не найдено")
         exercise = get_object_or_404(
             Exercise.objects.filter(sets__workout=workout).distinct(), pk=int(exercise_id)
@@ -469,6 +471,12 @@ class WorkoutFinishView(LoginRequiredMixin, View):
     def get(self, request, pk):
         workout = self.get_workout()
         if workout.is_finished:
+            # Модалка запрошена из устаревшей вкладки. За обычным 302 htmx пошёл бы
+            # сам и вставил страницу итога внутрь #modal — HX-Redirect вместо этого
+            # выполняет полноценный переход браузера.
+            if request.headers.get("HX-Request"):
+                summary_url = reverse("workout_summary", args=[workout.pk])
+                return HttpResponse(headers={"HX-Redirect": summary_url})
             return redirect("workout_summary", pk=workout.pk)
         return render(
             request,

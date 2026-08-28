@@ -3,6 +3,7 @@
 from datetime import datetime, time
 
 from django import forms
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from workouts.models import CardioDetails, Exercise, Sport, Workout
@@ -214,5 +215,11 @@ class ExerciseQuickForm(forms.ModelForm):
             return existing
         exercise = self.save(commit=False)
         exercise.owner = self.user
-        exercise.save()
+        try:
+            # Savepoint: гонка двух вкладок упрётся в уникальный индекс, и тогда
+            # правильный ответ — взять только что созданную запись, а не 500.
+            with transaction.atomic():
+                exercise.save()
+        except IntegrityError:
+            return Exercise.objects.visible_to(self.user).get(name__iexact=name)
         return exercise

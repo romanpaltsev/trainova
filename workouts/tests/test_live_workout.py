@@ -150,6 +150,25 @@ def test_history_hides_active_workout(client, user):
     assert active not in workouts
 
 
+@pytest.mark.parametrize(
+    ("url_name", "payload"),
+    [
+        pytest.param("live_rest", {"delta": "15"}, id="rest"),
+        pytest.param("live_set_add", {"exercise": "1"}, id="add-set"),
+        pytest.param("live_exercise_select", {"exercise": "1"}, id="select"),
+        pytest.param("live_exercises", {"name": "Жим лёжа"}, id="attach"),
+        pytest.param("workout_finish", {}, id="finish"),
+    ],
+)
+def test_foreign_workout_actions_are_404(client, user, other_user, url_name, payload):
+    client.force_login(user)
+    alien = WorkoutFactory(user=other_user, duration_min=None)
+
+    response = client.post(reverse(url_name, args=[alien.pk]), payload)
+
+    assert response.status_code == 404
+
+
 def test_anonymous_is_redirected_to_login(client):
     response = client.get(reverse("workout_start"))
 

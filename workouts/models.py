@@ -344,7 +344,9 @@ class CardioDetails(models.Model):
     @property
     def pace_seconds_per_km(self):
         """Темп в секундах на километр."""
-        if not self.distance:
+        # duration_min теперь nullable: чужими руками (админка) кардио без
+        # длительности возможно, и деление не должно ронять страницу.
+        if not self.workout.duration_min or not self.distance:
             return None
         return int(self.workout.duration_min * 60 / self.distance)
 

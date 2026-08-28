@@ -54,6 +54,18 @@ def test_weight_does_not_go_below_zero(client, user):
     assert row.weight_kg == 0
 
 
+def test_weight_clamps_at_upper_limit(client, user):
+    """Выше max_digits=5 подняться нельзя — иначе save() упал бы с 500."""
+    client.force_login(user)
+    row = planned_set(user, weight_kg=Decimal("999.99"))
+
+    response = adjust(client, row, "weight", "up")
+
+    row.refresh_from_db()
+    assert response.status_code == 200
+    assert row.weight_kg == Decimal("999.99")
+
+
 @pytest.mark.parametrize(
     ("field", "direction"),
     [("weight", "sideways"), ("height", "up"), ("", "")],

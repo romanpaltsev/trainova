@@ -34,7 +34,8 @@ def test_feed_shows_only_own_workouts(client, user, other_user):
 
     assert workouts == [mine]
     assert alien not in workouts
-    assert str(alien.pk) not in response.content.decode()
+    # Не голый pk: маленькое число нашлось бы в датах и весах и дало бы флак.
+    assert f'id="workout-{alien.pk}"' not in response.content.decode()
 
 
 def test_feed_is_ordered_by_date_descending(client, user):
