@@ -36,7 +36,11 @@
 {% for group in groups %}
   <section class="app-card app-live-exercise">
     <div class="app-live-exercise-head">
-      <h2 class="app-live-exercise-name">{{ group.exercise.name }}</h2>
+      <h2 class="app-live-exercise-name">
+        <a class="app-exercise-link" href="{% url 'exercise_detail' group.exercise.pk %}">
+          {{ group.exercise.name }}
+        </a>
+      </h2>
       <span class="app-live-exercise-meta">{{ group.tonnage|floatformat:0 }} кг</span>
     </div>
     <div class="app-live-sets">

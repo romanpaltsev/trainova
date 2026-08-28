@@ -86,6 +86,15 @@ def _window_totals(user, first_day, last_day):
     }
 
 
+def _delta(value, suffix=""):
+    """Подпись дельты плитки: «+1…», «−38 мин» или нейтральное «без изменений»."""
+    if value > 0:
+        return {"label": f"+{value}{suffix}", "direction": "up"}
+    if value < 0:
+        return {"label": f"−{abs(value)}{suffix}", "direction": "down"}
+    return {"label": "без изменений", "direction": "flat"}
+
+
 def seven_day_summary(user, today=None):
     """Сводка скользящего окна «за 7 дней» с дельтами к прошлым 7 дням.
 
@@ -95,18 +104,27 @@ def seven_day_summary(user, today=None):
     today = today or timezone.localdate()
     current = _window_totals(user, today - timedelta(days=6), today)
     previous = _window_totals(user, today - timedelta(days=13), today - timedelta(days=7))
+    count_delta = current["count"] - previous["count"]
+    minutes_delta = current["minutes"] - previous["minutes"]
+    strength = current["strength_count"]
     return {
         "start": today - timedelta(days=6),
         "end": today,
         "count": current["count"],
-        "count_delta": current["count"] - previous["count"],
+        "count_delta": count_delta,
+        "count_delta_label": _delta(count_delta, " к прошлым 7 дням"),
         "minutes": current["minutes"],
-        "minutes_delta": current["minutes"] - previous["minutes"],
+        "minutes_delta": minutes_delta,
+        "minutes_delta_label": _delta(minutes_delta, " мин"),
         "duration_display": hours_display(current["minutes"]),
-        "strength_count": current["strength_count"],
+        "strength_count": strength,
+        "strength_count_label": (
+            f"{strength} {ru_plural(strength, 'силовая', 'силовые', 'силовых')}" if strength else ""
+        ),
         "tonnage_display": decimal_display(current["tonnage"]),
         "distance_display": decimal_display(current["distance"]),
         "cardio_sports": current["cardio_sports"],
+        "cardio_sports_label": " + ".join(name.lower() for name in current["cardio_sports"]),
     }
 
 
@@ -301,6 +319,8 @@ def exercise_progress(user, exercise):
         group = progress[seen[row.workout_id]]
         group["sets"].append(row)
         group["max_weight"] = max(group["max_weight"], float(row.weight_kg))
+    for group in progress:
+        group["max_weight_display"] = decimal_display(Decimal(str(group["max_weight"])))
     return progress
 
 

@@ -941,6 +941,250 @@ body {
 
 .app-workout-actions form { flex: 1 1 auto; }
 
+/* ---------- Дашборд ---------- */
+
+.app-dash-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-dash {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* minmax(0, …): canvas и длинные названия иначе распирают колонку */
+.app-dash-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.app-stat { padding: 1rem 1.25rem; }
+.app-stat.is-desktop { display: none; }
+
+.app-stat-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.app-stat-value {
+  margin: 0.125rem 0;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.app-stat-unit { font-size: 1rem; }
+
+.app-stat-sub {
+  font-size: 0.875rem;
+  color: var(--app-text-secondary);
+}
+
+.app-stat-delta {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--app-success);
+}
+
+.app-stat-delta.is-down { color: var(--app-text-secondary); }
+.app-stat-delta.is-flat { color: var(--app-text-muted); }
+
+.app-chart-card { padding: 1.25rem 1rem 0.75rem; }
+
+.app-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.25rem;
+}
+
+.app-chart-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.app-chart-meta { font-size: 0.875rem; }
+
+.app-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.375rem;
+  padding: 0 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.app-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Высоту canvas задаёт обёртка: maintainAspectRatio у графиков выключен */
+.app-chart-body {
+  position: relative;
+  height: 260px;
+  margin-top: 0.5rem;
+}
+
+.app-week-detail { margin-top: 1rem; }
+.app-week-detail:empty { display: none; }
+.app-week-detail-card { padding: 1rem; }
+
+.app-week-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.app-week-detail-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--app-text-secondary);
+}
+
+.app-dash-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.app-dash-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Мобильный порядок: последние тренировки выше рекордов, как в макете */
+.app-dash-side .app-latest { order: -1; }
+
+.app-latest-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-card);
+  background-color: var(--app-card);
+  box-shadow: var(--app-shadow-card);
+  color: var(--app-text);
+  text-decoration: none;
+}
+
+.app-latest-row:last-child { margin-bottom: 0; }
+.app-latest-row:hover { border-color: var(--app-text-muted); }
+
+.app-latest-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.app-latest-name {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.app-latest-meta {
+  color: var(--app-text-secondary);
+  font-size: 0.9375rem;
+}
+
+/* Рекорды: на мобильном — сетка плиток */
+.app-records-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.app-records-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-card);
+  background-color: var(--app-card);
+  box-shadow: var(--app-shadow-card);
+  color: var(--app-text);
+  text-decoration: none;
+}
+
+a.app-records-item:hover { border-color: var(--app-text-muted); }
+
+.app-records-label {
+  font-size: 0.9375rem;
+  color: var(--app-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.app-records-value { font-size: 1.375rem; }
+
+.app-records-sub {
+  font-size: 0.875rem;
+  color: var(--app-text-muted);
+}
+
+/* Карточка-прожектор топ-упражнения — только десктоп */
+.app-spotlight {
+  display: none;
+  padding: 1.25rem;
+  color: var(--app-text);
+  text-decoration: none;
+}
+
+.app-spotlight:hover { border-color: var(--app-text-muted); }
+
+.app-spotlight-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.app-spotlight-name {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+
+.app-spotlight-body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.app-spotlight-record { font-size: 1.75rem; }
+
+.app-spotlight-spark {
+  position: relative;
+  flex: 1 1 auto;
+  max-width: 55%;
+  height: 64px;
+}
+
+.app-exercise-link { color: var(--app-text); text-decoration: none; }
+.app-exercise-link:hover { text-decoration: underline; }
+
 /* ---------- Десктоп ---------- */
 
 @media (min-width: 768px) {
@@ -955,6 +1199,12 @@ body {
   .app-queue-row,
   .app-live-add-tile { max-width: 34rem; }
   .app-rest-time { font-size: 4.5rem; }
+  /* Дашборд: четыре плитки в ряд, график выше */
+  .app-dash-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .app-stat.is-desktop { display: flex; flex-direction: column; }
+  .app-chart-body { height: 320px; }
+  .app-exercise-chart,
+  .app-exercise-workout { max-width: 44rem; }
   .app-modal-backdrop { align-items: center; }
   /* На широком экране карточка входа стоит по центру, а не прижата к верху */
   .app-auth { justify-content: center; padding-bottom: 4rem; }
@@ -974,4 +1224,80 @@ body {
 @media (min-width: 1200px) {
   .app-header { padding: 1rem 3.5rem; }
   .app-main { padding: 1rem 3.5rem 4rem; }
+
+  /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
+  .app-dash {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    grid-template-areas:
+      "stats stats"
+      "main side";
+    align-items: start;
+    gap: 1rem;
+  }
+
+  .app-dash-stats { grid-area: stats; }
+  .app-dash-main { grid-area: main; }
+  .app-dash-side { grid-area: side; }
+  .app-dash-side .app-latest { order: 0; }
+  .app-spotlight { display: block; }
+  /* Первый силовой рекорд живёт в прожекторе — плитку прячем */
+  .app-records-item.is-spotlight { display: none; }
+
+  /* Рекорды и последние — единые карточки со строками, как в макете */
+  .app-records,
+  .app-latest {
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    background-color: var(--app-card);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  .app-records-list { display: block; }
+
+  .app-records-item {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  /* Название прижато влево, значение и темп/скорость — вправо */
+  .app-records-label { margin-right: auto; }
+
+  .app-records-value {
+    font-size: 1.0625rem;
+    font-weight: 700;
+  }
+
+  .app-records-sub { font-size: 0.8125rem; }
+
+  .app-latest-row {
+    padding: 0.375rem 0;
+    margin-bottom: 0;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .app-latest-row .app-pick-chevron { display: none; }
+
+  .app-latest-text {
+    flex: 1 1 auto;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .app-latest-meta {
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
 }

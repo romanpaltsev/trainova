@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}{{ exercise.name }} · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'dashboard' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <div>
+    <h1 class="app-page-title mb-0">{{ exercise.name }}</h1>
+    <div class="text-secondary-app">{{ stats_line }}</div>
+  </div>
+</div>
+
+{% if chart.values|length > 1 %}
+  <section class="app-card app-chart-card app-exercise-chart">
+    <div class="app-chart-head">
+      <h2 class="app-chart-title">Максимальный вес</h2>
+    </div>
+    <div class="app-chart-body">
+      <canvas id="exercise-chart" role="img" aria-label="Максимальный вес по тренировкам"></canvas>
+    </div>
+  </section>
+{% endif %}
+
+<h2 class="app-section-title">История подходов</h2>
+{% for group in history %}
+  <section class="app-card app-live-exercise app-exercise-workout">
+    <div class="app-live-exercise-head">
+      <a class="app-link" href="{% url 'workout_summary' group.workout.pk %}">
+        {{ group.workout.started_at|date:"D, j b"|lower }}
+      </a>
+      <span class="app-live-exercise-meta">до {{ group.max_weight_display }} кг</span>
+    </div>
+    <div class="app-live-sets">
+      {% for set in group.sets %}
+        <div class="app-live-set">
+          <span class="app-live-set-num">{{ forloop.counter }}</span>
+          <span class="app-live-set-value">
+            <span class="num">{{ set.weight_display }}</span> кг × <span class="num">{{ set.reps }}</span>
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% empty %}
+  <div class="app-card app-empty text-secondary-app">Этого упражнения ещё не было в тренировках.</div>
+{% endfor %}
+
+{{ chart|json_script:"exercise-chart-data" }}
+{% endblock %}
+
+{% block extra_scripts %}
+  {% load static %}
+  <script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+  <script src="{% static 'js/charts.js' %}"></script>
+  <script src="{% static 'js/exercise.js' %}"></script>
+{% endblock %}

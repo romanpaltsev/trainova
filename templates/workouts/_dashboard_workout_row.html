@@ -1,0 +1,13 @@
+{% comment %}Компактная строка тренировки (item из stats.workout_row): дашборд и партиал недели.{% endcomment %}
+<a class="app-latest-row"
+   href="{% if item.workout.sport.is_strength %}{% url 'workout_summary' item.workout.pk %}{% else %}{% url 'workout_edit' item.workout.pk %}{% endif %}"
+   id="workout-{{ item.workout.pk }}">
+  <span class="app-sport-dot" style="--dot: var(--app-sport-{{ item.color_key }})"></span>
+  <span class="app-latest-text">
+    <span class="app-latest-name">{{ item.sport_name }}</span>
+    <span class="app-latest-meta">{{ item.meta }}</span>
+  </span>
+  <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
+       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+       aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+</a>

@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Дашборд · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-dash-head">
+  <h1 class="app-page-title mb-0">За 7 дней</h1>
+  <span class="text-secondary-app">
+    {% if summary.start|date:"m Y" == summary.end|date:"m Y" %}
+      {{ summary.start|date:"j" }} — {{ summary.end|date:"j b" }}
+    {% else %}
+      {{ summary.start|date:"j b" }} — {{ summary.end|date:"j b" }}
+    {% endif %}
+  </span>
+</div>
+
+<div class="app-dash">
+  <section class="app-dash-stats" aria-label="Сводка за 7 дней">
+    <div class="app-card app-stat">
+      <div class="app-stat-label">Тренировки</div>
+      <div class="app-stat-value num">{{ summary.count }}</div>
+      <div class="app-stat-delta is-{{ summary.count_delta_label.direction }}">
+        {{ summary.count_delta_label.label }}
+      </div>
+    </div>
+    <div class="app-card app-stat">
+      <div class="app-stat-label">Время</div>
+      <div class="app-stat-value num">{{ summary.duration_display }}</div>
+      <div class="app-stat-delta is-{{ summary.minutes_delta_label.direction }}">
+        {{ summary.minutes_delta_label.label }}
+      </div>
+    </div>
+    <div class="app-card app-stat is-desktop">
+      <div class="app-stat-label">Тоннаж</div>
+      <div class="app-stat-value num">
+        {{ summary.tonnage_display }} <span class="app-stat-unit">кг</span>
+      </div>
+      <div class="app-stat-sub">{{ summary.strength_count_label|default:"—" }}</div>
+    </div>
+    <div class="app-card app-stat is-desktop">
+      <div class="app-stat-label">Дистанция</div>
+      <div class="app-stat-value num">
+        {{ summary.distance_display }} <span class="app-stat-unit">км</span>
+      </div>
+      <div class="app-stat-sub">{{ summary.cardio_sports_label|default:"—" }}</div>
+    </div>
+  </section>
+
+  <div class="app-dash-main">
+    <section class="app-card app-chart-card">
+      <div class="app-chart-head">
+        <h2 class="app-chart-title">Часы по неделям</h2>
+        <span class="app-chart-meta text-muted-app">12 недель</span>
+      </div>
+      {% if has_chart %}
+        <div class="app-chart-legend">
+          {% for dataset in chart.datasets %}
+            <span class="app-chart-legend-item">
+              <span class="app-sport-dot" style="--dot: var(--app-sport-{{ dataset.colorKey }})"></span>
+              {{ dataset.name }}
+            </span>
+          {% endfor %}
+        </div>
+        <div class="app-chart-body">
+          <canvas id="weekly-chart" data-week-url="{% url 'dashboard_week' %}"
+                  role="img" aria-label="Часы тренировок по неделям"></canvas>
+        </div>
+      {% else %}
+        <div class="app-empty">
+          <p class="text-secondary-app mb-3">
+            Записывайте тренировки — здесь появится график часов по неделям.
+          </p>
+          <button type="button" class="btn btn-accent"
+                  hx-get="{% url 'workout_start' %}" hx-target="#modal" hx-swap="innerHTML">
+            Начать тренировку
+          </button>
+        </div>
+      {% endif %}
+    </section>
+    <div id="week-detail" class="app-week-detail"></div>
+  </div>
+
+  <aside class="app-dash-side">
+    {% if spotlight %}
+      <a class="app-card app-spotlight" href="{% url 'exercise_detail' spotlight.exercise.pk %}">
+        <div class="app-spotlight-head">
+          <h2 class="app-spotlight-name">{{ spotlight.exercise.name }}</h2>
+          <span class="text-muted-app">{{ spotlight.count_label }}</span>
+        </div>
+        <div class="app-spotlight-body">
+          <div>
+            <div class="app-stat-label">рекорд</div>
+            <div class="app-spotlight-record num">{{ spotlight.record_display }} кг</div>
+          </div>
+          <div class="app-spotlight-spark"><canvas id="spotlight-spark" aria-hidden="true"></canvas></div>
+        </div>
+      </a>
+    {% endif %}
+
+    {% if records %}
+      <section class="app-records">
+        <div class="app-dash-section-head">
+          <h2 class="app-section-title mb-0">Личные рекорды</h2>
+        </div>
+        <div class="app-records-list">
+          {% for record in records %}
+            {% if record.url %}
+              <a class="app-records-item {% if record.is_spotlight %}is-spotlight{% endif %}"
+                 href="{{ record.url }}">
+            {% else %}
+              <div class="app-records-item">
+            {% endif %}
+                <span class="app-records-label">{{ record.label }}</span>
+                <span class="app-records-value num">{{ record.value }}</span>
+                {% if record.sub %}<span class="app-records-sub">{{ record.sub }}</span>{% endif %}
+            {% if record.url %}</a>{% else %}</div>{% endif %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="app-latest">
+      <div class="app-dash-section-head">
+        <h2 class="app-section-title mb-0">Последние тренировки</h2>
+        <a class="app-link app-link-accent" href="{% url 'workout_history' %}">Все</a>
+      </div>
+      <div class="app-latest-list">
+        {% for item in latest %}
+          {% include "workouts/_dashboard_workout_row.html" %}
+        {% empty %}
+          <div class="app-card app-empty text-secondary-app">Пока нет тренировок.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </aside>
+</div>
+
+{{ chart|json_script:"chart-data" }}
+{% if spotlight %}{{ spotlight.sparkline|json_script:"spark-data" }}{% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+  {% load static %}
+  <script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+  <script src="{% static 'js/charts.js' %}"></script>
+  <script src="{% static 'js/dashboard.js' %}"></script>
+{% endblock %}

@@ -1,6 +1,7 @@
 bootstrap 5.3.8
 htmx 2.0.10
 alpinejs 3.16.3
+chart.js 4.5.1
 
 Из минифицированных файлов удалены комментарии sourceMappingURL: .map-файлы мы не
 вендорим, а ManifestStaticFilesStorage на такой ссылке валит collectstatic.

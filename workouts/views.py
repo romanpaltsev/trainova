@@ -4,6 +4,7 @@
 по прямому URL даёт 404.
 """
 
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -15,11 +16,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
-from django.views.generic import DeleteView, ListView, View
+from django.views.generic import DeleteView, ListView, TemplateView, View
 
-from workouts import services
+from workouts import services, stats
 from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
-from workouts.models import Exercise, Sport, StrengthSet, Workout
+from workouts.models import Exercise, Sport, StrengthSet, Workout, decimal_display
 from workouts.stats import week_start, week_title
 
 HISTORY_PAGE_SIZE = 10
@@ -32,6 +33,8 @@ REST_DELTAS = {"-15", "15"}
 REST_MIN_SECONDS = 15
 REST_MAX_SECONDS = 600
 EXERCISE_RESULTS_LIMIT = 30
+# Дашборд: силовых рекордов в блоке (кардио добавляются по числу видов).
+STRENGTH_RECORDS_LIMIT = 3
 
 
 class WorkoutHistoryView(LoginRequiredMixin, ListView):
@@ -576,3 +579,124 @@ class SportCreateView(LoginRequiredMixin, View):
 
     def render_modal(self, form):
         return render(self.request, "workouts/_sport_modal.html", {"form": form})
+
+
+# ---------- Дашборд ----------
+
+
+class DashboardView(LoginRequiredMixin, TemplateView):
+    """Главная: сводка за 7 дней, часы по неделям, рекорды, последние тренировки."""
+
+    template_name = "workouts/dashboard.html"
+    extra_context = {"nav_active": "dashboard"}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        chart = stats.weekly_chart(user)
+        spotlight = stats.exercise_spotlight(user)
+        context.update(
+            {
+                "summary": stats.seven_day_summary(user),
+                "chart": chart,
+                "has_chart": bool(chart["datasets"]),
+                "latest": stats.latest_workouts(user),
+                "records": self.build_records(user),
+                "spotlight": spotlight,
+            }
+        )
+        return context
+
+    @staticmethod
+    def build_records(user):
+        """Единый список плиток рекордов: топ силовых + кардио по видам.
+
+        Первый силовой на десктопе уходит в карточку-прожектор (is_spotlight).
+        """
+        records = [
+            {
+                "label": row["name"],
+                "value": f"{row['weight_display']} кг",
+                "sub": "",
+                "url": reverse("exercise_detail", args=[row["exercise_id"]]),
+                "is_spotlight": index == 0,
+            }
+            for index, row in enumerate(stats.strength_records(user, limit=STRENGTH_RECORDS_LIMIT))
+        ]
+        records += [
+            {
+                "label": f"{row['name']} · дистанция",
+                "value": f"{row['distance_display']} км",
+                "sub": row["metric_display"],
+                "url": "",
+                "is_spotlight": False,
+            }
+            for row in stats.cardio_records(user)
+        ]
+        return records
+
+
+class DashboardWeekView(LoginRequiredMixin, View):
+    """Партиал по тапу на столбец графика: тренировки выбранной недели."""
+
+    def get(self, request):
+        try:
+            start = date.fromisoformat(request.GET.get("start", ""))
+        except (TypeError, ValueError):
+            return HttpResponseBadRequest("Недопустимая дата")
+        start = week_start(start)
+        first_moment, next_week = stats.day_bounds(start, start + timedelta(days=6))
+        workouts = (
+            Workout.objects.filter(user=request.user)
+            .finished()
+            .filter(started_at__gte=first_moment, started_at__lt=next_week)
+            .select_related("sport", "cardio")
+            .annotate(tonnage=Sum(F("sets__weight_kg") * F("sets__reps")))
+            .order_by("-started_at", "-id")
+        )
+        today = timezone.localdate()
+        return render(
+            request,
+            "workouts/_dashboard_week.html",
+            {
+                "title": week_title(start, today),
+                "rows": [stats.workout_row(workout, today) for workout in workouts],
+            },
+        )
+
+
+class ExerciseDetailView(LoginRequiredMixin, View):
+    """Страница упражнения: график максимального веса и история подходов.
+
+    Страница глобального упражнения видна всем, но данные — только свои:
+    прогресс фильтруется по request.user.
+    """
+
+    def get(self, request, pk):
+        exercise = get_object_or_404(Exercise.objects.visible_to(request.user), pk=pk)
+        progress = stats.exercise_progress(request.user, exercise)
+        count = len(progress)
+        if count:
+            record = max(group["max_weight"] for group in progress)
+            workouts_word = services.ru_plural(count, "тренировка", "тренировки", "тренировок")
+            stats_line = f"{count} {workouts_word}"
+            if record:
+                stats_line += f" · рекорд {decimal_display(Decimal(str(record)))} кг"
+        else:
+            stats_line = "ещё не было в тренировках"
+        return render(
+            request,
+            "workouts/exercise_detail.html",
+            {
+                "exercise": exercise,
+                "history": list(reversed(progress)),
+                "chart": {
+                    "labels": [group["label"] for group in progress],
+                    "values": [group["max_weight"] for group in progress],
+                    "colorKey": "strength",
+                    "unit": "кг",
+                },
+                "stats_line": stats_line,
+                "nav_active": "dashboard",
+            },
+        )

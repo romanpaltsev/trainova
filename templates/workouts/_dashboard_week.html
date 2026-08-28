@@ -1,0 +1,17 @@
+{% comment %}Тренировки недели по тапу на столбец графика. Закрытие — удалением себя.{% endcomment %}
+<section class="app-card app-week-detail-card" x-data>
+  <div class="app-week-detail-head">
+    <h3 class="app-week-detail-title">{{ title }}</h3>
+    <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="app-latest-list">
+    {% for item in rows %}
+      {% include "workouts/_dashboard_workout_row.html" %}
+    {% empty %}
+      <p class="text-secondary-app mb-0">На этой неделе тренировок не было.</p>
+    {% endfor %}
+  </div>
+</section>
