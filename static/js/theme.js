@@ -12,7 +12,7 @@
   function apply(choice) {
     const theme = resolve(choice);
     document.documentElement.setAttribute("data-bs-theme", theme);
-    const meta = document.querySelector('meta[name="theme-color"]');
+    const meta = document.getElementById("theme-color");
     if (meta) {
       meta.setAttribute(
         "content",

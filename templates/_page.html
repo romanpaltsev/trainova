@@ -10,7 +10,7 @@
   {% endcomment %}
   <meta name="theme-color" media="(prefers-color-scheme: light)" content="{{ theme_colors.light }}">
   <meta name="theme-color" media="(prefers-color-scheme: dark)" content="{{ theme_colors.dark }}">
-  <meta name="theme-color">
+  <meta name="theme-color" id="theme-color">
   <link rel="manifest" href="{% url 'manifest' %}">
   <link rel="icon" href="{% static 'img/icon.svg' %}" type="image/svg+xml">
   <link rel="icon" href="{% static 'img/icon-192.png' %}" sizes="192x192" type="image/png">
@@ -39,7 +39,7 @@
         : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
       var root = document.documentElement;
       root.setAttribute("data-bs-theme", theme);
-      var meta = document.querySelector('meta[name="theme-color"]');
+      var meta = document.getElementById("theme-color");
       if (meta) {
         meta.setAttribute("content", getComputedStyle(root).getPropertyValue("--app-bg").trim());
       }

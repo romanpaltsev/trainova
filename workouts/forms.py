@@ -30,6 +30,7 @@ class CardioWorkoutForm(forms.Form):
     )
     date = forms.DateField(
         label="Дата",
+        error_messages={"required": "Укажите дату.", "invalid": "Не похоже на дату."},
         # input_formats и format — обязательны: <input type="date"> понимает только
         # ISO-формат, а с локалью ru-ru Django по умолчанию рендерит 27.08.2026.
         input_formats=["%Y-%m-%d"],
@@ -58,6 +59,11 @@ class CardioWorkoutForm(forms.Form):
         max_digits=6,
         decimal_places=2,
         min_value=0.01,
+        error_messages={
+            "required": "Укажите дистанцию.",
+            "invalid": "Дистанция — это число, например 7,2.",
+            "min_value": "Дистанция должна быть больше нуля.",
+        },
         widget=forms.NumberInput(
             attrs={"class": "form-control", "inputmode": "decimal", "step": "0.01"}
         ),
@@ -65,6 +71,7 @@ class CardioWorkoutForm(forms.Form):
     avg_heart_rate = forms.IntegerField(
         label="Средний пульс",
         help_text="необязательно",
+        error_messages={"invalid": "Пульс — это целое число."},
         min_value=30,
         max_value=250,
         required=False,

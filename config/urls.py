@@ -8,6 +8,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("manifest.webmanifest", views.manifest, name="manifest"),
+    path("favicon.ico", views.favicon),
     # Префикс accounts/ принадлежит allauth, поэтому свои экраны аккаунта
     # живут в корне — как дашборд.
     path("", include("accounts.urls")),
