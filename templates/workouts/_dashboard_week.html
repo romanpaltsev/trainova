@@ -2,7 +2,12 @@
 <section class="app-card app-week-detail-card" x-data>
   <div class="app-week-detail-head">
     <h3 class="app-week-detail-title">{{ title }}</h3>
-    <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+    {% comment %}
+      replaceChildren, а не remove: innerHTML-своп кладёт в контейнер и
+      whitespace-узлы, а с ними :empty перестал бы прятать пустой блок.
+    {% endcomment %}
+    <button type="button" class="app-icon-btn" aria-label="Закрыть"
+            @click="$root.parentElement.replaceChildren()">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>

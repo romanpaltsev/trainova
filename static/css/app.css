@@ -1038,7 +1038,12 @@ body {
   margin-top: 0.5rem;
 }
 
-.app-week-detail { margin-top: 1rem; }
+.app-week-detail {
+  margin-top: 1rem;
+  /* Прокрутка htmx show:top не должна увозить панель под липкую шапку */
+  scroll-margin-top: calc(var(--app-header-height) + 0.5rem);
+}
+
 .app-week-detail:empty { display: none; }
 .app-week-detail-card { padding: 1rem; }
 
@@ -1243,6 +1248,8 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
   .app-spotlight { display: block; }
   /* Первый силовой рекорд живёт в прожекторе — плитку прячем */
   .app-records-item.is-spotlight { display: none; }
+  /* Если он был единственным, прячем и саму карточку: она стала бы пустой */
+  .app-records.is-only-spotlight { display: none; }
 
   /* Рекорды и последние — единые карточки со строками, как в макете */
   .app-records,

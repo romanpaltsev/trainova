@@ -266,12 +266,14 @@ def cardio_records(user):
     records = []
     for row in rows:
         sport = sports[row["sport_id"]]
-        speed = row["best_speed"]
-        if Decimal(str(speed)) >= SPEED_THRESHOLD_KMH:
+        # Квантуем до 0,1 ДО сравнения с порогом — ровно как CardioDetails.shows_speed,
+        # иначе на границе (13,95…14,0) карточка и рекорд разошлись бы в юнитах.
+        speed = Decimal(str(row["best_speed"])).quantize(Decimal("0.1"))
+        if speed >= SPEED_THRESHOLD_KMH:
             metric_label = "скорость"
-            metric_display = f"{speed:.1f} км/ч".replace(".", ",")
+            metric_display = f"{speed} км/ч".replace(".", ",")
         else:
-            pace_min, pace_sec = divmod(int(3600 / speed), 60)
+            pace_min, pace_sec = divmod(int(3600 / row["best_speed"]), 60)
             metric_label = "темп"
             metric_display = f"{pace_min}:{pace_sec:02d} /км"
         records.append(

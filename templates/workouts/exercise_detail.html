@@ -21,6 +21,12 @@
     <div class="app-chart-head">
       <h2 class="app-chart-title">Максимальный вес</h2>
     </div>
+    <div class="app-chart-legend">
+      <span class="app-chart-legend-item">
+        <span class="app-sport-dot" style="--dot: var(--app-sport-strength)"></span>
+        {{ exercise.name }}
+      </span>
+    </div>
     <div class="app-chart-body">
       <canvas id="exercise-chart" role="img" aria-label="Максимальный вес по тренировкам"></canvas>
     </div>

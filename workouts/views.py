@@ -641,11 +641,12 @@ class DashboardWeekView(LoginRequiredMixin, View):
 
     def get(self, request):
         try:
-            start = date.fromisoformat(request.GET.get("start", ""))
-        except (TypeError, ValueError):
+            start = week_start(date.fromisoformat(request.GET.get("start", "")))
+            # OverflowError: дата у самого края календаря (год 9999) переполняет
+            # арифметику недели — это такой же негодный ввод, как и мусор.
+            first_moment, next_week = stats.day_bounds(start, start + timedelta(days=6))
+        except (TypeError, ValueError, OverflowError):
             return HttpResponseBadRequest("Недопустимая дата")
-        start = week_start(start)
-        first_moment, next_week = stats.day_bounds(start, start + timedelta(days=6))
         workouts = (
             Workout.objects.filter(user=request.user)
             .finished()

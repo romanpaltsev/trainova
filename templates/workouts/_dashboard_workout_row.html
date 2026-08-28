@@ -1,7 +1,8 @@
 {% comment %}Компактная строка тренировки (item из stats.workout_row): дашборд и партиал недели.{% endcomment %}
+{% comment %}data-workout вместо id: строка может быть и в «последних», и в панели недели.{% endcomment %}
 <a class="app-latest-row"
    href="{% if item.workout.sport.is_strength %}{% url 'workout_summary' item.workout.pk %}{% else %}{% url 'workout_edit' item.workout.pk %}{% endif %}"
-   id="workout-{{ item.workout.pk }}">
+   data-workout="{{ item.workout.pk }}">
   <span class="app-sport-dot" style="--dot: var(--app-sport-{{ item.color_key }})"></span>
   <span class="app-latest-text">
     <span class="app-latest-name">{{ item.sport_name }}</span>

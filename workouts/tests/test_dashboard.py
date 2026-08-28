@@ -41,18 +41,20 @@ def test_dashboard_shows_week_summary_and_latest_workouts(client, user):
     assert "Часы по неделям" in content
     assert "weekly-chart" in content
     assert "Личные рекорды" in content
-    assert f'id="workout-{workout.pk}"' in content
+    assert f'data-workout="{workout.pk}"' in content
 
 
 def test_dashboard_hides_other_users_data(client, user, other_user):
     alien = WorkoutFactory(user=other_user)
-    StrengthSetFactory(workout=alien, set_number=1, weight_kg=200, reps=1)
+    alien_exercise = ExerciseFactory(owner=other_user, name="Чужое упражнение")
+    StrengthSetFactory(workout=alien, exercise=alien_exercise, set_number=1, weight_kg=200, reps=1)
 
     client.force_login(user)
     content = client.get(reverse("dashboard")).content.decode()
 
-    assert f'id="workout-{alien.pk}"' not in content
-    assert "200" not in content
+    assert f'data-workout="{alien.pk}"' not in content
+    assert "Чужое упражнение" not in content
+    assert "200 кг" not in content
 
 
 def test_dashboard_redirects_anonymous_to_login(client):
@@ -71,8 +73,8 @@ def test_week_partial_shows_only_workouts_of_requested_week(client, user):
     client.force_login(user)
     content = client.get(reverse("dashboard_week"), {"start": monday.isoformat()}).content.decode()
 
-    assert f'id="workout-{inside.pk}"' in content
-    assert f'id="workout-{outside.pk}"' not in content
+    assert f'data-workout="{inside.pk}"' in content
+    assert f'data-workout="{outside.pk}"' not in content
 
 
 def test_week_partial_hides_other_users_workouts(client, user, other_user):
@@ -82,7 +84,7 @@ def test_week_partial_hides_other_users_workouts(client, user, other_user):
     client.force_login(user)
     content = client.get(reverse("dashboard_week"), {"start": monday.isoformat()}).content.decode()
 
-    assert f'id="workout-{alien.pk}"' not in content
+    assert f'data-workout="{alien.pk}"' not in content
     assert "тренировок не было" in content
 
 
@@ -101,6 +103,24 @@ def test_week_partial_without_param_is_rejected(client, user):
     assert client.get(reverse("dashboard_week")).status_code == 400
 
 
+def test_week_partial_rejects_date_at_calendar_edge(client, user):
+    """Год 9999 переполняет арифметику недели — это тоже негодный ввод, не 500."""
+    client.force_login(user)
+
+    response = client.get(reverse("dashboard_week"), {"start": "9999-12-31"})
+
+    assert response.status_code == 400
+
+
+def test_week_partial_redirects_anonymous_to_login(client):
+    monday = stats.week_start(timezone.localdate())
+
+    response = client.get(reverse("dashboard_week"), {"start": monday.isoformat()})
+
+    assert response.status_code == 302
+    assert reverse("account_login") in response.url
+
+
 def test_exercise_page_shows_chart_and_set_history(client, user):
     bench = ExerciseFactory(name="Жим лёжа")
     for offset, weight in ((7, 70), (1, Decimal("77.5"))):
@@ -112,7 +132,7 @@ def test_exercise_page_shows_chart_and_set_history(client, user):
 
     assert "Жим лёжа" in content
     assert "рекорд 77,5 кг" in content
-    assert "exercise-chart" in content
+    assert 'id="exercise-chart"' in content  # canvas, а не только json_script
     assert "История подходов" in content
     assert "77,5" in content
 

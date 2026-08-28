@@ -98,7 +98,11 @@
     {% endif %}
 
     {% if records %}
-      <section class="app-records">
+      {% comment %}
+        Если единственный рекорд ушёл в прожектор, на десктопе карточка
+        рекордов осталась бы пустой — прячем её целиком.
+      {% endcomment %}
+      <section class="app-records{% if records|length == 1 and records.0.is_spotlight %} is-only-spotlight{% endif %}">
         <div class="app-dash-section-head">
           <h2 class="app-section-title mb-0">Личные рекорды</h2>
         </div>

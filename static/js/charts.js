@@ -114,7 +114,7 @@ window.appCharts = (function () {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 8 } },
+        layout: { padding: { top: 18 } },
         onHover: function (event, elements) {
           event.native.target.style.cursor = elements.length ? "pointer" : "default";
         },
@@ -217,7 +217,7 @@ window.appCharts = (function () {
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        layout: { padding: { top: 8 } },
+        layout: { padding: { top: 18 } },
         scales: {
           x: {
             grid: { display: false },
