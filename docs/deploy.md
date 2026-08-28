@@ -32,14 +32,14 @@
 Заведите A-запись на IP сервера (AAAA — если есть IPv6):
 
 ```
-dnevnik.example.com.  A  203.0.113.10
+trainova.hotbar.pro.  A  203.0.113.10
 ```
 
 Проверьте до выпуска сертификата, иначе certbot израсходует попытки
 (лимит боевого УЦ — 5 неудач в час на домен):
 
 ```bash
-dig +short dnevnik.example.com
+dig +short trainova.hotbar.pro
 ```
 
 ## 2. Сервер: пользователь, docker, файрвол
@@ -125,8 +125,8 @@ EmailAddress.objects.update_or_create(user=u, email=u.email,
 ## 6. Проверка
 
 ```bash
-curl -I https://dnevnik.example.com/accounts/login/     # 200, есть strict-transport-security
-curl -I http://dnevnik.example.com/                     # 301 на https
+curl -I https://trainova.hotbar.pro/accounts/login/     # 200, есть strict-transport-security
+curl -I http://trainova.hotbar.pro/                     # 301 на https
 ./scripts/prod.sh exec web python manage.py sendtestemail вы@example.com
 ```
 
