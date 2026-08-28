@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% comment %}Наши экраны аккаунта. Папка account/ (без «s») — переопределения allauth.{% endcomment %}
+
+{% block title %}Профиль · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Профиль</h1>
+
+<section class="app-card app-profile-user">
+  <span class="app-avatar app-avatar-lg" aria-hidden="true">{{ user.initial }}</span>
+  <div>
+    <div class="app-profile-email">{{ user.email }}</div>
+    {% if email_verified %}
+      <div class="app-profile-verified">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+        email подтверждён
+      </div>
+    {% else %}
+      <div class="text-muted-app">email не подтверждён</div>
+    {% endif %}
+  </div>
+</section>
+
+<h2 class="app-section-title">Настройки</h2>
+
+<div class="app-card app-profile-block">
+  <div class="app-profile-block-title">Тема</div>
+  {% comment %}
+    data-app-theme-choice, а не data-app-theme-toggle: тот атрибут привязан
+    к двухпозиционному переключателю в шапке.
+  {% endcomment %}
+  <div class="app-chips app-theme-choice" data-app-theme-choice role="group" aria-label="Тема">
+    <input type="radio" name="app-theme" id="theme-light" value="light" class="app-chip-input">
+    <label class="app-chip" for="theme-light">Светлая</label>
+    <input type="radio" name="app-theme" id="theme-dark" value="dark" class="app-chip-input">
+    <label class="app-chip" for="theme-dark">Тёмная</label>
+    <input type="radio" name="app-theme" id="theme-system" value="system" class="app-chip-input">
+    <label class="app-chip" for="theme-system">Системная</label>
+  </div>
+</div>
+
+<div class="app-rows">
+  <button type="button" class="app-row"
+          hx-get="{% url 'profile_rest' %}" hx-target="#modal" hx-swap="innerHTML">
+    <span class="app-row-text">
+      <span class="app-row-name">Отдых между подходами</span>
+      <span class="app-row-meta">значение по умолчанию для таймера</span>
+    </span>
+    {% include "accounts/_rest_row_value.html" %}
+    {% include "includes/chevron.html" %}
+  </button>
+</div>
+
+<h2 class="app-section-title">Мои справочники</h2>
+
+<div class="app-rows">
+  <a class="app-row" href="{% url 'exercise_list' %}?mine=1">
+    <span class="app-row-icon">{% include "includes/logo.html" %}</span>
+    <span class="app-row-text"><span class="app-row-name">Мои упражнения</span></span>
+    <span class="app-row-count num">{{ exercises_count }}</span>
+    {% include "includes/chevron.html" %}
+  </a>
+  <a class="app-row" href="{% url 'my_sports' %}">
+    <span class="app-row-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/>
+      </svg>
+    </span>
+    <span class="app-row-text"><span class="app-row-name">Мои виды спорта</span></span>
+    <span class="app-row-count num">{{ sports_count }}</span>
+    {% include "includes/chevron.html" %}
+  </a>
+</div>
+
+<h2 class="app-section-title">Приложение</h2>
+
+<div class="app-rows">
+  <a class="app-row" href="{% url 'changelog' %}">
+    <span class="app-row-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 4l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8z"/>
+      </svg>
+    </span>
+    <span class="app-row-text"><span class="app-row-name">Что нового</span></span>
+    {% if changelog_unread %}
+      <span class="app-sport-dot" style="--dot: var(--app-accent-text)"></span>
+      <span class="visually-hidden">есть новые записи</span>
+    {% endif %}
+    {% include "includes/chevron.html" %}
+  </a>
+</div>
+
+<h2 class="app-section-title">Аккаунт</h2>
+
+<div class="app-rows">
+  <a class="app-row" href="{% url 'account_change_password' %}">
+    <span class="app-row-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>
+      </svg>
+    </span>
+    <span class="app-row-text"><span class="app-row-name">Сменить пароль</span></span>
+    {% include "includes/chevron.html" %}
+  </a>
+  {% comment %}Выход только POST'ом: GET-выход выключен настройкой allauth.{% endcomment %}
+  <form method="post" action="{% url 'account_logout' %}">
+    {% csrf_token %}
+    <button type="submit" class="app-row is-danger">
+      <span class="app-row-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10 5H6a2 2 0 00-2 2v10a2 2 0 002 2h4M15 8l4 4-4 4M19 12H9"/>
+        </svg>
+      </span>
+      <span class="app-row-text"><span class="app-row-name">Выйти</span></span>
+    </button>
+  </form>
+</div>
+
+<p class="app-profile-version text-muted-app">
+  Дневник тренировок{% if app_version %} · v{{ app_version }}{% endif %}
+</p>
+{% endblock %}

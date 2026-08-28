@@ -386,6 +386,17 @@ body {
   text-align: center;
 }
 
+.app-empty-title {
+  margin-bottom: 0.375rem;
+  font-size: 1.0625rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.app-empty-text { margin-bottom: 0; }
+
+.app-empty-actions { margin-top: 1rem; }
+
 /* ---------- Модалка ---------- */
 
 .app-modal-backdrop {
@@ -1190,6 +1201,215 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
 .app-exercise-link { color: var(--app-text); text-decoration: none; }
 .app-exercise-link:hover { text-decoration: underline; }
 
+/* ---------- Профиль и справочники ---------- */
+
+.app-profile-user {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.app-avatar-lg {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  font-size: 1.5rem;
+}
+
+.app-profile-email {
+  font-size: 1.0625rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+/* Акцент как текст — только --app-accent-text: лайм на светлой карточке нечитаем */
+.app-profile-verified {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--app-accent-text);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+.app-profile-block {
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-profile-block-title {
+  margin-bottom: 0.625rem;
+  font-size: 1.0625rem;
+  font-weight: 800;
+}
+
+.app-theme-choice { flex-wrap: nowrap; }
+
+.app-theme-choice .app-chip {
+  flex: 1 1 0;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+}
+
+/* В макете выбранный сегмент залит акцентом, а не обведён им, как чипы спорта */
+.app-theme-choice .app-chip-input:checked + .app-chip {
+  background-color: var(--app-accent);
+  border-color: var(--app-accent);
+  color: var(--app-on-accent);
+  box-shadow: none;
+}
+
+.app-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Форма выхода не должна ломать колонку строк */
+.app-rows form { display: contents; }
+
+.app-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 56px;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-card);
+  background-color: var(--app-card);
+  box-shadow: var(--app-shadow-card);
+  color: var(--app-text);
+  font-weight: 700;
+  text-align: left;
+  text-decoration: none;
+}
+
+.app-row:hover { border-color: var(--app-text-muted); }
+
+.app-row-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--app-text-secondary);
+}
+
+.app-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-row-link {
+  color: var(--app-text);
+  text-decoration: none;
+}
+
+.app-row-name {
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.app-row-meta {
+  color: var(--app-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+.app-row-value {
+  flex: 0 0 auto;
+  font-size: 1.125rem;
+}
+
+.app-row-count {
+  flex: 0 0 auto;
+  color: var(--app-text-secondary);
+  font-weight: 400;
+}
+
+.app-row.is-danger,
+.app-row.is-danger .app-row-icon { color: var(--app-danger); }
+
+.app-row-delete {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+.app-row-delete:hover { color: var(--app-danger); }
+
+.app-rest-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+}
+
+.app-search { margin-bottom: 1rem; }
+
+.app-profile-version {
+  margin-top: 1.5rem;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ---------- Что нового ---------- */
+
+.app-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-pill);
+  color: var(--app-text-secondary);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-badge-feature {
+  border-color: var(--app-accent-text);
+  color: var(--app-accent-text);
+}
+
+.app-badge-fix {
+  border-color: var(--app-line);
+  color: var(--app-text-secondary);
+}
+
+.app-news {
+  padding: 1rem 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-news-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin-bottom: 0.5rem;
+}
+
+.app-news-date {
+  color: var(--app-text-secondary);
+  font-size: 0.9375rem;
+}
+
+.app-news-title {
+  margin: 0 0 0.25rem;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.app-news-body {
+  margin: 0;
+  color: var(--app-text-secondary);
+}
+
 /* ---------- Десктоп ---------- */
 
 @media (min-width: 768px) {
@@ -1210,6 +1430,13 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
   .app-chart-body { height: 320px; }
   .app-exercise-chart,
   .app-exercise-workout { max-width: 44rem; }
+  /* Профиль, справочники и новости — узкая колонна, как форма кардио */
+  .app-profile-user,
+  .app-profile-block,
+  .app-rows,
+  .app-search,
+  .app-news,
+  .app-profile-version { max-width: 34rem; }
   .app-modal-backdrop { align-items: center; }
   /* На широком экране карточка входа стоит по центру, а не прижата к верху */
   .app-auth { justify-content: center; padding-bottom: 4rem; }

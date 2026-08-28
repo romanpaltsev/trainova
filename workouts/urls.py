@@ -5,7 +5,12 @@ from workouts import views
 urlpatterns = [
     path("", views.DashboardView.as_view(), name="dashboard"),
     path("dashboard/week/", views.DashboardWeekView.as_view(), name="dashboard_week"),
+    path("exercises/", views.ExerciseListView.as_view(), name="exercise_list"),
     path("exercises/<int:pk>/", views.ExerciseDetailView.as_view(), name="exercise_detail"),
+    path("exercises/<int:pk>/delete/", views.ExerciseDeleteView.as_view(), name="exercise_delete"),
+    path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
+    path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
+    path("changelog/", views.ChangelogView.as_view(), name="changelog"),
     path("history/", views.WorkoutHistoryView.as_view(), name="workout_history"),
     path("workouts/cardio/new/", views.CardioWorkoutFormView.as_view(), name="cardio_create"),
     path("workouts/<int:pk>/edit/", views.CardioWorkoutFormView.as_view(), name="workout_edit"),

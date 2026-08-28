@@ -3,6 +3,7 @@
 Все значения, зависящие от окружения, читаются из .env (django-environ).
 """
 
+import tomllib
 from pathlib import Path
 
 import environ
@@ -22,6 +23,19 @@ env = environ.Env(
     DJANGO_DB_CONN_MAX_AGE=(int, 0),
 )
 environ.Env.read_env(BASE_DIR / ".env")
+
+# Версия продукта для футера профиля. Единственный источник — pyproject.toml:
+# importlib.metadata не годится, прод-образ ставит зависимости с --no-install-project.
+try:
+    APP_VERSION = tomllib.loads((BASE_DIR / "pyproject.toml").read_text("utf-8"))["project"][
+        "version"
+    ]
+except (OSError, KeyError, tomllib.TOMLDecodeError):
+    APP_VERSION = ""
+
+# Дубль токенов --app-bg из static/css/tokens.css: манифест PWA и <meta name="theme-color">
+# не понимают CSS-переменных, а цвет темы нужен ещё до первой отрисовки.
+APP_THEME_COLORS = {"dark": "#0D1015", "light": "#F6F7F9"}
 
 SECRET_KEY = env("DJANGO_SECRET_KEY")
 DEBUG = env("DJANGO_DEBUG")
@@ -71,6 +85,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.honeypot",
+                "accounts.context_processors.theme_colors",
             ],
         },
     },

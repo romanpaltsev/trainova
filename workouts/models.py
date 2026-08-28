@@ -23,6 +23,22 @@ GLOBAL_SPORT_COLORS = {
 }
 
 
+# Границы и шаг отдыха: одни и те же для значения по умолчанию в профиле
+# (User.rest_seconds_default) и для отдыха отдельной тренировки (Workout.rest_seconds).
+REST_MIN_SECONDS = 15
+REST_MAX_SECONDS = 600
+REST_DELTAS = {"-15", "15"}
+
+
+def clamp_rest_seconds(seconds):
+    return max(REST_MIN_SECONDS, min(REST_MAX_SECONDS, seconds))
+
+
+def rest_display(seconds):
+    """Отдых как 1:30 — так он показан на таймере живого режима."""
+    return f"{seconds // 60}:{seconds % 60:02d}"
+
+
 def decimal_display(value):
     """Число без лишних нулей и с запятой: 7,2 · 32,4 · 12,34 · 10."""
     value = value.normalize()
@@ -267,6 +283,9 @@ class StrengthSet(models.Model):
         verbose_name = "подход"
         verbose_name_plural = "подходы"
         ordering = ["exercise__name", "set_number"]
+        # Рекорды и прогресс упражнения группируют подходы по упражнению,
+        # а одиночного FK-индекса для такой выборки мало.
+        indexes = [models.Index(fields=["exercise", "workout"], name="set_exercise_workout_idx")]
         constraints = [
             models.UniqueConstraint(
                 fields=["workout", "exercise", "set_number"],
@@ -375,3 +394,55 @@ class CardioDetails(models.Model):
             return f"{self.speed_kmh} км/ч".replace(".", ",")
         pace = self.pace_display
         return f"{pace} /км" if pace else "—"
+
+
+class ChangelogQuerySet(models.QuerySet):
+    """Новости проекта: что показывать и что считать непрочитанным."""
+
+    def published(self, now=None):
+        # Две независимые заслонки: is_published — черновик, published_at — отложенный показ.
+        return self.filter(is_published=True, published_at__lte=now or timezone.now())
+
+    def unread_for(self, user):
+        """Опубликованные записи новее последнего открытия «Что нового»."""
+        entries = self.published()
+        if user.changelog_seen_at is None:
+            # Страницу ещё не открывали — непрочитано всё.
+            return entries
+        return entries.filter(published_at__gt=user.changelog_seen_at)
+
+
+class ChangelogEntry(models.Model):
+    """Новость проекта. Создаёт и правит только админ через Django admin."""
+
+    class Kind(models.TextChoices):
+        FEATURE = "feature", "Новое"
+        FIX = "fix", "Исправлено"
+
+    kind = models.CharField("тип", max_length=10, choices=Kind, default=Kind.FEATURE)
+    title = models.CharField("заголовок", max_length=120)
+    body = models.TextField("текст")
+    published_at = models.DateTimeField(
+        "дата публикации",
+        default=timezone.now,
+        help_text=(
+            "Можно поставить будущую — запись появится сама. Дата задним числом "
+            "ниже последнего открытия «Что нового» точку-бейдж не зажжёт."
+        ),
+    )
+    is_published = models.BooleanField(
+        "опубликовано", default=True, help_text="Снято — черновик, в приложении не виден."
+    )
+
+    objects = models.Manager.from_queryset(ChangelogQuerySet)()
+
+    class Meta:
+        verbose_name = "новость"
+        verbose_name_plural = "новости"
+        # -id как тайбрейкер: у двух записей одного дня published_at совпадает.
+        ordering = ["-published_at", "-id"]
+        # Индекса нет намеренно: таблица растёт на единицы строк за релиз,
+        # последовательное чтение дешевле обхода индекса.
+
+    def __str__(self):
+        return self.title

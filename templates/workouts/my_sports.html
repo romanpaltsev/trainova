@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Мои виды спорта · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Мои виды спорта</h1>
+</div>
+
+<div class="app-rows">
+  {% for sport in sports %}
+    <div class="app-row">
+      <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
+      <span class="app-row-text">
+        <span class="app-row-name">{{ sport.name }}</span>
+        <span class="app-row-meta">{{ sport.get_category_display }} · {{ sport.usage_label }}</span>
+      </span>
+      <a class="app-icon-btn app-row-delete" href="{% url 'sport_delete' sport.pk %}"
+         aria-label="Удалить {{ sport.name }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>
+        </svg>
+      </a>
+    </div>
+  {% empty %}
+    {% url 'cardio_create' as cardio_url %}
+    {% include "includes/empty_state.html" with title="Своих видов спорта пока нет" text="Свой вид спорта добавляется в форме кардио — чипом «+ Свой»." cta_label="Записать кардио" cta_url=cardio_url %}
+  {% endfor %}
+</div>
+{% endblock %}

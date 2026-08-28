@@ -1,0 +1,18 @@
+{% comment %}
+  Пустое состояние экрана. Параметры: title (необязателен), text,
+  cta_label + cta_url (ссылка) или cta_hx_get (модалка).
+{% endcomment %}
+<div class="app-card app-empty">
+  {% if title %}<p class="app-empty-title">{{ title }}</p>{% endif %}
+  <p class="app-empty-text text-secondary-app">{{ text }}</p>
+  {% if cta_label %}
+    <div class="app-empty-actions">
+      {% if cta_hx_get %}
+        <button type="button" class="btn btn-accent"
+                hx-get="{{ cta_hx_get }}" hx-target="#modal" hx-swap="innerHTML">{{ cta_label }}</button>
+      {% else %}
+        <a class="btn btn-accent" href="{{ cta_url }}">{{ cta_label }}</a>
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

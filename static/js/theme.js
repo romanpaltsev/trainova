@@ -53,7 +53,22 @@
     if (stored() === "system") apply("system");
   });
 
+  // Трёхпозиционный выбор темы в профиле: светлая / тёмная / системная.
+  // Серверу выбор неизвестен — он живёт в localStorage, поэтому и предвыбор здесь.
+  function bindThemeChoice() {
+    document.querySelectorAll("[data-app-theme-choice]").forEach(function (group) {
+      var choice = stored();
+      group.querySelectorAll('input[type="radio"]').forEach(function (radio) {
+        radio.checked = radio.value === choice;
+        radio.addEventListener("change", function () {
+          if (radio.checked) window.appTheme.set(radio.value);
+        });
+      });
+    });
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
+    bindThemeChoice();
     apply(stored());
     document.querySelectorAll("[data-app-theme-toggle]").forEach(function (btn) {
       btn.addEventListener("click", window.appTheme.toggle);

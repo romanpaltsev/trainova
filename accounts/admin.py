@@ -17,6 +17,8 @@ class UserAdmin(DjangoUserAdmin):
             "Права",
             {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")},
         ),
-        ("Даты", {"fields": ("last_login", "date_joined")}),
+        # changelog_seen_at редактируемое: очистить поле — самый простой способ
+        # снова увидеть точку-бейдж «Что нового».
+        ("Даты", {"fields": ("last_login", "date_joined", "changelog_seen_at")}),
     )
     add_fieldsets = ((None, {"classes": ("wide",), "fields": ("email", "password1", "password2")}),)

@@ -10,7 +10,7 @@
   <nav class="app-nav">
     <a href="{% url 'dashboard' %}" class="{% if nav_active == 'dashboard' %}is-active{% endif %}">Дашборд</a>
     <a href="{% url 'workout_history' %}" class="{% if nav_active == 'history' %}is-active{% endif %}">История</a>
-    <a href="{% url 'dashboard' %}">Упражнения</a>
+    <a href="{% url 'exercise_list' %}" class="{% if nav_active == 'exercises' %}is-active{% endif %}">Упражнения</a>
   </nav>
 
   <div class="d-flex align-items-center gap-2 ms-auto">
@@ -24,7 +24,7 @@
     {% endif %}
     {% include "includes/theme_toggle.html" %}
     {% if user.is_authenticated %}
-      <a class="app-avatar" href="{% url 'dashboard' %}" title="{{ user.email }}">{{ user.initial }}</a>
+      <a class="app-avatar" href="{% url 'profile' %}" title="{{ user.email }}">{{ user.initial }}</a>
     {% else %}
       <a class="app-link" href="{% url 'account_login' %}">Войти</a>
     {% endif %}
@@ -67,11 +67,11 @@
            stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
     </span>
   </button>
-  <a href="{% url 'dashboard' %}">
+  <a href="{% url 'exercise_list' %}" class="{% if nav_active == 'exercises' %}is-active{% endif %}">
     {% include "includes/logo.html" %}
     <span>Упражнения</span>
   </a>
-  <a href="{% url 'dashboard' %}" class="{% if nav_active == 'profile' %}is-active{% endif %}">
+  <a href="{% url 'profile' %}" class="{% if nav_active == 'profile' %}is-active{% endif %}">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/>

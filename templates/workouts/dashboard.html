@@ -66,15 +66,8 @@
                   role="img" aria-label="Часы тренировок по неделям"></canvas>
         </div>
       {% else %}
-        <div class="app-empty">
-          <p class="text-secondary-app mb-3">
-            Записывайте тренировки — здесь появится график часов по неделям.
-          </p>
-          <button type="button" class="btn btn-accent"
-                  hx-get="{% url 'workout_start' %}" hx-target="#modal" hx-swap="innerHTML">
-            Начать тренировку
-          </button>
-        </div>
+        {% url 'workout_start' as start_url %}
+        {% include "includes/empty_state.html" with text="Записывайте тренировки — здесь появится график часов по неделям." cta_label="Начать тренировку" cta_hx_get=start_url %}
       {% endif %}
     </section>
     <div id="week-detail" class="app-week-detail"></div>
@@ -121,6 +114,13 @@
           {% endfor %}
         </div>
       </section>
+    {% else %}
+      <section class="app-records">
+        <div class="app-dash-section-head">
+          <h2 class="app-section-title mb-0">Личные рекорды</h2>
+        </div>
+        {% include "includes/empty_state.html" with text="Рекорды появятся после первой силовой тренировки." %}
+      </section>
     {% endif %}
 
     <section class="app-latest">
@@ -132,7 +132,8 @@
         {% for item in latest %}
           {% include "workouts/_dashboard_workout_row.html" %}
         {% empty %}
-          <div class="app-card app-empty text-secondary-app">Пока нет тренировок.</div>
+          {% url 'workout_start' as start_url %}
+          {% include "includes/empty_state.html" with text="Здесь появятся ваши тренировки." cta_label="Начать тренировку" cta_hx_get=start_url %}
         {% endfor %}
       </div>
     </section>

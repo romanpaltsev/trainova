@@ -71,9 +71,7 @@
   {% endif %}
 
   {% if not current_group and not done_groups %}
-    <p class="text-secondary-app">
-      Добавьте первое упражнение — подходы подставятся из прошлой тренировки.
-    </p>
+    {% include "includes/empty_state.html" with text="Добавьте первое упражнение — подходы подставятся из прошлой тренировки." %}
   {% endif %}
 
   <button type="button" class="app-live-add-tile"

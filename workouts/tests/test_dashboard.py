@@ -26,7 +26,9 @@ def test_dashboard_renders_for_new_user_without_workouts(client, user):
     assert response.status_code == 200
     assert "Записывайте тренировки" in content
     assert "weekly-chart" not in content
-    assert "Личные рекорды" not in content
+    # Секции не исчезают молча: у каждой — подсказка первого шага.
+    assert "Рекорды появятся после первой силовой" in content
+    assert "Здесь появятся ваши тренировки" in content
 
 
 def test_dashboard_shows_week_summary_and_latest_workouts(client, user):

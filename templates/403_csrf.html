@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Страница устарела · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Страница устарела</h1>
+
+<div class="app-card app-empty" style="max-width: 34rem;">
+  <p class="app-empty-text text-secondary-app">
+    Форма была открыта слишком долго и защита от подделки запросов её отклонила.
+    Обновите страницу и повторите — введённые данные придётся набрать заново.
+  </p>
+  <div class="app-empty-actions">
+    <a class="btn btn-accent" href="{% url 'dashboard' %}">На дашборд</a>
+  </div>
+</div>
+{% endblock %}

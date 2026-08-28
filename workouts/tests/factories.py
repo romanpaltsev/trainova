@@ -2,7 +2,14 @@ import factory
 from django.utils import timezone
 
 from accounts.tests.factories import UserFactory
-from workouts.models import CardioDetails, Exercise, Sport, StrengthSet, Workout
+from workouts.models import (
+    CardioDetails,
+    ChangelogEntry,
+    Exercise,
+    Sport,
+    StrengthSet,
+    Workout,
+)
 
 
 class SportFactory(factory.django.DjangoModelFactory):
@@ -54,3 +61,14 @@ class CardioDetailsFactory(factory.django.DjangoModelFactory):
     workout = factory.SubFactory(WorkoutFactory, sport__category=Sport.Category.CARDIO)
     distance_km = 10
     avg_heart_rate = 140
+
+
+class ChangelogEntryFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ChangelogEntry
+
+    kind = ChangelogEntry.Kind.FEATURE
+    title = factory.Sequence(lambda n: f"Новость {n}")
+    body = "Текст новости."
+    published_at = factory.LazyFunction(timezone.now)
+    is_published = True

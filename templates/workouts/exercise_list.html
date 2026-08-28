@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Упражнения · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Упражнения</h1>
+
+<div class="app-chips app-filters">
+  <a class="app-chip {% if not mine_only %}is-active{% endif %}"
+     href="{% url 'exercise_list' %}{% if query %}?q={{ query|urlencode }}{% endif %}">Все</a>
+  <a class="app-chip {% if mine_only %}is-active{% endif %}"
+     href="{% url 'exercise_list' %}?mine=1{% if query %}&q={{ query|urlencode }}{% endif %}">Мои</a>
+</div>
+
+<form method="get" class="app-search" role="search">
+  {% if mine_only %}<input type="hidden" name="mine" value="1">{% endif %}
+  <input type="search" name="q" value="{{ query }}" class="form-control"
+         placeholder="Найти упражнение" autocomplete="off" aria-label="Найти упражнение">
+</form>
+
+<div class="app-rows">
+  {% for exercise in exercises %}
+    <div class="app-row">
+      <a class="app-row-text app-row-link" href="{% url 'exercise_detail' exercise.pk %}">
+        <span class="app-row-name">{{ exercise.name }}</span>
+        <span class="app-row-meta">
+          {% if exercise.muscle_group %}{{ exercise.muscle_group }}{% endif %}
+          {% if not exercise.is_global %}
+            {% if exercise.muscle_group %} · {% endif %}моё · {{ exercise.usage_label }}
+          {% endif %}
+        </span>
+      </a>
+      {% if exercise.record_display %}
+        <span class="app-row-value num">{{ exercise.record_display }} кг</span>
+      {% endif %}
+      {% if exercise.is_global %}
+        {% include "includes/chevron.html" %}
+      {% else %}
+        <a class="app-icon-btn app-row-delete" href="{% url 'exercise_delete' exercise.pk %}"
+           aria-label="Удалить {{ exercise.name }}">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>
+          </svg>
+        </a>
+      {% endif %}
+    </div>
+  {% empty %}
+    {% if query %}
+      {% include "includes/empty_state.html" with text="По этому запросу упражнений нет." %}
+    {% elif mine_only %}
+      {% include "includes/empty_state.html" with title="Своих упражнений пока нет" text="Они появляются, когда в живом режиме вы добавляете упражнение с новым названием." cta_label="Все упражнения" cta_url=request.path %}
+    {% else %}
+      {% include "includes/empty_state.html" with text="Справочник пуст — запустите команду seed." %}
+    {% endif %}
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block title %}Что нового · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Что нового</h1>
+</div>
+
+{% for entry in entries %}
+  <article class="app-card app-news">
+    <div class="app-news-head">
+      <span class="app-badge app-badge-{{ entry.kind }}">{{ entry.get_kind_display }}</span>
+      <span class="app-news-date">{{ entry.date_label }}</span>
+    </div>
+    <h2 class="app-news-title">{{ entry.title }}</h2>
+    <p class="app-news-body">{{ entry.body|linebreaksbr }}</p>
+  </article>
+{% empty %}
+  {% include "includes/empty_state.html" with text="Пока никаких новостей." %}
+{% endfor %}
+{% endblock %}

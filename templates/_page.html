@@ -4,10 +4,22 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}Дневник тренировок{% endblock %}</title>
+  {% comment %}
+    Первые два тега работают до выполнения JS и следуют системной схеме;
+    третий заполняет анти-FOUC-скрипт — он учитывает и ручной выбор темы.
+  {% endcomment %}
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="{{ theme_colors.light }}">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="{{ theme_colors.dark }}">
   <meta name="theme-color">
-  <link rel="manifest" href="{% static 'manifest.json' %}">
+  <link rel="manifest" href="{% url 'manifest' %}">
   <link rel="icon" href="{% static 'img/icon.svg' %}" type="image/svg+xml">
+  <link rel="icon" href="{% static 'img/icon-192.png' %}" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="{% static 'img/icon-192.png' %}">
+  {% comment %}iOS: без этих тегов ярлык открывается в Safari и берёт имя из <title>.{% endcomment %}
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Дневник">
+  <meta name="mobile-web-app-capable" content="yes">
 
   <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
   <link rel="stylesheet" href="{% static 'css/fonts.css' %}">

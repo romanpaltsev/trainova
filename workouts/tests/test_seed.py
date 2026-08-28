@@ -4,8 +4,8 @@ import pytest
 from django.core.management import call_command
 
 from accounts.tests.factories import UserFactory
-from workouts.management.commands.seed import EXERCISES, SPORTS
-from workouts.models import Exercise, Sport
+from workouts.management.commands.seed import CHANGELOG, EXERCISES, SPORTS
+from workouts.models import ChangelogEntry, Exercise, Sport
 
 pytestmark = pytest.mark.django_db
 
@@ -19,15 +19,40 @@ def test_seed_creates_global_catalogs():
     assert Sport.objects.get(name="Бег").category == Sport.Category.CARDIO
 
 
+def test_seed_creates_starter_changelog_entries():
+    call_command("seed")
+
+    entries = ChangelogEntry.objects.published()
+    assert entries.count() == len(CHANGELOG)
+    assert entries.filter(kind=ChangelogEntry.Kind.FIX).count() == 1
+    assert entries.first().title == "Тёмная и светлая темы"  # порядок — новые сверху
+
+
 def test_seed_is_idempotent():
     call_command("seed")
     sports = set(Sport.objects.values_list("id", "name", "category"))
     exercises = set(Exercise.objects.values_list("id", "name", "muscle_group"))
+    news = set(ChangelogEntry.objects.values_list("id", "title", "published_at"))
 
     call_command("seed")
 
     assert set(Sport.objects.values_list("id", "name", "category")) == sports
     assert set(Exercise.objects.values_list("id", "name", "muscle_group")) == exercises
+    assert set(ChangelogEntry.objects.values_list("id", "title", "published_at")) == news
+
+
+def test_seed_keeps_edited_changelog_entry():
+    """Правки админа в существующей записи команда не перезаписывает."""
+    call_command("seed")
+    entry = ChangelogEntry.objects.get(title="Таймер отдыха")
+    entry.body = "Текст, отредактированный админом."
+    entry.save(update_fields=["body"])
+
+    call_command("seed")
+
+    entry.refresh_from_db()
+    assert entry.body == "Текст, отредактированный админом."
+    assert ChangelogEntry.objects.filter(title="Таймер отдыха").count() == 1
 
 
 def test_seed_fixes_category_of_existing_global_sport():

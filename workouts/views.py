@@ -10,17 +10,28 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Sum
+from django.db.models import Count, F, Q, Sum
+from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
-from django.utils import timezone
+from django.utils import formats, timezone
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
 from workouts import services, stats
 from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
-from workouts.models import Exercise, Sport, StrengthSet, Workout, decimal_display
+from workouts.models import (
+    REST_DELTAS,
+    ChangelogEntry,
+    Exercise,
+    Sport,
+    StrengthSet,
+    Workout,
+    clamp_rest_seconds,
+    decimal_display,
+    rest_display,
+)
 from workouts.stats import week_start, week_title
 
 HISTORY_PAGE_SIZE = 10
@@ -29,9 +40,6 @@ HISTORY_PAGE_SIZE = 10
 SET_STEPS = {"weight": Decimal("2.5"), "reps": 1}
 MAX_WEIGHT_KG = Decimal("999.99")  # max_digits=5 у StrengthSet.weight_kg
 MAX_REPS = 999
-REST_DELTAS = {"-15", "15"}
-REST_MIN_SECONDS = 15
-REST_MAX_SECONDS = 600
 EXERCISE_RESULTS_LIMIT = 30
 # Дашборд: силовых рекордов в блоке (кардио добавляются по числу видов).
 STRENGTH_RECORDS_LIMIT = 3
@@ -189,7 +197,7 @@ def live_rest_context(workout, *, autostart=False, oob=False):
     return {
         "workout": workout,
         "rest_seconds": seconds,
-        "rest_display": f"{seconds // 60}:{seconds % 60:02d}",
+        "rest_display": rest_display(seconds),
         "autostart": autostart,
         "oob": oob,
     }
@@ -378,8 +386,7 @@ class LiveRestView(LoginRequiredMixin, View):
         delta = request.POST.get("delta", "")
         if delta not in REST_DELTAS:
             return HttpResponseBadRequest("Недопустимый шаг")
-        seconds = workout.effective_rest_seconds + int(delta)
-        workout.rest_seconds = max(REST_MIN_SECONDS, min(REST_MAX_SECONDS, seconds))
+        workout.rest_seconds = clamp_rest_seconds(workout.effective_rest_seconds + int(delta))
         workout.save(update_fields=["rest_seconds"])
         # Клиент уже обновился оптимистично; 204 без свапа не трогает таймер.
         return HttpResponse(status=204)
@@ -700,4 +707,169 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 "stats_line": stats_line,
                 "nav_active": "dashboard",
             },
+        )
+
+
+# ---------- Справочники в профиле и новости ----------
+
+
+def usage_label(count):
+    """Подпись строки справочника: «в 3 тренировках» или «не использовалось»."""
+    if not count:
+        return "не использовалось"
+    word = services.ru_plural(count, "тренировке", "тренировках", "тренировках")
+    return f"в {count} {word}"
+
+
+class ExerciseListView(LoginRequiredMixin, ListView):
+    """Каталог упражнений: глобальные и свои, с моими рекордами и поиском."""
+
+    template_name = "workouts/exercise_list.html"
+    context_object_name = "exercises"
+    extra_context = {"nav_active": "exercises"}
+
+    def get_queryset(self):
+        # Священное правило: глобальные записи плюс свои, чужие личные не видны.
+        queryset = Exercise.objects.visible_to(self.request.user)
+        if self.request.GET.get("mine"):
+            queryset = queryset.filter(owner=self.request.user)
+        query = self.request.GET.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(name__icontains=query)
+        # Счётчик использований нужен только для своих записей — их и удаляем.
+        return queryset.annotate(
+            workouts_count=Count(
+                "sets__workout", distinct=True, filter=Q(sets__workout__user=self.request.user)
+            )
+        ).order_by("name")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        my_records = stats.strength_records(self.request.user)
+        records = {row["exercise_id"]: row["weight_display"] for row in my_records}
+        for exercise in context["exercises"]:
+            exercise.record_display = records.get(exercise.pk)
+            exercise.usage_label = usage_label(exercise.workouts_count)
+        context["query"] = self.request.GET.get("q", "").strip()
+        context["mine_only"] = bool(self.request.GET.get("mine"))
+        return context
+
+
+class MySportsView(LoginRequiredMixin, ListView):
+    """Личные виды спорта: сколько тренировок записано и удаление."""
+
+    template_name = "workouts/my_sports.html"
+    context_object_name = "sports"
+    extra_context = {"nav_active": "profile"}
+
+    def get_queryset(self):
+        return (
+            Sport.objects.filter(owner=self.request.user)
+            .annotate(workouts_count=Count("workouts", distinct=True))
+            .order_by("name")
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        for sport in context["sports"]:
+            sport.usage_label = usage_label(sport.workouts_count)
+        return context
+
+
+class CatalogDeleteView(LoginRequiredMixin, View):
+    """Удаление своей записи справочника: подтверждение страницей, удаление POST'ом.
+
+    Использованную запись защищает база (on_delete=PROTECT). Проверяем это до
+    удаления — чтобы дать понятное сообщение и спрятать кнопку — и на всякий
+    случай ловим ProtectedError в savepoint: между проверкой и DELETE другая
+    вкладка может записать подход, а при ATOMIC_REQUESTS исключение стоило бы
+    500 и откат всей транзакции запроса.
+    """
+
+    model = None
+    usage_related = ""
+    title = ""
+    in_use_message = ""
+    deleted_message = ""
+    success_url_name = ""
+
+    def get_object(self):
+        # Чужая и глобальная запись по прямому URL — 404.
+        return get_object_or_404(
+            self.model.objects.filter(owner=self.request.user), pk=self.kwargs["pk"]
+        )
+
+    def get(self, request, pk):
+        item = self.get_object()
+        count = getattr(item, self.usage_related).count()
+        return render(
+            request,
+            "workouts/catalog_confirm_delete.html",
+            {
+                "item": item,
+                "title": self.title,
+                "usage_count": count,
+                "usage_label": usage_label(count),
+                "in_use_message": self.in_use_message.format(name=item.name),
+                "cancel_url": reverse(self.success_url_name),
+                "nav_active": "profile",
+            },
+        )
+
+    def post(self, request, pk):
+        item = self.get_object()
+        if getattr(item, self.usage_related).exists():
+            messages.error(request, self.in_use_message.format(name=item.name))
+            return redirect(self.success_url_name)
+        try:
+            with transaction.atomic():
+                item.delete()
+        except ProtectedError:
+            messages.error(request, self.in_use_message.format(name=item.name))
+            return redirect(self.success_url_name)
+        messages.success(request, self.deleted_message)
+        return redirect(self.success_url_name)
+
+
+class ExerciseDeleteView(CatalogDeleteView):
+    model = Exercise
+    usage_related = "sets"
+    title = "Удалить упражнение?"
+    in_use_message = "Упражнение «{name}» есть в записанных тренировках — его нельзя удалить."
+    deleted_message = "Упражнение удалено."
+    success_url_name = "exercise_list"
+
+
+class SportDeleteView(CatalogDeleteView):
+    model = Sport
+    usage_related = "workouts"
+    title = "Удалить вид спорта?"
+    in_use_message = "Вид спорта «{name}» есть в записанных тренировках — его нельзя удалить."
+    deleted_message = "Вид спорта удалён."
+    success_url_name = "my_sports"
+
+
+class ChangelogView(LoginRequiredMixin, View):
+    """«Что нового». Открытие страницы отмечает новости прочитанными.
+
+    GET меняет состояние осознанно: это обычный «прочитано при открытии» —
+    пишется одна колонка своей же строки, повторные открытия просто сдвигают
+    отметку вперёд, а при ошибке рендера транзакция откатится и новости
+    останутся непрочитанными.
+    """
+
+    def get(self, request):
+        entries = list(ChangelogEntry.objects.published())
+        today = timezone.localdate()
+        for entry in entries:
+            moment = timezone.localtime(entry.published_at)
+            entry.date_label = formats.date_format(
+                moment, "j E" if moment.year == today.year else "j E Y"
+            )
+        request.user.changelog_seen_at = timezone.now()
+        request.user.save(update_fields=["changelog_seen_at"])
+        return render(
+            request,
+            "workouts/changelog.html",
+            {"entries": entries, "nav_active": "profile"},
         )

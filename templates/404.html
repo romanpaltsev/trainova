@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block title %}Страница не найдена · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Страница не найдена</h1>
+
+<div class="app-card app-empty" style="max-width: 34rem;">
+  <p class="app-empty-text text-secondary-app">
+    Такой страницы нет — возможно, запись удалена или ссылка ведёт на чужие данные.
+  </p>
+  <div class="app-empty-actions d-flex flex-column gap-2">
+    <a class="btn btn-accent" href="{% url 'dashboard' %}">На дашборд</a>
+    <a class="btn btn-quiet" href="{% url 'workout_history' %}">В историю</a>
+  </div>
+</div>
+{% endblock %}

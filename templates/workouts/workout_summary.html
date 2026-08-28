@@ -54,6 +54,8 @@
       {% endfor %}
     </div>
   </section>
+{% empty %}
+  {% include "includes/empty_state.html" with text="В этой тренировке нет записанных подходов." %}
 {% endfor %}
 
 <div class="app-form-actions">

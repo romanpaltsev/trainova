@@ -16,6 +16,9 @@
   </div>
 </div>
 
+{% if chart.values|length == 1 %}
+  {% include "includes/empty_state.html" with text="График максимального веса появится со второй тренировки с этим упражнением." %}
+{% endif %}
 {% if chart.values|length > 1 %}
   <section class="app-card app-chart-card app-exercise-chart">
     <div class="app-chart-head">
@@ -54,7 +57,7 @@
     </div>
   </section>
 {% empty %}
-  <div class="app-card app-empty text-secondary-app">Этого упражнения ещё не было в тренировках.</div>
+  {% include "includes/empty_state.html" with text="Этого упражнения ещё не было в тренировках. Добавьте его в живом режиме силовой тренировки." %}
 {% endfor %}
 
 {{ chart|json_script:"exercise-chart-data" }}

@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from workouts.models import CardioDetails, Exercise, Sport, StrengthSet, Workout
+from workouts.models import (
+    CardioDetails,
+    ChangelogEntry,
+    Exercise,
+    Sport,
+    StrengthSet,
+    Workout,
+)
 
 
 class CatalogAdmin(admin.ModelAdmin):
@@ -63,3 +70,13 @@ class WorkoutAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("sport", "user")
+
+
+@admin.register(ChangelogEntry)
+class ChangelogEntryAdmin(admin.ModelAdmin):
+    """Новости проекта: единственное место, где их создают и правят."""
+
+    list_display = ("published_at", "kind", "title", "is_published")
+    list_filter = ("kind", "is_published")
+    date_hierarchy = "published_at"
+    search_fields = ("title", "body")

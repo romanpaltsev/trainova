@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Нет доступа · Дневник тренировок{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Нет доступа</h1>
+
+<div class="app-card app-empty" style="max-width: 34rem;">
+  <p class="app-empty-text text-secondary-app">
+    Эта страница недоступна. Возможно, нужно войти заново.
+  </p>
+  <div class="app-empty-actions">
+    <a class="btn btn-accent" href="{% url 'account_login' %}">Войти</a>
+  </div>
+</div>
+{% endblock %}

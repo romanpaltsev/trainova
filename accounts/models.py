@@ -40,6 +40,12 @@ class User(AbstractUser):
         default=90,
         help_text="Используется, если у тренировки не задан свой отдых.",
     )
+    changelog_seen_at = models.DateTimeField(
+        "новости просмотрены",
+        null=True,
+        blank=True,
+        help_text="Пусто — пользователь ещё не открывал «Что нового».",
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
