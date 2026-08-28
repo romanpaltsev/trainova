@@ -12,6 +12,8 @@
   function apply(choice) {
     const theme = resolve(choice);
     document.documentElement.setAttribute("data-bs-theme", theme);
+    // Переключатель в шапке и сегменты в профиле не должны разъезжаться.
+    syncThemeChoice();
     const meta = document.getElementById("theme-color");
     if (meta) {
       meta.setAttribute(
@@ -55,16 +57,24 @@
 
   // Трёхпозиционный выбор темы в профиле: светлая / тёмная / системная.
   // Серверу выбор неизвестен — он живёт в localStorage, поэтому и предвыбор здесь.
-  function bindThemeChoice() {
+  function syncThemeChoice() {
+    var choice = stored();
     document.querySelectorAll("[data-app-theme-choice]").forEach(function (group) {
-      var choice = stored();
       group.querySelectorAll('input[type="radio"]').forEach(function (radio) {
         radio.checked = radio.value === choice;
+      });
+    });
+  }
+
+  function bindThemeChoice() {
+    document.querySelectorAll("[data-app-theme-choice]").forEach(function (group) {
+      group.querySelectorAll('input[type="radio"]').forEach(function (radio) {
         radio.addEventListener("change", function () {
           if (radio.checked) window.appTheme.set(radio.value);
         });
       });
     });
+    syncThemeChoice();
   }
 
   document.addEventListener("DOMContentLoaded", function () {

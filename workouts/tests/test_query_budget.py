@@ -66,15 +66,16 @@ def test_catalog_query_budget(client, user, django_assert_max_num_queries):
         client.get(reverse("exercise_list"))
 
 
-def test_live_screen_query_budget(client, user, django_assert_max_num_queries):
+@pytest.mark.parametrize("queued", [1, 6], ids=["one-exercise", "six-exercises"])
+def test_live_screen_query_budget(client, user, django_assert_max_num_queries, queued):
     """Живой экран не должен зависеть от числа упражнений в очереди."""
     fill_history(user)
     active = WorkoutFactory(user=user, duration_min=None)
-    for number, exercise in enumerate(ExerciseFactory.create_batch(3), start=1):
+    for number, exercise in enumerate(ExerciseFactory.create_batch(queued), start=1):
         StrengthSetFactory(workout=active, exercise=exercise, set_number=number, done=False)
 
     client.force_login(user)
-    with django_assert_max_num_queries(12):
+    with django_assert_max_num_queries(8):
         client.get(reverse("workout_live", args=[active.pk]))
 
 

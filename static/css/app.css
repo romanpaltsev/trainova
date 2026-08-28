@@ -34,7 +34,9 @@ body {
   align-items: center;
   gap: 1.5rem;
   min-height: var(--app-header-height);
-  padding: 0.5rem 1rem;
+  /* env(safe-area-inset-top): в standalone на телефоне с «бровью» контент
+     иначе уезжает под статус-бар (viewport-fit=cover). */
+  padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.5rem;
   background-color: var(--app-bg);
 }
 

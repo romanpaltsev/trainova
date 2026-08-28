@@ -140,6 +140,20 @@ def test_delete_page_renders_for_own_exercise(client, user):
     assert "Моё упражнение" in content
 
 
+def test_delete_page_counts_workouts_not_sets(client, user):
+    """Подпись говорит «в N тренировках» — значит и считать надо тренировки."""
+    mine = ExerciseFactory(owner=user, name="Моё упражнение")
+    workout = WorkoutFactory(user=user)
+    for number in range(1, 5):
+        StrengthSetFactory(workout=workout, exercise=mine, set_number=number)
+
+    client.force_login(user)
+    content = client.get(reverse("exercise_delete", args=[mine.pk])).content.decode()
+
+    assert "в 1 тренировке" in content
+    assert "в 4 тренировк" not in content
+
+
 def test_delete_page_explains_why_used_record_is_kept(client, user):
     mine = ExerciseFactory(owner=user, name="Моё упражнение")
     StrengthSetFactory(workout=WorkoutFactory(user=user), exercise=mine, set_number=1)

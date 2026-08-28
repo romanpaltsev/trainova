@@ -76,13 +76,16 @@ MIDDLEWARE = [
     "allauth.account.middleware.AccountMiddleware",
 ]
 
-DEBUG_TOOLBAR = env("DJANGO_DEBUG_TOOLBAR")
+# Панель работает только вместе с DEBUG: её URL-маршруты (debug_toolbar_urls)
+# при DEBUG=False не регистрируются, и включённая middleware валила бы каждую
+# страницу с NoReverseMatch. Так же это гарантирует, что в проде панели нет.
+DEBUG_TOOLBAR = DEBUG and env("DJANGO_DEBUG_TOOLBAR")
 
 if DEBUG_TOOLBAR:
     INSTALLED_APPS += ["debug_toolbar"]
     MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
     # INTERNAL_IPS бесполезен в Docker: запрос приходит с адреса шлюза бриджа,
-    # а не с 127.0.0.1 — поэтому решаем по флагу.
+    # а не с 127.0.0.1 — поэтому решаем по тому же флагу.
     DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": lambda request: True}
 
 ROOT_URLCONF = "config.urls"

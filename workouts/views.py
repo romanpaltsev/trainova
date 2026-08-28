@@ -790,6 +790,9 @@ class CatalogDeleteView(LoginRequiredMixin, View):
 
     model = None
     usage_related = ""
+    # По какому пути от связанной записи считать РАЗНЫЕ тренировки: у упражнения
+    # это подходы (в одной тренировке их несколько), у вида спорта — сами тренировки.
+    usage_workout_path = ""
     title = ""
     in_use_message = ""
     deleted_message = ""
@@ -801,9 +804,16 @@ class CatalogDeleteView(LoginRequiredMixin, View):
             self.model.objects.filter(owner=self.request.user), pk=self.kwargs["pk"]
         )
 
+    def usage_count(self, item):
+        """Число тренировок, а не связанных строк: подписи говорят «в N тренировках»."""
+        related = getattr(item, self.usage_related)
+        if self.usage_workout_path:
+            return related.values(self.usage_workout_path).distinct().count()
+        return related.count()
+
     def get(self, request, pk):
         item = self.get_object()
-        count = getattr(item, self.usage_related).count()
+        count = self.usage_count(item)
         return render(
             request,
             "workouts/catalog_confirm_delete.html",
@@ -836,6 +846,7 @@ class CatalogDeleteView(LoginRequiredMixin, View):
 class ExerciseDeleteView(CatalogDeleteView):
     model = Exercise
     usage_related = "sets"
+    usage_workout_path = "workout"
     title = "Удалить упражнение?"
     in_use_message = "Упражнение «{name}» есть в записанных тренировках — его нельзя удалить."
     deleted_message = "Упражнение удалено."

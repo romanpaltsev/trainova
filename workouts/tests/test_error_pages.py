@@ -49,3 +49,23 @@ def test_csrf_failure_page_is_russian(user):
 
     assert response.status_code == 403
     assert "Страница устарела" in response.content.decode()
+
+
+def test_manifest_is_served_for_pwa(client):
+    """Манифест — вьюха: правильный Content-Type и иконки через static."""
+    response = client.get(reverse("manifest"))
+
+    content = response.content.decode()
+    assert response.status_code == 200
+    assert response["Content-Type"] == "application/manifest+json"
+    assert '"id": "/"' in content
+    assert "icon-maskable-512.png" in content
+    assert '"purpose": "maskable"' in content
+
+
+def test_favicon_redirects_to_icon(client):
+    """Браузеры просят /favicon.ico независимо от <link>."""
+    response = client.get("/favicon.ico")
+
+    assert response.status_code == 301
+    assert "icon-192.png" in response.url
