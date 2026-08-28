@@ -4,7 +4,6 @@
 по прямому URL даёт 404.
 """
 
-from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib import messages
@@ -21,6 +20,7 @@ from django.views.generic import DeleteView, ListView, View
 from workouts import services
 from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
 from workouts.models import Exercise, Sport, StrengthSet, Workout
+from workouts.stats import week_start, week_title
 
 HISTORY_PAGE_SIZE = 10
 
@@ -32,11 +32,6 @@ REST_DELTAS = {"-15", "15"}
 REST_MIN_SECONDS = 15
 REST_MAX_SECONDS = 600
 EXERCISE_RESULTS_LIMIT = 30
-
-
-def week_start(date):
-    """Понедельник недели, к которой относится дата."""
-    return date - timedelta(days=date.weekday())
 
 
 class WorkoutHistoryView(LoginRequiredMixin, ListView):
@@ -92,20 +87,10 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
             start = week_start(timezone.localtime(workout.started_at).date())
             if not groups or groups[-1]["key"] != start.isoformat():
                 groups.append(
-                    {"key": start.isoformat(), "title": self._week_title(start, today), "items": []}
+                    {"key": start.isoformat(), "title": week_title(start, today), "items": []}
                 )
             groups[-1]["items"].append(workout)
         return groups
-
-    @staticmethod
-    def _week_title(start, today):
-        current = week_start(today)
-        if start == current:
-            return "Эта неделя"
-        if start == current - timedelta(days=7):
-            return "Прошлая неделя"
-        end = start + timedelta(days=6)
-        return f"{start:%d.%m} — {end:%d.%m}"
 
 
 class CardioWorkoutFormView(LoginRequiredMixin, View):
