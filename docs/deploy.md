@@ -51,12 +51,14 @@ getent hosts trainova.hotbar.pro
 ## 2. Сервер: пользователь, docker, файрвол
 
 ```bash
-# от root
-adduser roman && usermod -aG sudo roman
-# дальше — под roman
+# Админские шаги — под своим пользователем с sudo.
 sudo apt update && sudo apt -y upgrade
 sudo apt -y install docker.io docker-compose-v2 git rclone nginx python3-certbot-nginx
-sudo usermod -aG docker roman && newgrp docker
+
+# Сервисный пользователь для деплоя: вход только по ключу, sudo ему не нужен —
+# приватный ключ лежит в секретах GitHub, и права root к нему прилагаться не должны.
+sudo adduser --disabled-password --gecos "" deploy
+sudo usermod -aG docker deploy
 
 sudo apt -y install unattended-upgrades && sudo dpkg-reconfigure -plow unattended-upgrades
 
@@ -67,13 +69,16 @@ sudo ufw enable
 ## 3. Код и окружение
 
 ```bash
-sudo mkdir -p /opt/trainova && sudo chown roman:roman /opt/trainova
-git clone https://github.com/romanpaltsev/trainova.git /opt/trainova
+sudo mkdir -p /opt/trainova && sudo chown deploy:deploy /opt/trainova
+sudo -u deploy git clone https://github.com/romanpaltsev/trainova.git /opt/trainova
 cd /opt/trainova
 
-cp .env.prod.example .env.prod
+sudo -u deploy cp .env.prod.example .env.prod
 python3 -c "import secrets; print(secrets.token_urlsafe(64))"   # ключ для DJANGO_SECRET_KEY
-nano .env.prod
+sudo -u deploy nano .env.prod
+
+# В файле пароль базы и SECRET_KEY — читать его должен только deploy
+sudo chown deploy:deploy .env.prod && sudo chmod 600 .env.prod
 ```
 
 Обязательно поменяйте: `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
@@ -192,7 +197,7 @@ Workflow `.github/workflows/ci.yml`: на каждый push и pull request пр
 
 ```bash
 ssh-keygen -t ed25519 -C "github-actions-trainova" -f ~/.ssh/trainova_deploy -N ""
-ssh-copy-id -i ~/.ssh/trainova_deploy.pub roman@trainova.hotbar.pro
+ssh-copy-id -i ~/.ssh/trainova_deploy.pub deploy@trainova.hotbar.pro
 ssh-keyscan -t ed25519 trainova.hotbar.pro          # строка для DEPLOY_KNOWN_HOSTS
 cat ~/.ssh/trainova_deploy                           # приватный ключ целиком, с BEGIN/END
 ```
@@ -202,7 +207,7 @@ Secrets в GitHub (Settings → Secrets and variables → Actions → Secrets):
 | Секрет | Значение |
 |---|---|
 | `DEPLOY_HOST` | `trainova.hotbar.pro` |
-| `DEPLOY_USER` | `roman` |
+| `DEPLOY_USER` | `deploy` |
 | `DEPLOY_SSH_KEY` | содержимое `~/.ssh/trainova_deploy` (приватный ключ) |
 | `DEPLOY_KNOWN_HOSTS` | вывод `ssh-keyscan -t ed25519 trainova.hotbar.pro` |
 
@@ -212,8 +217,10 @@ Secrets в GitHub (Settings → Secrets and variables → Actions → Secrets):
 Отпечаток сервера берётся из секрета, а не через `ssh-keyscan` во время деплоя:
 иначе подменённый DNS-ответ увёл бы деплой (вместе с ключом) на чужой сервер.
 
-Пользователь деплоя должен уметь `docker` без sudo (`usermod -aG docker roman`) и иметь
-права на каталог с кодом. `.env.prod` в git не попадает, деплой его не трогает.
+Пользователь `deploy` должен уметь `docker` без sudo (`usermod -aG docker deploy`) и владеть
+каталогом с кодом — иначе `git reset --hard` в деплое упадёт на правах. Если репозиторий
+клонировали под собой, передайте владение: `sudo chown -R deploy:deploy /opt/trainova`.
+`.env.prod` в git не попадает, деплой его не трогает.
 
 ## 9. Обновление версии вручную
 

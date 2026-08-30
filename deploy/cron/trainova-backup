@@ -8,5 +8,5 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 17 4 * * * root cd /opt/trainova && ./scripts/backup.sh >> /var/log/trainova-backup.log 2>&1
 
-# Продление сертификата: certbot сам решит, пора ли, и перезагрузит nginx.
-41 3 * * * root cd /opt/trainova && ./scripts/renew_cert.sh >> /var/log/trainova-cert.log 2>&1
+# Продление сертификата здесь не нужно: им занимается системный certbot
+# своим таймером (systemctl list-timers certbot.timer).
