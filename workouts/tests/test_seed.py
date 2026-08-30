@@ -25,7 +25,7 @@ def test_seed_creates_starter_changelog_entries():
     entries = ChangelogEntry.objects.published()
     assert entries.count() == len(CHANGELOG)
     assert entries.filter(kind=ChangelogEntry.Kind.FIX).count() == 1
-    assert entries.first().title == "Подготовка тренировки заранее"  # порядок — новые сверху
+    assert entries.first().title == "Тёмная и светлая темы"  # порядок — новые сверху
 
 
 def test_seed_is_idempotent():
