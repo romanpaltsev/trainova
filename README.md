@@ -64,7 +64,9 @@ DJANGO_DEBUG_TOOLBAR=True  # в .env
 ## Прод
 
 Деплой на VDS с HTTPS — [docs/deploy.md](docs/deploy.md), бэкапы и восстановление базы —
-[docs/backup.md](docs/backup.md). Прод-стек поднимается через `./scripts/prod.sh up -d`.
+[docs/backup.md](docs/backup.md). Прод-стек (gunicorn + postgres) поднимается через
+`./scripts/prod.sh up -d` и слушает только localhost; наружу его отдаёт системный nginx
+с конфигом из [deploy/nginx/trainova.conf](deploy/nginx/trainova.conf).
 
 Требования к продукту, дизайн-система и рабочие правила — в [CLAUDE.md](CLAUDE.md),
 макеты экранов — в `docs/design/`.

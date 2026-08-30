@@ -1,24 +1,29 @@
 # Деплой на VDS
 
-Стек: **nginx** (TLS, редирект, ACME) → **gunicorn** (Django, статику отдаёт whitenoise)
-→ **postgres**. Сертификат Let's Encrypt выпускает и продлевает **certbot**, вызываемый из
-крона. Наружу открыты только 80 и 443.
+Стек: **системный nginx** (TLS, редирект, ACME) → **gunicorn** в докере (Django, статику
+отдаёт whitenoise) → **postgres** в докере. Сертификат Let's Encrypt выпускает и продлевает
+системный **certbot** (пакет `python3-certbot-nginx`, продление — его собственный
+systemd-таймер).
+
+nginx намеренно не в контейнере: на этом VDS он уже стоит и обслуживает другие сайты,
+и два nginx не поделят порты 80/443. Приложение публикует порт **только на 127.0.0.1** —
+снаружи к нему ходит лишь локальный nginx.
 
 Все команды прод-стека идут через обёртку `./scripts/prod.sh` — она добавляет
-`--env-file .env.prod` и нужный compose-файл. Без `--env-file` подстановка `${DOMAIN}`
-в compose не работает, и nginx поднимется с пустым `server_name`.
+`--env-file .env.prod` и нужный compose-файл. Без `--env-file` подстановка `${POSTGRES_*}`
+в compose не работает, и postgres не поднимется.
 
 ## Почему статику отдаёт whitenoise, а не nginx
 
-- Статика лежит внутри контейнера web (`collectstatic` при старте) — nginx не нужен общий
-  том, и невозможна рассинхронизация «код обновили, а nginx отдаёт старые файлы».
+- Статика лежит внутри контейнера web (`collectstatic` при старте) — nginx не нужен доступ
+  к файлам приложения, и невозможна рассинхронизация «код обновили, а nginx отдаёт старые».
 - Имена файлов содержат хэш содержимого, поэтому кэш выставлен на год, а рядом лежат
   заранее пожатые `.br`/`.gz` — отдача почти не стоит воркеру времени.
 - Для дневника на несколько человек разница между nginx и whitenoise не измеряется,
   а движущихся частей на одну меньше.
 
-Если позже понадобится отдавать статику nginx — добавляется том `staticfiles` и один
-`location /static/`, код при этом не меняется.
+Если позже понадобится отдавать статику самим nginx — примонтируйте `staticfiles` наружу
+и добавьте `location /static/` в конфиг; код при этом не меняется.
 
 ## 0. Что нужно заранее
 
@@ -50,7 +55,7 @@ getent hosts trainova.hotbar.pro
 adduser roman && usermod -aG sudo roman
 # дальше — под roman
 sudo apt update && sudo apt -y upgrade
-sudo apt -y install docker.io docker-compose-v2 git rclone
+sudo apt -y install docker.io docker-compose-v2 git rclone nginx python3-certbot-nginx
 sudo usermod -aG docker roman && newgrp docker
 
 sudo apt -y install unattended-upgrades && sudo dpkg-reconfigure -plow unattended-upgrades
@@ -71,9 +76,9 @@ python3 -c "import secrets; print(secrets.token_urlsafe(64))"   # ключ дл�
 nano .env.prod
 ```
 
-Обязательно поменяйте: `DJANGO_SECRET_KEY`, `DOMAIN`, `DJANGO_ALLOWED_HOSTS`,
-`CSRF_TRUSTED_ORIGINS`, `LETSENCRYPT_EMAIL`, `POSTGRES_PASSWORD` (и тот же пароль внутри
-`DATABASE_URL`), `EMAIL_URL`, `DEFAULT_FROM_EMAIL`.
+Обязательно поменяйте: `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`,
+`CSRF_TRUSTED_ORIGINS`, `POSTGRES_PASSWORD` (и тот же пароль внутри `DATABASE_URL`),
+`EMAIL_URL`, `DEFAULT_FROM_EMAIL`. Если порт 8000 на сервере занят — задайте `WEB_PORT`.
 
 Про `EMAIL_URL` для Яндекса:
 
@@ -87,21 +92,39 @@ EMAIL_URL=smtp+ssl://dnevnik%40yandex.ru:parolprilozheniya@smtp.yandex.ru:465
 
 `.env.prod` закрыт `.gitignore` и остаётся только на сервере.
 
-## 4. Сертификат и первый запуск
+## 4. Приложение, nginx и сертификат
+
+Сначала поднимаем приложение — оно слушает только localhost:
 
 ```bash
 ./scripts/prod.sh build
-./scripts/init_letsencrypt.sh     # заглушка → nginx → настоящий серт → reload
 ./scripts/prod.sh up -d
 ./scripts/prod.sh ps
+curl -sI http://127.0.0.1:8000/accounts/login/    # 200 прямо с сервера
 ```
 
-`init_letsencrypt.sh` решает проблему курицы и яйца: nginx не стартует без файлов
-сертификата, а certbot не пройдёт проверку домена без работающего nginx.
+Потом отдаём его наружу системным nginx:
 
-Сомневаетесь в DNS — поставьте `LETSENCRYPT_STAGING=1`, прогоните выпуск на тестовом УЦ
-(браузер такому серту не поверит, это нормально), потом верните `0`, удалите том
-`docker volume rm trainova-prod_certbot_conf` и повторите.
+```bash
+sudo cp deploy/nginx/trainova.conf /etc/nginx/sites-available/trainova
+sudo ln -s /etc/nginx/sites-available/trainova /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+В конфиге только HTTP-сервер: блок TLS дописывает certbot, ему нужен работающий
+80-й порт для проверки домена.
+
+```bash
+sudo certbot --nginx -d trainova.hotbar.pro     # выпустит серт и добавит редирект на https
+sudo certbot renew --dry-run                    # репетиция продления
+```
+
+Сомневаетесь в DNS — прогоните сначала на тестовом УЦ: тот же вызов с `--dry-run`
+или `--test-cert` (браузер такому серту не поверит, это нормально). Боевой УЦ даёт
+5 неудач в час на домен.
+
+Продление certbot делает сам (systemd-таймер `certbot.timer`) и перезагружает nginx —
+крон для сертификата не нужен, в отличие от бэкапов.
 
 ## 5. Первые данные
 
@@ -172,7 +195,8 @@ git pull
 
 ```bash
 ./scripts/prod.sh logs -f web       # gunicorn и Django
-./scripts/prod.sh logs -f nginx     # запросы и TLS
+sudo journalctl -u nginx -f         # системный nginx: запросы и TLS
+sudo tail -f /var/log/nginx/error.log
 ./scripts/prod.sh logs -f db        # postgres
 tail -f /var/log/trainova-backup.log
 tail -f /var/log/trainova-cert.log
@@ -189,3 +213,6 @@ docker system df                    # место под образы и тома
   убедитесь, что всё работает.
 - Стек рассчитан на один сервер. Горизонтальное масштабирование потребует вынести
   postgres и статику наружу — для этого проекта не планируется.
+- nginx и certbot живут в системе, а не в стеке: значит их обновления и конфиги —
+  отдельная от проекта зона ответственности (`apt`, `/etc/nginx`). Взамен на сервере
+  спокойно соседствуют другие сайты.

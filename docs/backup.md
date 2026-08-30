@@ -101,8 +101,8 @@ rclone copy backup:trainova-backups/dnevnik-2026-08-27-0417.dump /var/backups/tr
 
 ## Если потерян весь VDS
 
-1. Новый сервер, шаги 1–4 из [deploy.md](deploy.md) (DNS на новый IP, docker, клон, `.env.prod`
-   из менеджера паролей, `init_letsencrypt.sh`, `up -d`).
+1. Новый сервер, шаги 1–4 из [deploy.md](deploy.md) (DNS на новый IP, docker и nginx, клон,
+   `.env.prod` из менеджера паролей, `up -d`, конфиг nginx, `certbot --nginx`).
 2. Скачать дамп: `rclone copy backup:trainova-backups/<файл> /var/backups/trainova/`.
 3. `./scripts/restore.sh /var/backups/trainova/<файл>`.
 4. Проверить вход и историю тренировок.

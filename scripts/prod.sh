@@ -2,8 +2,8 @@
 # Обёртка над docker compose для прод-стека.
 #
 # Зачем: env_file в compose передаёт переменные только внутрь контейнеров, а для
-# подстановки ${DOMAIN}, ${POSTGRES_*} в самом compose-файле нужен --env-file.
-# Без него DOMAIN оказался бы пустым, и nginx поднялся бы с пустым server_name.
+# подстановки ${POSTGRES_*} и ${WEB_PORT} в самом compose-файле нужен --env-file.
+# Без него пароль базы оказался бы пустым, и postgres не поднялся бы.
 #
 # Примеры:
 #   ./scripts/prod.sh up -d
