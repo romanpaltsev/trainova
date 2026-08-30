@@ -114,6 +114,11 @@ sudo nginx -t && sudo systemctl reload nginx
 В конфиге только HTTP-сервер: блок TLS дописывает certbot, ему нужен работающий
 80-й порт для проверки домена.
 
+Пока конфига нет, домен отвечает пустотой (`curl: (52) Empty reply from server`) —
+это нормально: запрос попадает в catch-all заглушку `server_name _; return 444`,
+которая закрывает соединение для неизвестных доменов. После `reload` nginx выберет
+наш блок по точному совпадению `server_name`, заглушка на него больше не влияет.
+
 ```bash
 sudo certbot --nginx -d trainova.hotbar.pro     # выпустит серт и добавит редирект на https
 sudo certbot renew --dry-run                    # репетиция продления
