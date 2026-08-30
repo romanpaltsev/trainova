@@ -6,22 +6,35 @@
 {% block bottom_nav %}{% endblock %}
 
 {% block content %}
+{% comment %}
+  Один экран на черновик и на идущую тренировку: различие — есть ли started_at.
+  У черновика таймер не рендерится вовсе (пустой data-started дал бы «NaN:NaN»),
+  карточки отдыха тоже нет — отдыхать до старта нечего.
+{% endcomment %}
 <div class="app-live-head">
   <div>
     <h1 class="app-page-title mb-0">{{ workout.sport.name }}</h1>
     <div class="app-live-status">
-      тренировка идёт ·
-      <span class="num" x-data="liveClock()" data-started="{{ workout.started_at|date:'c' }}"
-            x-text="text">0:00</span>
+      {% if workout.is_planned %}
+        черновик · время не идёт
+      {% else %}
+        тренировка идёт ·
+        <span class="num" x-data="liveClock()" data-started="{{ workout.started_at|date:'c' }}"
+              x-text="text">0:00</span>
+      {% endif %}
     </div>
   </div>
-  <button type="button" class="btn btn-quiet"
-          hx-get="{% url 'workout_finish' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
-    Завершить
-  </button>
+  {% if workout.is_planned %}
+    <a class="btn btn-quiet" href="{% url 'workout_delete' workout.pk %}">Удалить</a>
+  {% else %}
+    <button type="button" class="btn btn-quiet"
+            hx-get="{% url 'workout_finish' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
+      Завершить
+    </button>
+  {% endif %}
 </div>
 
-{% include "workouts/_live_rest.html" %}
+{% if not workout.is_planned %}{% include "workouts/_live_rest.html" %}{% endif %}
 {% include "workouts/_live_exercises.html" %}
 {% endblock %}
 

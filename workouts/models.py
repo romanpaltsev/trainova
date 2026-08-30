@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.db.models.functions import Lower
 from django.utils import timezone
 from django.utils.timezone import localtime
@@ -157,11 +157,26 @@ class Exercise(CatalogItem):
 
 
 class WorkoutQuerySet(models.QuerySet):
+    """Три состояния тренировки собираются из двух колонок — см. Workout."""
+
     def finished(self):
         """Завершённые тренировки — только они попадают в историю и агрегаты."""
         return self.filter(duration_min__isnull=False)
 
-    def in_progress(self):
+    def live(self):
+        """Идущая: время пошло, длительности ещё нет. Больше одной быть не может."""
+        return self.filter(started_at__isnull=False, duration_min__isnull=True)
+
+    def planned(self):
+        """Черновики: подготовлены заранее, время не идёт. Их может быть сколько угодно.
+
+        Одного условия хватает: check-констрейнт запрещает завершённую без начала,
+        поэтому started_at IS NULL уже означает и duration_min IS NULL.
+        """
+        return self.filter(started_at__isnull=True)
+
+    def unfinished(self):
+        """Черновик или идущая — всё, что ещё правится живым режимом."""
         return self.filter(duration_min__isnull=True)
 
 
@@ -178,7 +193,14 @@ class Workout(models.Model):
         on_delete=models.PROTECT,
         related_name="workouts",
     )
-    started_at = models.DateTimeField("начало")
+    # NULL = тренировка подготовлена заранее, но не начата (черновик): времени
+    # начала у неё честно нет, поэтому и отсчёт длительности невозможен.
+    started_at = models.DateTimeField(
+        "начало",
+        null=True,
+        blank=True,
+        help_text="Пусто — тренировка подготовлена, но ещё не начата.",
+    )
     # NULL = тренировка ещё идёт (живой режим); длительность считается при завершении.
     duration_min = models.PositiveIntegerField(
         "длительность, мин",
@@ -211,25 +233,44 @@ class Workout(models.Model):
         # -id как тайбрейкер: у двух тренировок одного прошедшего дня started_at
         # совпадает (полдень), и без него порядок между запросами не определён,
         # а пагинация может продублировать или потерять карточку.
-        ordering = ["-started_at", "-id"]
+        # nulls_last: в Postgres DESC ставит NULL первыми, и черновики всплывали бы
+        # в начало любой выборки без явной сортировки — там, где ищут идущую.
+        ordering = [F("started_at").desc(nulls_last=True), "-id"]
         indexes = [models.Index(fields=["user", "-started_at"], name="workout_user_started_idx")]
         constraints = [
             # Гонку «две вкладки нажали старт» ловит база, а не check-then-create.
+            # Предикат требует начала: черновиков может быть сколько угодно, они
+            # в индекс не попадают, а вот UPDATE «Начать» второго — попадает.
             models.UniqueConstraint(
                 fields=["user"],
-                condition=Q(duration_min__isnull=True),
-                name="unique_active_workout_per_user",
+                condition=Q(started_at__isnull=False, duration_min__isnull=True),
+                name="unique_live_workout_per_user",
                 violation_error_message="У вас уже есть незавершённая тренировка.",
-            )
+            ),
+            # Записанной без начала не бывает. Благодаря этому .finished() гарантирует
+            # непустой started_at, и localtime(started_at) в истории и агрегатах
+            # не может молча подставить now() вместо настоящей даты.
+            models.CheckConstraint(
+                condition=Q(started_at__isnull=False) | Q(duration_min__isnull=True),
+                name="finished_workout_is_started",
+                violation_error_message="Завершённая тренировка не может быть без начала.",
+            ),
         ]
 
     def __str__(self):
+        if self.started_at is None:
+            return f"{self.sport} — черновик"
         # localtime: started_at хранится в UTC, а показывать надо в TIME_ZONE проекта.
         return f"{self.sport} — {localtime(self.started_at):%d.%m.%Y %H:%M}"
 
     @property
     def is_finished(self):
         return self.duration_min is not None
+
+    @property
+    def is_planned(self):
+        """Черновик: подготовлена, но не начата — время ещё не идёт."""
+        return self.started_at is None
 
     @property
     def duration_display(self):
@@ -241,7 +282,9 @@ class Workout(models.Model):
 
     @property
     def elapsed_min(self):
-        """Минуты с начала — тикающая длительность активной тренировки."""
+        """Минуты с начала — тикающая длительность идущей тренировки."""
+        if self.started_at is None:
+            return 0
         return int((timezone.now() - self.started_at).total_seconds() // 60)
 
     @property

@@ -43,11 +43,15 @@ def test_start_modal_lists_all_visible_sports_with_dots(client, user, other_user
     bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
     SportFactory(name="Силовая")
 
-    content = client.get(reverse("workout_start")).content.decode()
+    response = client.get(reverse("workout_start"))
+    content = response.content.decode()
 
     assert "Кроссфит" in content
     assert "Силовая" in content
     assert "Велосипед" in content
+    # Тумблер намерения: начать сейчас или подготовить заранее.
+    assert response.context["can_start_now"] is True
+    assert reverse("strength_prepare") in content
     # У кардио теперь такая же точка-маркер, как у силовых.
     assert "--app-sport-bike" in content
     # Кардио открывает форму с уже выбранным видом — один тап вместо двух.
@@ -72,14 +76,17 @@ def test_start_modal_offers_to_continue_active_workout(client, user):
     SportFactory(name="Силовая")
     bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
 
-    content = client.get(reverse("workout_start")).content.decode()
+    response = client.get(reverse("workout_start"))
+    content = response.content.decode()
 
     assert "Продолжить тренировку" in content
     assert reverse("workout_live", args=[active.pk]) in content
-    # Вторая активная невозможна — силовых строк нет...
-    assert reverse("strength_start") not in content
-    assert "Силовая" not in content
-    # ...а кардио записывается независимо от незавершённой силовой.
+    # Вторая идущая невозможна: строки «начать сейчас» скрыты (x-cloak — чтобы они
+    # не мигнули до инициализации Alpine), решение принимает вьюха.
+    assert response.context["can_start_now"] is False
+    assert "x-cloak" in content
+    # ...но подготовить следующую можно, а кардио пишется независимо.
+    assert reverse("strength_prepare") in content
     assert f"{reverse('cardio_create')}?sport={bike.pk}" in content
 
 

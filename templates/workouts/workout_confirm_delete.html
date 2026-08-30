@@ -1,14 +1,18 @@
 {% extends "base.html" %}
 
-{% block title %}Удалить тренировку · Дневник тренировок{% endblock %}
+{% block title %}{% if workout.is_planned %}Удалить черновик{% else %}Удалить тренировку{% endif %} · Дневник тренировок{% endblock %}
 
 {% block content %}
-<h1 class="app-page-title">Удалить тренировку?</h1>
+<h1 class="app-page-title">
+  {% if workout.is_planned %}Удалить черновик?{% else %}Удалить тренировку?{% endif %}
+</h1>
 
 <div class="app-card p-4">
   <p class="mb-1">
     <span class="app-sport-dot" style="--dot: var(--app-sport-{{ workout.sport.color_key }})"></span>
-    <strong>{{ workout.sport.name }}</strong> · {{ workout.started_at|date:"j E Y, H:i" }}
+    <strong>{{ workout.sport.name }}</strong> ·
+    {# У черновика даты нет: фильтр date отдал бы пустоту и точка повисла бы в воздухе. #}
+    {% if workout.is_planned %}{{ plan_label }}{% else %}{{ workout.started_at|date:"j E Y, H:i" }}{% endif %}
   </p>
   <p class="text-secondary-app">Действие нельзя отменить.</p>
 
@@ -17,7 +21,9 @@
     <div class="d-flex flex-column gap-2">
       <button type="submit" class="btn btn-danger-quiet w-100">Удалить</button>
       {# У силовой тренировки экрана правки пока нет — возвращаемся в историю. #}
-      {% if workout.sport.is_strength %}
+      {% if workout.is_planned %}
+        <a class="btn btn-quiet w-100" href="{% url 'workout_live' workout.pk %}">Отмена</a>
+      {% elif workout.sport.is_strength %}
         <a class="btn btn-quiet w-100" href="{% url 'workout_history' %}">Отмена</a>
       {% else %}
         <a class="btn btn-quiet w-100" href="{% url 'workout_edit' workout.pk %}">Отмена</a>

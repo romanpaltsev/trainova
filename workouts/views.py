@@ -15,7 +15,7 @@ from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
-from django.urls import reverse, reverse_lazy
+from django.urls import reverse
 from django.utils import formats, timezone
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
@@ -87,7 +87,14 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
         context["last_week"] = context["groups"][-1]["key"] if context["groups"] else ""
         context["sport_filter"] = self.request.GET.get("sport", "")
         context["sports_used"] = (
-            Sport.objects.filter(workouts__user=self.request.user).distinct().order_by("name")
+            # Оба условия — в одном filter: два вызова подряд дали бы два JOIN'а,
+            # то есть «есть моя тренировка И есть чья-то завершённая». Чип строится
+            # только по записанным: у черновика карточек в ленте нет.
+            Sport.objects.filter(
+                workouts__user=self.request.user, workouts__duration_min__isnull=False
+            )
+            .distinct()
+            .order_by("name")
         )
         return context
 
@@ -172,39 +179,71 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
 
 
 class WorkoutDeleteView(LoginRequiredMixin, DeleteView):
-    """Удаление своей тренировки с подтверждением."""
+    """Удаление своей тренировки или черновика с подтверждением."""
 
     template_name = "workouts/workout_confirm_delete.html"
     context_object_name = "workout"
-    success_url = reverse_lazy("workout_history")
+    # Выставляется в form_valid до удаления: после него объекта в базе уже нет.
+    planned = False
 
     def get_queryset(self):
         return Workout.objects.filter(user=self.request.user).select_related("sport")
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        if self.object.is_planned:
+            # У черновика нет даты, поэтому в подзаголовке — состав, а не «когда».
+            count = self.object.sets.values("exercise").distinct().count()
+            context["plan_label"] = exercises_label(count)
+        return context
+
+    def get_success_url(self):
+        # Черновика в истории нет — возвращаться туда после удаления бессмысленно.
+        return reverse("dashboard") if self.planned else reverse("workout_history")
+
     def form_valid(self, form):
-        messages.success(self.request, "Тренировка удалена.")
+        # Запоминаем до удаления: после super() объект уже без строки в базе.
+        self.planned = self.object.is_planned
+        messages.success(
+            self.request, "Черновик удалён." if self.planned else "Тренировка удалена."
+        )
         return super().form_valid(form)
 
 
 # ---------- Живой режим силовой тренировки ----------
 
 
+def exercises_label(count):
+    """«3 упражнения» для шапки черновика и строк чузера; «пусто» — если ничего нет."""
+    if not count:
+        return "пусто"
+    word = services.ru_plural(count, "упражнение", "упражнения", "упражнений")
+    return f"{count} {word}"
+
+
 def live_workout_or_404(request, pk):
-    """Своя активная силовая тренировка — база всех действий живого режима."""
+    """Своя незавершённая силовая — база всех действий живого режима.
+
+    Черновик правится тем же набором эндпоинтов, что и идущая тренировка:
+    подготовка — это и есть добавление упражнений и правка весов.
+    """
     return get_object_or_404(
         Workout.objects.filter(user=request.user, sport__category=Sport.Category.STRENGTH)
-        .in_progress()
+        .unfinished()
         # user — для отдыха по умолчанию и подсказок, иначе он тянется отдельным запросом
         .select_related("sport", "user"),
         pk=pk,
     )
 
 
-def live_set_or_404(request, pk, *, undone_only=False, for_update=False):
-    """Свой подход своей активной тренировки; подходы завершённых неизменяемы."""
+def live_set_or_404(request, pk, *, undone_only=False, for_update=False, started_only=False):
+    """Свой подход своей незавершённой тренировки; подходы завершённых неизменяемы."""
     queryset = StrengthSet.objects.filter(
         workout__user=request.user, workout__duration_min__isnull=True
     ).select_related("workout", "exercise")
+    if started_only:
+        # «Подход выполнен» до старта невозможно: в черновике время ещё не идёт.
+        queryset = queryset.filter(workout__started_at__isnull=False)
     if undone_only:
         queryset = queryset.filter(done=False)
     if for_update:
@@ -245,29 +284,46 @@ def live_region_response(request, workout, *, oob=False, restart_timer=False, er
 
 
 class WorkoutStartView(LoginRequiredMixin, View):
-    """HTMX-модалка «+»: продолжить активную, начать силовую или записать кардио."""
+    """HTMX-модалка «+»: продолжить идущую, открыть черновик, начать или записать."""
 
     def get(self, request):
-        active = Workout.objects.filter(user=request.user).in_progress().first()
-        sports = Sport.objects.visible_to(request.user)
-        if active is not None:
-            # Второй активной тренировки быть не может (частичный уникальный индекс),
-            # поэтому силовые строки прячем; запись кардио от неё не зависит.
-            sports = sports.filter(category=Sport.Category.CARDIO)
+        # Один запрос на идущую и на черновики: вместе их единицы.
+        rows = list(
+            Workout.objects.filter(user=request.user)
+            .unfinished()
+            .select_related("sport")
+            .annotate(exercises_count=Count("sets__exercise", distinct=True))
+            # Явно: с GROUP BY Django игнорирует Meta.ordering, а у черновика нет даты.
+            .order_by("-id")
+        )
+        live = next((row for row in rows if not row.is_planned), None)
+        drafts = [row for row in rows if row.is_planned]
+        for draft in drafts:
+            draft.plan_label = exercises_label(draft.exercises_count)
         return render(
             request,
             "workouts/_start_modal.html",
             {
-                "active": active,
+                "live": live,
+                "drafts": drafts,
+                # Начать вторую идущую нельзя, а подготовить следующую — можно,
+                # поэтому список видов спорта больше не сужается.
+                "can_start_now": live is None,
                 # Силовые сверху, дальше по алфавиту — тот же порядок, что у легенды
                 # графика дашборда: главное действие оказывается первым в списке.
-                "sports": sorted(sports, key=lambda sport: (not sport.is_strength, sport.name)),
+                "sports": sorted(
+                    Sport.objects.visible_to(request.user),
+                    key=lambda sport: (not sport.is_strength, sport.name),
+                ),
             },
         )
 
 
 class StrengthWorkoutStartView(LoginRequiredMixin, View):
-    """Старт живого режима: активная тренировка создаётся сразу, форма не нужна."""
+    """Силовая из чузера: сразу в живой режим либо черновиком (planned=True)."""
+
+    # Ставится через as_view(planned=True) на маршруте подготовки.
+    planned = False
 
     def post(self, request):
         sport_id = request.POST.get("sport", "")
@@ -277,6 +333,13 @@ class StrengthWorkoutStartView(LoginRequiredMixin, View):
             Sport.objects.visible_to(request.user).filter(category=Sport.Category.STRENGTH),
             pk=int(sport_id),
         )
+        if self.planned:
+            # Черновиков может быть сколько угодно: уникальный индекс требует начала,
+            # поэтому ловить IntegrityError здесь не нужно.
+            workout = Workout.objects.create(
+                user=request.user, sport=sport, started_at=None, duration_min=None
+            )
+            return redirect("workout_live", pk=workout.pk)
         try:
             # Вложенный atomic: гонку двух вкладок ловит частичный уникальный индекс,
             # а savepoint не даёт IntegrityError отравить транзакцию запроса.
@@ -285,9 +348,41 @@ class StrengthWorkoutStartView(LoginRequiredMixin, View):
                     user=request.user, sport=sport, started_at=timezone.now(), duration_min=None
                 )
         except IntegrityError:
-            workout = Workout.objects.filter(user=request.user).in_progress().first()
+            workout = Workout.objects.filter(user=request.user).live().first()
             if workout is None:
                 raise
+        return redirect("workout_live", pk=workout.pk)
+
+
+class WorkoutDraftStartView(LoginRequiredMixin, View):
+    """«Начать тренировку»: с этого момента идут часы черновика."""
+
+    def post(self, request, pk):
+        workout = live_workout_or_404(request, pk)
+        if not workout.is_planned:
+            # Даблтап или кнопка «назад»: тренировка уже идёт.
+            return redirect("workout_live", pk=workout.pk)
+        live = Workout.objects.filter(user=request.user).live().first()
+        if live is not None:
+            messages.info(request, "Сначала завершите текущую тренировку.")
+            return redirect("workout_live", pk=live.pk)
+        try:
+            # До UPDATE черновика в частичном индексе нет, после — есть: гонку
+            # «две вкладки стартуют разные черновики» ловит база, а savepoint не
+            # даёт IntegrityError отравить транзакцию запроса (ATOMIC_REQUESTS).
+            # Условие в filter, а не присваивание полю: при двойном тапе Postgres
+            # перепроверит started_at IS NULL уже под блокировкой строки, и время
+            # начала останется от первого нажатия, а не сдвинется назад.
+            with transaction.atomic():
+                Workout.objects.filter(pk=workout.pk, started_at__isnull=True).update(
+                    started_at=timezone.now()
+                )
+        except IntegrityError:
+            live = Workout.objects.filter(user=request.user).live().first()
+            if live is None:
+                raise
+            messages.info(request, "Сначала завершите текущую тренировку.")
+            return redirect("workout_live", pk=live.pk)
         return redirect("workout_live", pk=workout.pk)
 
 
@@ -445,7 +540,8 @@ class SetDoneView(LoginRequiredMixin, View):
     """«Подход выполнен»: фиксирует подход и перезапускает таймер отдыха."""
 
     def post(self, request, pk):
-        row = live_set_or_404(request, pk, for_update=True)
+        # started_only: в черновике этой кнопки нет, но устаревшая вкладка есть всегда.
+        row = live_set_or_404(request, pk, for_update=True, started_only=True)
         if row.done:
             # Даблтап: подход уже записан, отдых перезапускать нельзя.
             return live_region_response(request, row.workout)
@@ -491,6 +587,9 @@ class WorkoutFinishView(LoginRequiredMixin, View):
         )
         if not workout.sport.is_strength:
             raise Http404("Завершение есть только у силовых тренировок")
+        if workout.is_planned:
+            # Нечего завершать: время не шло. Заодно защищает elapsed_min от NULL.
+            raise Http404("Тренировка ещё не начата")
         return workout
 
     def get(self, request, pk):
@@ -565,7 +664,7 @@ class WorkoutRepeatView(LoginRequiredMixin, View):
             .select_related("sport"),
             pk=pk,
         )
-        active = Workout.objects.filter(user=request.user).in_progress().first()
+        active = Workout.objects.filter(user=request.user).live().first()
         if active is not None:
             messages.info(request, "Сначала завершите текущую тренировку.")
             return redirect("workout_live", pk=active.pk)
@@ -578,7 +677,7 @@ class WorkoutRepeatView(LoginRequiredMixin, View):
                     duration_min=None,
                 )
         except IntegrityError:
-            active = Workout.objects.filter(user=request.user).in_progress().first()
+            active = Workout.objects.filter(user=request.user).live().first()
             if active is None:
                 raise
             return redirect("workout_live", pk=active.pk)
@@ -768,9 +867,16 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         if query:
             queryset = queryset.filter(name__icontains=query)
         # Счётчик использований нужен только для своих записей — их и удаляем.
+        # Подпись говорит «в N тренировках», поэтому считаем записанные: плановые
+        # подходы черновика тренировками ещё не стали.
         return queryset.annotate(
             workouts_count=Count(
-                "sets__workout", distinct=True, filter=Q(sets__workout__user=self.request.user)
+                "sets__workout",
+                distinct=True,
+                filter=Q(
+                    sets__workout__user=self.request.user,
+                    sets__workout__duration_min__isnull=False,
+                ),
             )
         ).order_by("name")
 
@@ -796,7 +902,11 @@ class MySportsView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         return (
             Sport.objects.filter(owner=self.request.user)
-            .annotate(workouts_count=Count("workouts", distinct=True))
+            .annotate(
+                workouts_count=Count(
+                    "workouts", distinct=True, filter=Q(workouts__duration_min__isnull=False)
+                )
+            )
             .order_by("name")
         )
 
@@ -818,12 +928,11 @@ class CatalogDeleteView(LoginRequiredMixin, View):
     """
 
     model = None
-    usage_related = ""
-    # По какому пути от связанной записи считать РАЗНЫЕ тренировки: у упражнения
-    # это подходы (в одной тренировке их несколько), у вида спорта — сами тренировки.
-    usage_workout_path = ""
     title = ""
     in_use_message = ""
+    # Ссылка из черновика тоже держит запись (FK PROTECT), но «записанной
+    # тренировкой» она не является — иначе сообщение врало бы.
+    planned_use_message = ""
     deleted_message = ""
     success_url_name = ""
 
@@ -833,25 +942,38 @@ class CatalogDeleteView(LoginRequiredMixin, View):
             self.model.objects.filter(owner=self.request.user), pk=self.kwargs["pk"]
         )
 
-    def usage_count(self, item):
-        """Число тренировок, а не связанных строк: подписи говорят «в N тренировках»."""
-        related = getattr(item, self.usage_related)
-        if self.usage_workout_path:
-            return related.values(self.usage_workout_path).distinct().count()
-        return related.count()
+    def referencing_workouts(self, item):
+        """Тренировки, которые держат запись. Подклассы знают путь до них."""
+        raise NotImplementedError
+
+    def usage_counts(self, item):
+        """Сколько записанных тренировок и сколько незавершённых держат запись.
+
+        «Сколько раз использовано» и «можно ли удалить» — разные вопросы: подпись
+        считает записанные, а удаление блокирует любая ссылка, включая черновик.
+        Иначе вышел бы тупик: «не использовалось» рядом с кнопкой, которая падает.
+        """
+        workouts = self.referencing_workouts(item)
+        return workouts.finished().count(), workouts.unfinished().count()
+
+    def blocked_message(self, item, recorded, unfinished):
+        if recorded:
+            return self.in_use_message.format(name=item.name)
+        if unfinished:
+            return self.planned_use_message.format(name=item.name)
+        return ""
 
     def get(self, request, pk):
         item = self.get_object()
-        count = self.usage_count(item)
+        recorded, unfinished = self.usage_counts(item)
         return render(
             request,
             "workouts/catalog_confirm_delete.html",
             {
                 "item": item,
                 "title": self.title,
-                "usage_count": count,
-                "usage_label": usage_label(count),
-                "in_use_message": self.in_use_message.format(name=item.name),
+                "usage_label": usage_label(recorded),
+                "blocked_message": self.blocked_message(item, recorded, unfinished),
                 "cancel_url": reverse(self.success_url_name),
                 "nav_active": "profile",
             },
@@ -859,8 +981,10 @@ class CatalogDeleteView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
         item = self.get_object()
-        if getattr(item, self.usage_related).exists():
-            messages.error(request, self.in_use_message.format(name=item.name))
+        recorded, unfinished = self.usage_counts(item)
+        blocked = self.blocked_message(item, recorded, unfinished)
+        if blocked:
+            messages.error(request, blocked)
             return redirect(self.success_url_name)
         try:
             with transaction.atomic():
@@ -874,21 +998,31 @@ class CatalogDeleteView(LoginRequiredMixin, View):
 
 class ExerciseDeleteView(CatalogDeleteView):
     model = Exercise
-    usage_related = "sets"
-    usage_workout_path = "workout"
     title = "Удалить упражнение?"
     in_use_message = "Упражнение «{name}» есть в записанных тренировках — его нельзя удалить."
+    planned_use_message = (
+        "Упражнение «{name}» есть в подготовленной тренировке — сначала уберите его оттуда."
+    )
     deleted_message = "Упражнение удалено."
     success_url_name = "exercise_list"
+
+    def referencing_workouts(self, item):
+        # distinct: в одной тренировке у упражнения несколько подходов.
+        return Workout.objects.filter(sets__exercise=item).distinct()
 
 
 class SportDeleteView(CatalogDeleteView):
     model = Sport
-    usage_related = "workouts"
     title = "Удалить вид спорта?"
     in_use_message = "Вид спорта «{name}» есть в записанных тренировках — его нельзя удалить."
+    planned_use_message = (
+        "Вид спорта «{name}» есть в подготовленной тренировке — сначала удалите черновик."
+    )
     deleted_message = "Вид спорта удалён."
     success_url_name = "my_sports"
+
+    def referencing_workouts(self, item):
+        return Workout.objects.filter(sport=item)
 
 
 class ChangelogView(LoginRequiredMixin, View):

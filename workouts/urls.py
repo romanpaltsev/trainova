@@ -23,7 +23,15 @@ urlpatterns = [
         views.StrengthWorkoutStartView.as_view(),
         name="strength_start",
     ),
+    path(
+        "workouts/strength/prepare/",
+        views.StrengthWorkoutStartView.as_view(planned=True),
+        name="strength_prepare",
+    ),
+    # Черновик и идущая тренировка живут на одном URL: после старта адрес не
+    # меняется, открытая вкладка и закладка остаются рабочими.
     path("workouts/<int:pk>/live/", views.LiveWorkoutView.as_view(), name="workout_live"),
+    path("workouts/<int:pk>/start/", views.WorkoutDraftStartView.as_view(), name="draft_start"),
     path(
         "workouts/<int:pk>/live/exercises/",
         views.LiveExerciseView.as_view(),

@@ -79,6 +79,33 @@ def test_live_screen_query_budget(client, user, django_assert_max_num_queries, q
         client.get(reverse("workout_live", args=[active.pk]))
 
 
+@pytest.mark.parametrize("queued", [1, 6], ids=["one-exercise", "six-exercises"])
+def test_draft_screen_query_budget(client, user, django_assert_max_num_queries, queued):
+    """Экран черновика — тот же живой экран без таймера: бюджет не выше."""
+    fill_history(user)
+    planned = WorkoutFactory(user=user, started_at=None, duration_min=None)
+    for number, exercise in enumerate(ExerciseFactory.create_batch(queued), start=1):
+        StrengthSetFactory(workout=planned, exercise=exercise, set_number=number, done=False)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(8):
+        client.get(reverse("workout_live", args=[planned.pk]))
+
+
+@pytest.mark.parametrize("drafts", [1, 4], ids=["one-draft", "four-drafts"])
+def test_start_modal_query_budget(client, user, django_assert_max_num_queries, drafts):
+    """Число запросов чузера не должно расти вместе с числом черновиков."""
+    fill_history(user)
+    for _ in range(drafts):
+        planned = WorkoutFactory(user=user, started_at=None, duration_min=None)
+        StrengthSetFactory(workout=planned, set_number=1, done=False)
+
+    client.force_login(user)
+    # Идущая тренировка и черновики берутся одним запросом с аннотацией.
+    with django_assert_max_num_queries(6):
+        client.get(reverse("workout_start"))
+
+
 def test_profile_query_budget(client, user, django_assert_max_num_queries):
     fill_history(user)
 

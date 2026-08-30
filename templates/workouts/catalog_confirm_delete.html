@@ -7,8 +7,9 @@
 
 <div class="app-card p-4" style="max-width: 26rem;">
   <p class="mb-1"><strong>{{ item.name }}</strong> · {{ usage_label }}</p>
-  {% if usage_count %}
-    <p class="text-secondary-app">{{ in_use_message }}</p>
+  {# Подпись считает записанные тренировки, а держать запись может и черновик. #}
+  {% if blocked_message %}
+    <p class="text-secondary-app">{{ blocked_message }}</p>
     <a class="btn btn-quiet w-100" href="{{ cancel_url }}">Назад</a>
   {% else %}
     <p class="text-secondary-app">Действие нельзя отменить.</p>

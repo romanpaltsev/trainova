@@ -165,6 +165,39 @@ def test_delete_page_explains_why_used_record_is_kept(client, user):
     assert "Удалить</button>" not in content
 
 
+def test_counters_ignore_drafts(client, user):
+    """Подпись «в N тренировках» считает записанные: черновик тренировкой не стал."""
+    exercise = ExerciseFactory(owner=user, name="Моё упражнение")
+    sport = SportFactory(owner=user, name="Кроссфит")
+    planned = WorkoutFactory(user=user, sport=sport, started_at=None, duration_min=None)
+    StrengthSetFactory(workout=planned, exercise=exercise, set_number=1, done=False)
+
+    client.force_login(user)
+    catalog = client.get(reverse("exercise_list"), {"mine": "1"}).content.decode()
+    sports = client.get(reverse("my_sports")).content.decode()
+
+    assert "не использовалось" in catalog
+    assert "не использовалось" in sports
+
+
+def test_draft_blocks_deletion_with_honest_message(client, user):
+    """Черновик держит запись (FK PROTECT), но «записанной тренировкой» не является:
+    иначе рядом с подписью «не использовалось» стояла бы падающая кнопка."""
+    exercise = ExerciseFactory(owner=user, name="Моё упражнение")
+    sport = SportFactory(owner=user, name="Кроссфит")
+    planned = WorkoutFactory(user=user, sport=sport, started_at=None, duration_min=None)
+    StrengthSetFactory(workout=planned, exercise=exercise, set_number=1, done=False)
+
+    client.force_login(user)
+    page = client.get(reverse("exercise_delete", args=[exercise.pk])).content.decode()
+    response = client.post(reverse("sport_delete", args=[sport.pk]), follow=True)
+
+    assert "есть в подготовленной тренировке" in page
+    assert "Удалить</button>" not in page
+    assert Sport.objects.filter(pk=sport.pk).exists()
+    assert "сначала удалите черновик" in response.content.decode()
+
+
 @pytest.mark.parametrize("owner", ["global", "other"], ids=["global", "other-user"])
 def test_delete_page_404_for_foreign_exercise(client, user, other_user, owner):
     exercise = ExerciseFactory(owner=None if owner == "global" else other_user)

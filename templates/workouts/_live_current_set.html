@@ -2,11 +2,17 @@
   Панель текущего подхода. Степперы сохраняют каждый тап сразу и свапают только
   span со значением — кнопки не пересоздаются, серия быстрых тапов не теряется.
   Общая sync-очередь сериализует тапы и «Подход выполнен».
+
+  В черновике на месте «Подход выполнен» стоит «Начать тренировку»: рука в зале
+  уже там. Признак берём у модели (workout.is_planned), а не из контекста —
+  партиал рендерится и из live.html, и из live_region_response.
 {% endcomment %}
 <div class="app-live-current">
   <div class="app-live-current-head">
     <span class="app-live-set-num">{{ set.display_number }}</span>
-    <span class="text-secondary-app">текущий подход</span>
+    <span class="text-secondary-app">
+      {% if workout.is_planned %}подход в плане{% else %}текущий подход{% endif %}
+    </span>
   </div>
 
   {% if error %}<div class="invalid-feedback d-block mb-2">{{ error }}</div>{% endif %}
@@ -44,9 +50,16 @@
     </div>
   </div>
 
-  <button type="button" class="btn btn-accent w-100 app-btn-big"
-          hx-post="{% url 'set_done' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
-          hx-sync="closest .app-live-current:queue all" hx-disabled-elt="this">
-    Подход выполнен
-  </button>
+  {% if workout.is_planned %}
+    <form method="post" action="{% url 'draft_start' workout.pk %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-accent w-100 app-btn-big">Начать тренировку</button>
+    </form>
+  {% else %}
+    <button type="button" class="btn btn-accent w-100 app-btn-big"
+            hx-post="{% url 'set_done' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
+            hx-sync="closest .app-live-current:queue all" hx-disabled-elt="this">
+      Подход выполнен
+    </button>
+  {% endif %}
 </div>

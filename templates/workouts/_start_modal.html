@@ -1,8 +1,13 @@
 {% comment %}
-  Чузер «+»: продолжить активную тренировку либо выбрать вид спорта.
-  Силовые стартуют живой режим сразу, кардио открывают форму с этим же видом.
+  Чузер «+»: продолжить идущую тренировку, открыть подготовленную либо выбрать вид спорта.
+  Тумблер переключает намерение: «Начать сейчас» — силовая уходит в живой режим,
+  кардио открывает форму с этим же видом; «Подготовить» — силовая создаётся черновиком
+  (у кардио живого режима нет, готовить нечего, поэтому его строки скрываются).
+  Вторая идущая тренировка невозможна, поэтому при canStartNow=false строки «начать
+  сейчас» спрятаны, а подготовка следующей остаётся доступной.
 {% endcomment %}
-<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+<div class="app-modal-backdrop" x-data="{mode: 'now', canStartNow: {{ can_start_now|yesno:'true,false' }}}"
+     @keydown.escape.window="$root.remove()">
   <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="start-modal-title">
     <div class="app-modal-head">
       <h2 class="app-modal-title" id="start-modal-title">Новая тренировка</h2>
@@ -12,16 +17,46 @@
       </button>
     </div>
 
-    {% if active %}
-      <a class="btn btn-accent w-100 mb-2" href="{% url 'workout_live' active.pk %}">
-        Продолжить тренировку · идёт {{ active.elapsed_min }} мин
+    {% if live %}
+      <a class="btn btn-accent w-100 mb-2" href="{% url 'workout_live' live.pk %}">
+        Продолжить тренировку · идёт {{ live.elapsed_min }} мин
       </a>
     {% endif %}
+
+    {% if drafts %}
+      <h3 class="app-section-title">Подготовлено</h3>
+      <div class="app-pick-list">
+        {% for draft in drafts %}
+          <a class="app-pick-row" href="{% url 'workout_live' draft.pk %}">
+            <span class="app-sport-dot" style="--dot: var(--app-sport-{{ draft.sport.color_key }})"></span>
+            <span class="app-pick-name">{{ draft.sport.name }}</span>
+            <span class="app-pick-meta">{{ draft.plan_label }}</span>
+            {% include "includes/chevron.html" %}
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <div class="app-chips app-chips-split mt-3" role="group" aria-label="Что делаем">
+      <input type="radio" name="start-mode" id="start-mode-now" value="now"
+             class="app-chip-input" x-model="mode" checked>
+      <label class="app-chip" for="start-mode-now">Начать сейчас</label>
+      <input type="radio" name="start-mode" id="start-mode-prepare" value="prepare"
+             class="app-chip-input" x-model="mode">
+      <label class="app-chip" for="start-mode-prepare">Подготовить</label>
+    </div>
 
     <div class="app-pick-list">
       {% for sport in sports %}
         {% if sport.is_strength %}
-          <form method="post" action="{% url 'strength_start' %}">
+          {% comment %}
+            action по умолчанию — «начать сейчас»: без Alpine работает главный сценарий.
+            x-cloak убирает мигание строки, которую сразу же спрячет x-show.
+          {% endcomment %}
+          <form method="post" action="{% url 'strength_start' %}"
+                x-show="mode === 'prepare' || canStartNow"
+                {% if not can_start_now %}x-cloak{% endif %}
+                :action="mode === 'now' ? '{% url 'strength_start' %}' : '{% url 'strength_prepare' %}'">
             {% csrf_token %}
             <input type="hidden" name="sport" value="{{ sport.pk }}">
             <button type="submit" class="app-pick-row">
@@ -31,7 +66,8 @@
             </button>
           </form>
         {% else %}
-          <a class="app-pick-row" href="{% url 'cardio_create' %}?sport={{ sport.pk }}">
+          <a class="app-pick-row" href="{% url 'cardio_create' %}?sport={{ sport.pk }}"
+             x-show="mode === 'now'">
             <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
             <span class="app-pick-name">{{ sport.name }}</span>
             {% include "includes/chevron.html" %}
@@ -39,5 +75,9 @@
         {% endif %}
       {% endfor %}
     </div>
+
+    <p class="app-queue-hint mt-2 mb-0" x-show="mode === 'prepare'" x-cloak>
+      Соберите упражнения заранее — время пойдёт в зале по кнопке «Начать тренировку».
+    </p>
   </div>
 </div>
