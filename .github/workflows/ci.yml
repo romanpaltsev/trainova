@@ -1,0 +1,127 @@
+# Проверки на каждый push и pull request, деплой — только с main.
+#
+# uv ставим официальным установщиком, а не сторонним экшеном: он сам подтянет
+# Python из .python-version, и в цепочке меньше движущихся частей.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  # Новый push отменяет проверки предыдущего: очередь деплоя не копится.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Тестовые значения: секретов здесь быть не должно, база — сервисный контейнер.
+  DJANGO_SECRET_KEY: ci-secret-not-used-in-prod
+  DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+  DATABASE_URL: postgres://trainova:trainova@localhost:5432/trainova
+  EMAIL_URL: consolemail://
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      db:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: trainova
+          POSTGRES_USER: trainova
+          POSTGRES_PASSWORD: trainova
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U trainova -d trainova"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Установить uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Кэш зависимостей uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
+      - name: Синхронизировать окружение
+        run: uv sync --frozen
+
+      - name: Линт и формат
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Проверки Django
+        run: uv run python manage.py check
+
+      - name: Незакоммиченные миграции
+        # Модель поменяли, а makemigrations не запустили — ловим здесь, а не в проде.
+        run: uv run python manage.py makemigrations --check --dry-run
+
+      - name: Тесты
+        run: uv run pytest -q
+
+      - name: Сборка статики с манифестом
+        # Проверяет, что все ассеты на месте: под ManifestStaticFilesStorage
+        # отсутствующий файл валит collectstatic, а следом и страницы.
+        env:
+          DJANGO_STATIC_MANIFEST: "True"
+        run: uv run python manage.py collectstatic --noinput
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      # Два деплоя одновременно сломали бы стек на сервере.
+      group: deploy-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Ключ и отпечаток сервера
+        # known_hosts из секрета, а не ssh-keyscan на лету: иначе первый же
+        # подменённый ответ DNS увёл бы деплой на чужой сервер.
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Обновить прод и проверить, что он отвечает
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER_NAME: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/trainova' }}
+        # Внутренние переменные сервера экранированы (\$), иначе их подставил бы раннер.
+        run: |
+          ssh -o BatchMode=yes "$USER_NAME@$HOST" bash -euo pipefail <<REMOTE
+          cd "$DEPLOY_PATH"
+          git fetch --prune origin
+          git reset --hard origin/main
+          # Миграции и collectstatic выполняет entrypoint при старте контейнера.
+          ./scripts/prod.sh up -d --build
+          # Старые слои на маленьком VDS съедают диск за десяток деплоев.
+          docker image prune -f
+
+          for attempt in \$(seq 1 15); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8000/accounts/login/; then
+              echo "приложение отвечает"
+              exit 0
+            fi
+            sleep 4
+          done
+          echo "приложение не поднялось" >&2
+          ./scripts/prod.sh logs --tail 50 web >&2 || true
+          exit 1
+          REMOTE

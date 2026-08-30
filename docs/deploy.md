@@ -181,7 +181,44 @@ sudo chown root:root /etc/cron.d/trainova-backup && sudo chmod 644 /etc/cron.d/t
 сертификата. Настройка выгрузки в облако и процедура восстановления — в
 [backup.md](backup.md).
 
-## 8. Обновление версии
+## 8. Автодеплой через GitHub Actions
+
+Workflow `.github/workflows/ci.yml`: на каждый push и pull request прогоняются ruff,
+`manage.py check`, проверка незакоммиченных миграций, тесты и `collectstatic` с манифестом.
+Если push пришёл в `main` и проверки зелёные — job `deploy` заходит на сервер по SSH,
+делает `git reset --hard origin/main`, пересобирает стек и ждёт, пока приложение ответит.
+
+Деплой-ключ (на своей машине):
+
+```bash
+ssh-keygen -t ed25519 -C "github-actions-trainova" -f ~/.ssh/trainova_deploy -N ""
+ssh-copy-id -i ~/.ssh/trainova_deploy.pub roman@trainova.hotbar.pro
+ssh-keyscan -t ed25519 trainova.hotbar.pro          # строка для DEPLOY_KNOWN_HOSTS
+cat ~/.ssh/trainova_deploy                           # приватный ключ целиком, с BEGIN/END
+```
+
+Secrets в GitHub (Settings → Secrets and variables → Actions → Secrets):
+
+| Секрет | Значение |
+|---|---|
+| `DEPLOY_HOST` | `trainova.hotbar.pro` |
+| `DEPLOY_USER` | `roman` |
+| `DEPLOY_SSH_KEY` | содержимое `~/.ssh/trainova_deploy` (приватный ключ) |
+| `DEPLOY_KNOWN_HOSTS` | вывод `ssh-keyscan -t ed25519 trainova.hotbar.pro` |
+
+Если код лежит не в `/opt/trainova`, задайте переменную (не секрет) `DEPLOY_PATH`
+в том же разделе, вкладка Variables.
+
+Отпечаток сервера берётся из секрета, а не через `ssh-keyscan` во время деплоя:
+иначе подменённый DNS-ответ увёл бы деплой (вместе с ключом) на чужой сервер.
+
+Пользователь деплоя должен уметь `docker` без sudo (`usermod -aG docker roman`) и иметь
+права на каталог с кодом. `.env.prod` в git не попадает, деплой его не трогает.
+
+## 9. Обновление версии вручную
+
+Обычно это делает GitHub Actions (раздел 8). Руками — если Actions недоступен
+или нужен откат:
 
 ```bash
 cd /opt/trainova
@@ -196,7 +233,7 @@ git pull
 Если новая версия успела применить миграции, откат кода сам их не отменит — восстанавливайте
 базу из дампа по [backup.md](backup.md).
 
-## 9. Что где смотреть
+## 10. Что где смотреть
 
 ```bash
 ./scripts/prod.sh logs -f web       # gunicorn и Django

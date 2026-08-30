@@ -63,7 +63,10 @@ DJANGO_DEBUG_TOOLBAR=True  # в .env
 
 ## Прод
 
-Деплой на VDS с HTTPS — [docs/deploy.md](docs/deploy.md), бэкапы и восстановление базы —
+Push в `main` с зелёными проверками деплоится на сервер автоматически
+([.github/workflows/ci.yml](.github/workflows/ci.yml)); на pull request'ах гоняются
+только проверки. Деплой на VDS с HTTPS — [docs/deploy.md](docs/deploy.md),
+бэкапы и восстановление базы —
 [docs/backup.md](docs/backup.md). Прод-стек (gunicorn + postgres) поднимается через
 `./scripts/prod.sh up -d` и слушает только localhost; наружу его отдаёт системный nginx
 с конфигом из [deploy/nginx/trainova.conf](deploy/nginx/trainova.conf).
