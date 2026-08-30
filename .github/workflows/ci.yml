@@ -88,7 +88,35 @@ jobs:
       cancel-in-progress: false
 
     steps:
+      - name: Проверить секреты деплоя
+        id: gate
+        # Пока секретов нет, деплой пропускается с заметкой, а не роняет CI:
+        # иначе каждый push в main давал бы красный прогон на пустом ssh.
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          names="DEPLOY_HOST DEPLOY_USER DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS"
+          missing=""
+          filled=""
+          for name in $names; do
+            if [ -n "${!name}" ]; then filled="$filled $name"; else missing="$missing $name"; fi
+          done
+          if [ -z "$missing" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          elif [ -z "$filled" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Секреты деплоя не заданы — деплой пропущен. Как настроить: docs/deploy.md, раздел 8."
+          else
+            # Половина секретов — это опечатка в настройках, а не «ещё не настроили».
+            echo "::error::Заданы не все секреты деплоя, отсутствуют:$missing"
+            exit 1
+          fi
+
       - name: Ключ и отпечаток сервера
+        if: steps.gate.outputs.ready == 'true' 
         # known_hosts из секрета, а не ssh-keyscan на лету: иначе первый же
         # подменённый ответ DNS увёл бы деплой на чужой сервер.
         run: |
@@ -99,6 +127,7 @@ jobs:
           chmod 644 ~/.ssh/known_hosts
 
       - name: Обновить прод и проверить, что он отвечает
+        if: steps.gate.outputs.ready == 'true'
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
           USER_NAME: ${{ secrets.DEPLOY_USER }}
