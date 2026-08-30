@@ -69,7 +69,7 @@ Push в `main` с зелёными проверками деплоится на 
 бэкапы и восстановление базы —
 [docs/backup.md](docs/backup.md). Прод-стек (gunicorn + postgres) поднимается через
 `./scripts/prod.sh up -d` и слушает только localhost; наружу его отдаёт системный nginx
-с конфигом из [deploy/nginx/trainova.conf](deploy/nginx/trainova.conf).
+с конфигом из [deploy/nginx/trainova.hotbar.pro.conf](deploy/nginx/trainova.hotbar.pro.conf).
 
 Требования к продукту, дизайн-система и рабочие правила — в [CLAUDE.md](CLAUDE.md),
 макеты экранов — в `docs/design/`.

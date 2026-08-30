@@ -114,8 +114,9 @@ curl -sI -H "Host: trainova.hotbar.pro" -H "X-Forwarded-Proto: https" \
 Потом отдаём его наружу системным nginx:
 
 ```bash
-sudo cp deploy/nginx/trainova.conf /etc/nginx/sites-available/trainova
-sudo ln -s /etc/nginx/sites-available/trainova /etc/nginx/sites-enabled/
+# Файл называется по домену: в sites-enabled так сразу видно, какой это сайт.
+sudo cp deploy/nginx/trainova.hotbar.pro.conf /etc/nginx/sites-available/trainova.hotbar.pro
+sudo ln -s /etc/nginx/sites-available/trainova.hotbar.pro /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
