@@ -144,8 +144,12 @@ jobs:
           docker image prune -f
 
           for attempt in \$(seq 1 15); do
-            # Host обязателен: в ALLOWED_HOSTS только домен, по IP Django ответит 400.
-            if curl -fsS -o /dev/null -H "Host: $HOST" http://127.0.0.1:8000/accounts/login/; then
+            # Оба заголовка подделывают то, что обычно добавляет nginx: без Host
+            # Django ответит 400 (ALLOWED_HOSTS), без X-Forwarded-Proto — 301 на https,
+            # и проверка «позеленела» бы, не убедившись, что страница рендерится.
+            if curl -fsS -o /dev/null --max-time 10 \
+                 -H "Host: $HOST" -H "X-Forwarded-Proto: https" \
+                 http://127.0.0.1:8000/accounts/login/; then
               echo "приложение отвечает"
               exit 0
             fi

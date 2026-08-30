@@ -105,8 +105,10 @@ EMAIL_URL=smtp+ssl://dnevnik%40yandex.ru:parolprilozheniya@smtp.yandex.ru:465
 ./scripts/prod.sh build
 ./scripts/prod.sh up -d
 ./scripts/prod.sh ps
-# Host обязателен: в ALLOWED_HOSTS только домен, по IP Django ответит 400 (DisallowedHost).
-curl -sI -H "Host: trainova.hotbar.pro" http://127.0.0.1:8000/accounts/login/   # 200
+# Оба заголовка подделывают то, что добавляет nginx: без Host будет 400
+# (ALLOWED_HOSTS), без X-Forwarded-Proto — 301 на https (SECURE_SSL_REDIRECT).
+curl -sI -H "Host: trainova.hotbar.pro" -H "X-Forwarded-Proto: https" \
+  http://127.0.0.1:8000/accounts/login/       # 200
 ```
 
 Потом отдаём его наружу системным nginx:
