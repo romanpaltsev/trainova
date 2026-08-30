@@ -13,6 +13,16 @@ from workouts.tests.factories import ChangelogEntryFactory
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def without_shipped_announcements():
+    """Пустая таблица новостей: тесты описывают логику на своих записях.
+
+    Анонсы релизов приезжают data-миграциями, поэтому в тестовой базе они уже
+    лежат — а «непрочитанных нет» и «список пуст» иначе не проверить.
+    """
+    ChangelogEntry.objects.all().delete()
+
+
 @pytest.mark.parametrize(
     ("case", "expected"),
     [

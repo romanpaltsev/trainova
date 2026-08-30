@@ -10,6 +10,14 @@ from workouts.models import ChangelogEntry, Exercise, Sport
 pytestmark = pytest.mark.django_db
 
 
+@pytest.fixture(autouse=True)
+def without_shipped_announcements():
+    """seed отвечает только за стартовые новости; анонсы релизов приезжают
+    data-миграциями и в тестовой базе уже есть — считать их вместе с CHANGELOG
+    нельзя."""
+    ChangelogEntry.objects.all().delete()
+
+
 def test_seed_creates_global_catalogs():
     call_command("seed")
 
