@@ -35,20 +35,28 @@ def test_start_creates_active_workout_and_redirects_to_live(client, user):
     assert response.url == reverse("workout_live", args=[workout.pk])
 
 
-def test_start_modal_lists_only_visible_strength_sports(client, user, other_user):
+def test_start_modal_lists_all_visible_sports_with_dots(client, user, other_user):
     client.force_login(user)
     SportFactory(owner=user, name="Кроссфит")
     SportFactory(owner=other_user, name="Чужой спорт")
-    SportFactory(category=Sport.Category.CARDIO, name="Велосипед")
+    SportFactory(owner=other_user, name="Чужое кардио", category=Sport.Category.CARDIO)
+    bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
     SportFactory(name="Силовая")
 
     content = client.get(reverse("workout_start")).content.decode()
 
     assert "Кроссфит" in content
     assert "Силовая" in content
+    assert "Велосипед" in content
+    # У кардио теперь такая же точка-маркер, как у силовых.
+    assert "--app-sport-bike" in content
+    # Кардио открывает форму с уже выбранным видом — один тап вместо двух.
+    assert f"{reverse('cardio_create')}?sport={bike.pk}" in content
+    # Силовые сверху, кардио ниже — как в легенде графика.
+    assert content.index("Кроссфит") < content.index("Велосипед")
+    # Священное правило: чужие личные виды спорта в чузере не появляются.
     assert "Чужой спорт" not in content
-    # Кардио стартует не отсюда, а через свою форму.
-    assert "Велосипед" not in content
+    assert "Чужое кардио" not in content
 
 
 def test_start_of_foreign_or_cardio_sport_is_404(client, user, other_user):
@@ -61,12 +69,18 @@ def test_start_of_foreign_or_cardio_sport_is_404(client, user, other_user):
 def test_start_modal_offers_to_continue_active_workout(client, user):
     client.force_login(user)
     active = WorkoutFactory(user=user, duration_min=None)
+    SportFactory(name="Силовая")
+    bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
 
     content = client.get(reverse("workout_start")).content.decode()
 
     assert "Продолжить тренировку" in content
     assert reverse("workout_live", args=[active.pk]) in content
+    # Вторая активная невозможна — силовых строк нет...
     assert reverse("strength_start") not in content
+    assert "Силовая" not in content
+    # ...а кардио записывается независимо от незавершённой силовой.
+    assert f"{reverse('cardio_create')}?sport={bike.pk}" in content
 
 
 def test_second_active_workout_is_impossible(user):

@@ -1,4 +1,7 @@
-{% comment %}Чузер «+»: продолжить активную тренировку, начать силовую или записать кардио.{% endcomment %}
+{% comment %}
+  Чузер «+»: продолжить активную тренировку либо выбрать вид спорта.
+  Силовые стартуют живой режим сразу, кардио открывают форму с этим же видом.
+{% endcomment %}
 <div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
   <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="start-modal-title">
     <div class="app-modal-head">
@@ -16,27 +19,25 @@
     {% endif %}
 
     <div class="app-pick-list">
-      {% if not active %}
-        {% for sport in strength_sports %}
+      {% for sport in sports %}
+        {% if sport.is_strength %}
           <form method="post" action="{% url 'strength_start' %}">
             {% csrf_token %}
             <input type="hidden" name="sport" value="{{ sport.pk }}">
             <button type="submit" class="app-pick-row">
               <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
               <span class="app-pick-name">{{ sport.name }}</span>
-              <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
-                   stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                   stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+              {% include "includes/chevron.html" %}
             </button>
           </form>
-        {% endfor %}
-      {% endif %}
-      <a class="app-pick-row" href="{% url 'cardio_create' %}">
-        <span class="app-pick-name">Кардио — записать</span>
-        <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round"
-             stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-      </a>
+        {% else %}
+          <a class="app-pick-row" href="{% url 'cardio_create' %}?sport={{ sport.pk }}">
+            <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
+            <span class="app-pick-name">{{ sport.name }}</span>
+            {% include "includes/chevron.html" %}
+          </a>
+        {% endif %}
+      {% endfor %}
     </div>
   </div>
 </div>

@@ -228,3 +228,57 @@ def test_cancel_link_on_delete_page_always_leads_somewhere_reachable(client, use
         cancel = re.search(r'href="([^"]+)"[^>]*>\s*Отмена', html).group(1)
 
         assert client.get(cancel).status_code == 200, f"«Отмена» ведёт в {cancel}"
+
+
+def test_sport_from_chooser_is_preselected(client, user, bike):
+    """Строка кардио в чузере «+» передаёт вид спорта — чип уже выбран."""
+    client.force_login(user)
+
+    response = client.get(reverse("cardio_create"), {"sport": bike.pk})
+
+    assert response.context["form"].initial["sport"] == bike.pk
+    assert re.search(rf'id="sport-{bike.pk}"[^>]*checked', response.content.decode())
+
+
+@pytest.mark.parametrize(
+    "sport_id",
+    [
+        pytest.param("abc", id="garbage"),
+        pytest.param("-1", id="negative"),
+        pytest.param("0", id="nonexistent"),
+        pytest.param("", id="empty"),
+    ],
+)
+def test_bad_preselect_is_ignored_without_error(client, user, bike, sport_id):
+    client.force_login(user)
+
+    response = client.get(reverse("cardio_create"), {"sport": sport_id})
+
+    assert response.status_code == 200
+    assert "sport" not in response.context["form"].initial
+    assert "checked" not in response.content.decode()
+
+
+def test_foreign_or_strength_sport_is_not_preselected(client, user, other_user, bike):
+    """?sport= — подсказка, а не доступ: чужой и силовой id просто игнорируются."""
+    client.force_login(user)
+    alien = SportFactory(name="Каяк", category=Sport.Category.CARDIO, owner=other_user)
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH, owner=None)
+
+    for sport in (alien, strength):
+        response = client.get(reverse("cardio_create"), {"sport": sport.pk})
+
+        assert response.status_code == 200, f"?sport={sport.pk}"
+        assert "sport" not in response.context["form"].initial
+        assert "checked" not in response.content.decode()
+
+
+def test_preselect_does_not_override_edited_workout(client, user, bike):
+    """На правке ?sport= игнорируется: переданный initial перебил бы вид тренировки."""
+    client.force_login(user)
+    run = SportFactory(name="Бег", category=Sport.Category.CARDIO, owner=None)
+    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+
+    response = client.get(reverse("workout_edit", args=[workout.pk]), {"sport": run.pk})
+
+    assert response.context["form"].initial["sport"] == bike.pk

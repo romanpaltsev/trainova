@@ -122,7 +122,30 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
 
     def get(self, request, **kwargs):
         instance = self.get_instance()
-        return self.render_form(CardioWorkoutForm(user=request.user, instance=instance), instance)
+        form = CardioWorkoutForm(
+            user=request.user, instance=instance, initial=self.preselected(request, instance)
+        )
+        return self.render_form(form, instance)
+
+    @staticmethod
+    def preselected(request, instance):
+        """Вид спорта из чузера «+» (?sport=): подсказка, а не адрес.
+
+        Чужой личный, силовой или мусорный id молча игнорируем — 404 здесь был бы
+        грубостью, а расширить набор сохраняемых видов параметр всё равно не может:
+        форма валидирует sport своим queryset'ом. На правке подсказка запрещена:
+        переданный initial перебивает данные тренировки и подменил бы ей вид спорта.
+        """
+        sport_id = request.GET.get("sport", "")
+        if instance is not None or not sport_id.isdecimal():
+            return None
+        pk = (
+            Sport.objects.visible_to(request.user)
+            .filter(category=Sport.Category.CARDIO, pk=int(sport_id))
+            .values_list("pk", flat=True)
+            .first()
+        )
+        return {"sport": pk} if pk is not None else None
 
     def post(self, request, **kwargs):
         instance = self.get_instance()
@@ -225,14 +248,20 @@ class WorkoutStartView(LoginRequiredMixin, View):
     """HTMX-модалка «+»: продолжить активную, начать силовую или записать кардио."""
 
     def get(self, request):
+        active = Workout.objects.filter(user=request.user).in_progress().first()
+        sports = Sport.objects.visible_to(request.user)
+        if active is not None:
+            # Второй активной тренировки быть не может (частичный уникальный индекс),
+            # поэтому силовые строки прячем; запись кардио от неё не зависит.
+            sports = sports.filter(category=Sport.Category.CARDIO)
         return render(
             request,
             "workouts/_start_modal.html",
             {
-                "active": Workout.objects.filter(user=request.user).in_progress().first(),
-                "strength_sports": Sport.objects.visible_to(request.user).filter(
-                    category=Sport.Category.STRENGTH
-                ),
+                "active": active,
+                # Силовые сверху, дальше по алфавиту — тот же порядок, что у легенды
+                # графика дашборда: главное действие оказывается первым в списке.
+                "sports": sorted(sports, key=lambda sport: (not sport.is_strength, sport.name)),
             },
         )
 
