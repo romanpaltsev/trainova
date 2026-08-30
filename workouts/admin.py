@@ -53,12 +53,20 @@ class CardioDetailsInline(admin.StackedInline):
 
 @admin.register(Workout)
 class WorkoutAdmin(admin.ModelAdmin):
-    list_display = ("started_at", "sport", "user", "duration_min", "summary")
+    list_display = ("started_at", "state", "sport", "user", "duration_min", "summary")
     list_filter = ("sport__category", "sport", "user")
+    # Черновики (started_at пуст) в срезы по датам не попадают — их там и нет.
     date_hierarchy = "started_at"
     search_fields = ("user__email", "note")
     autocomplete_fields = ("user", "sport")
     inlines = (StrengthSetInline, CardioDetailsInline)
+
+    @admin.display(description="состояние")
+    def state(self, obj):
+        """Иначе черновик и идущая в списке отличались бы только пустой датой."""
+        if obj.is_planned:
+            return "черновик"
+        return "записана" if obj.is_finished else "идёт"
 
     @admin.display(description="содержимое")
     def summary(self, obj):
