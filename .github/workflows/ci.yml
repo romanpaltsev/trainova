@@ -144,7 +144,8 @@ jobs:
           docker image prune -f
 
           for attempt in \$(seq 1 15); do
-            if curl -fsS -o /dev/null http://127.0.0.1:8000/accounts/login/; then
+            # Host обязателен: в ALLOWED_HOSTS только домен, по IP Django ответит 400.
+            if curl -fsS -o /dev/null -H "Host: $HOST" http://127.0.0.1:8000/accounts/login/; then
               echo "приложение отвечает"
               exit 0
             fi

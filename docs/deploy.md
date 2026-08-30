@@ -105,7 +105,8 @@ EMAIL_URL=smtp+ssl://dnevnik%40yandex.ru:parolprilozheniya@smtp.yandex.ru:465
 ./scripts/prod.sh build
 ./scripts/prod.sh up -d
 ./scripts/prod.sh ps
-curl -sI http://127.0.0.1:8000/accounts/login/    # 200 прямо с сервера
+# Host обязателен: в ALLOWED_HOSTS только домен, по IP Django ответит 400 (DisallowedHost).
+curl -sI -H "Host: trainova.hotbar.pro" http://127.0.0.1:8000/accounts/login/   # 200
 ```
 
 Потом отдаём его наружу системным nginx:
