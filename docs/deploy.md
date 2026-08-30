@@ -39,7 +39,8 @@ trainova.hotbar.pro.  A  203.0.113.10
 (лимит боевого УЦ — 5 неудач в час на домен):
 
 ```bash
-dig +short trainova.hotbar.pro
+getent hosts trainova.hotbar.pro
+# dig +short trainova.hotbar.pro — если установлен dnsutils (в WSL по умолчанию его нет)
 ```
 
 ## 2. Сервер: пользователь, docker, файрвол
