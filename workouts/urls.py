@@ -8,6 +8,11 @@ urlpatterns = [
     path("exercises/", views.ExerciseListView.as_view(), name="exercise_list"),
     path("exercises/<int:pk>/", views.ExerciseDetailView.as_view(), name="exercise_detail"),
     path("exercises/<int:pk>/delete/", views.ExerciseDeleteView.as_view(), name="exercise_delete"),
+    path(
+        "exercises/<int:pk>/measurement/",
+        views.ExerciseMeasurementView.as_view(),
+        name="exercise_measurement",
+    ),
     path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
     path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
     path("changelog/", views.ChangelogView.as_view(), name="changelog"),

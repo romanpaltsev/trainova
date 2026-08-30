@@ -6,20 +6,16 @@
 
 from decimal import Decimal
 
-from workouts.models import StrengthSet, decimal_display
-
-
-def ru_plural(number, one, few, many):
-    """Русское склонение: 1 подход, 2 подхода, 5 подходов."""
-    tail = abs(number) % 100
-    if 11 <= tail <= 14:
-        return many
-    tail %= 10
-    if tail == 1:
-        return one
-    if 2 <= tail <= 4:
-        return few
-    return many
+from workouts.models import (
+    MEASUREMENT_FIELDS,
+    METRIC_FIELDS,
+    Exercise,
+    StrengthSet,
+    decimal_display,
+    metric_display,
+    rest_display,
+    ru_plural,
+)
 
 
 def last_sets(user, exercise):
@@ -49,9 +45,11 @@ def last_sets(user, exercise):
 
 
 def create_planned_sets(workout, exercise):
-    """Плановые подходы нового упражнения: копия прошлого раза или один пустой 0×0.
+    """Плановые подходы нового упражнения: копия прошлого раза или один пустой.
 
     Номера проставляются заново с единицы — в источнике могли быть пропуски.
+    Единицу ставим здесь явно: bulk_create не вызывает save(), а без снимка
+    подход упёрся бы в set_fields_match_measurement.
     """
     previous = last_sets(workout.user, exercise)
     rows = [
@@ -59,14 +57,35 @@ def create_planned_sets(workout, exercise):
             workout=workout,
             exercise=exercise,
             set_number=number,
-            weight_kg=source.weight_kg,
-            reps=source.reps,
+            measurement=exercise.measurement,
             done=False,
+            **set_values(exercise.measurement, source),
         )
         for number, source in enumerate(previous, start=1)
-    ] or [StrengthSet(workout=workout, exercise=exercise, set_number=1, weight_kg=0, reps=0)]
+    ] or [
+        StrengthSet(
+            workout=workout,
+            exercise=exercise,
+            set_number=1,
+            measurement=exercise.measurement,
+            **set_values(exercise.measurement, None),
+        )
+    ]
     StrengthSet.objects.bulk_create(rows)
     return rows
+
+
+def set_values(measurement, source):
+    """Значения подхода: применимые поля из источника, остальные — нули.
+
+    Нули задаём явно: у weight_kg и reps нет default в модели. Источник мог быть
+    записан в другой единице (упражнение переводили), поэтому берём из него
+    только то, что подходит текущей единице.
+    """
+    values = {"weight_kg": 0, "reps": 0, "duration_sec": 0}
+    if source is not None:
+        values.update({field: getattr(source, field) for field in MEASUREMENT_FIELDS[measurement]})
+    return values
 
 
 def exercise_groups(workout):
@@ -133,11 +152,23 @@ def live_context(workout):
     }
 
 
+def set_value_hint(row):
+    """Короткая запись подхода для перечисления: «77,5×8» · «8» · «1:30»."""
+    measurement = row.measurement
+    if measurement == Exercise.Measurement.WEIGHT_REPS:
+        return f"{row.weight_display}×{row.reps}"
+    if measurement == Exercise.Measurement.TIME_WEIGHT:
+        return f"{rest_display(row.duration_sec)}×{row.weight_display}"
+    if measurement == Exercise.Measurement.REPS:
+        return str(row.reps)
+    return rest_display(row.duration_sec)
+
+
 def last_time_hint(previous):
-    """«прошлый раз: 70×10 · 77,5×8 · 80×5» под заголовком текущего упражнения."""
+    """«прошлый раз: 70×10 · 77,5×8» — или «1:00 · 1:15» у удержаний."""
     if not previous:
         return "первое выполнение"
-    return "прошлый раз: " + " · ".join(f"{s.weight_display}×{s.reps}" for s in previous)
+    return "прошлый раз: " + " · ".join(set_value_hint(row) for row in previous)
 
 
 def queue_hint(sets):
@@ -145,17 +176,30 @@ def queue_hint(sets):
     done_count = sum(1 for s in sets if s.done)
     if done_count:
         return f"выполнено {done_count} из {len(sets)}"
-    top_weight = max(Decimal(str(s.weight_kg)) for s in sets)
-    if not top_weight:
+    # Максимум метрики, а не веса: у планки и подтягиваний вес нулевой, и по нему
+    # подсказка всегда говорила бы «первое выполнение» даже с полной историей.
+    top = max(row.metric_value for row in sets)
+    if not top:
         return "первое выполнение"
     count = len(sets)
     sets_word = ru_plural(count, "подход", "подхода", "подходов")
-    return f"прошлый раз: {count} {sets_word} · до {decimal_display(top_weight)} кг"
+    return f"прошлый раз: {count} {sets_word} · до {metric_display(sets[0].measurement, top)}"
 
 
 def done_hint(sets):
-    """Итог завершённого упражнения: «3 подхода · 590 кг»."""
-    tonnage = sum((s.tonnage_kg for s in sets), Decimal(0))
+    """Итог завершённого упражнения: «3 подхода · 590 кг» или «· 4:30»."""
     count = len(sets)
     sets_word = ru_plural(count, "подход", "подхода", "подходов")
-    return f"{count} {sets_word} · {decimal_display(tonnage)} кг"
+    return f"{count} {sets_word} · {exercise_total(sets)}"
+
+
+def exercise_total(sets):
+    """Сумма работы упражнения в его единице: тоннаж, повторы или время."""
+    measurement = sets[0].measurement
+    if METRIC_FIELDS[measurement] == "duration_sec":
+        return rest_display(sum(row.duration_sec for row in sets))
+    if measurement == Exercise.Measurement.REPS:
+        total = sum(row.reps for row in sets)
+        return f"{total} {ru_plural(total, 'повтор', 'повтора', 'повторов')}"
+    tonnage = sum((row.tonnage_kg for row in sets), Decimal(0))
+    return f"{decimal_display(tonnage)} кг"

@@ -54,6 +54,23 @@ class StrengthSetFactory(factory.django.DjangoModelFactory):
     done = True
 
 
+class TimeSetFactory(StrengthSetFactory):
+    """Подход на удержание: ни веса, ни повторов — так требует ограничение БД."""
+
+    measurement = Exercise.Measurement.TIME
+    weight_kg = 0
+    reps = 0
+    duration_sec = 60
+
+
+class RepsSetFactory(StrengthSetFactory):
+    """Подход «только повторы»: подтягивания, скручивания — без веса."""
+
+    measurement = Exercise.Measurement.REPS
+    weight_kg = 0
+    reps = 12
+
+
 class CardioDetailsFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = CardioDetails

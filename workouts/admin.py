@@ -33,15 +33,17 @@ class SportAdmin(CatalogAdmin):
 
 @admin.register(Exercise)
 class ExerciseAdmin(CatalogAdmin):
-    list_display = ("name", "muscle_group", "owner_display")
-    list_filter = ("muscle_group", "owner")
+    list_display = ("name", "muscle_group", "measurement", "owner_display")
+    list_filter = ("measurement", "muscle_group", "owner")
 
 
 class StrengthSetInline(admin.TabularInline):
     model = StrengthSet
     extra = 3
     autocomplete_fields = ("exercise",)
-    fields = ("exercise", "set_number", "weight_kg", "reps", "done")
+    # Явный список: без duration_sec и measurement подход временного упражнения
+    # из админки создать нельзя — он упрётся в set_fields_match_measurement.
+    fields = ("exercise", "set_number", "measurement", "weight_kg", "reps", "duration_sec", "done")
 
 
 class CardioDetailsInline(admin.StackedInline):

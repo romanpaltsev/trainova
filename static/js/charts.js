@@ -45,6 +45,12 @@ window.appCharts = (function () {
     return String(value).replace(".", ",");
   }
 
+  // 90 -> «1:30». Удержания подписываются так же, как таймер отдыха.
+  function minutesShort(value) {
+    const total = Math.round(value);
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  }
+
   // 1.083 -> «1 ч 05 мин», 0.75 -> «45 мин»
   function hoursLong(value) {
     const total = Math.round(value * 60);
@@ -192,10 +198,15 @@ window.appCharts = (function () {
     return chart;
   }
 
-  // Линия «максимальный вес» на странице упражнения.
+  // Линия метрики упражнения (вес, повторы или удержание) по тренировкам.
   function buildLine(canvas, payload) {
     const t = theme();
     const color = t.sports[payload.colorKey] || t.sports.strength;
+    // Единица приходит с сервера; у времени формат особый — «1:30», а не «90».
+    const label = (value) =>
+      payload.format === "time"
+        ? minutesShort(value)
+        : (comma(value) + (payload.unit ? " " + payload.unit : ""));
     const chart = new Chart(canvas, {
       type: "line",
       data: {
@@ -242,7 +253,7 @@ window.appCharts = (function () {
               font: { size: 11 },
               maxTicksLimit: 5,
               callback: function (value) {
-                return comma(value) + " " + payload.unit;
+                return label(value);
               },
             },
           },
@@ -252,7 +263,7 @@ window.appCharts = (function () {
           tooltip: Object.assign(tooltipDefaults(t), {
             callbacks: {
               label: function (ctx) {
-                return comma(ctx.parsed.y) + " " + payload.unit;
+                return label(ctx.parsed.y);
               },
             },
           }),

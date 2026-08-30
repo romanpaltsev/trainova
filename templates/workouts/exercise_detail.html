@@ -16,13 +16,15 @@
   </div>
 </div>
 
+{% include "workouts/_measurement_choice.html" %}
+
 {% if chart.values|length == 1 %}
-  {% include "includes/empty_state.html" with text="График максимального веса появится со второй тренировки с этим упражнением." %}
+  {% include "includes/empty_state.html" with text="График появится со второй тренировки с этим упражнением." %}
 {% endif %}
 {% if chart.values|length > 1 %}
   <section class="app-card app-chart-card app-exercise-chart">
     <div class="app-chart-head">
-      <h2 class="app-chart-title">Максимальный вес</h2>
+      <h2 class="app-chart-title">{{ chart_title }}</h2>
     </div>
     <div class="app-chart-legend">
       <span class="app-chart-legend-item">
@@ -31,7 +33,8 @@
       </span>
     </div>
     <div class="app-chart-body">
-      <canvas id="exercise-chart" role="img" aria-label="Максимальный вес по тренировкам"></canvas>
+      <canvas id="exercise-chart" role="img"
+              aria-label="{{ chart_title }} по тренировкам"></canvas>
     </div>
   </section>
 {% endif %}
@@ -43,14 +46,14 @@
       <a class="app-link" href="{% url 'workout_summary' group.workout.pk %}">
         {{ group.workout.started_at|date:"D, j b"|lower }}
       </a>
-      <span class="app-live-exercise-meta">до {{ group.max_weight_display }} кг</span>
+      <span class="app-live-exercise-meta">до {{ group.max_value_display }}</span>
     </div>
     <div class="app-live-sets">
       {% for set in group.sets %}
         <div class="app-live-set">
           <span class="app-live-set-num">{{ forloop.counter }}</span>
           <span class="app-live-set-value">
-            <span class="num">{{ set.weight_display }}</span> кг × <span class="num">{{ set.reps }}</span>
+            <span class="num">{{ set.value_display }}</span>
           </span>
         </div>
       {% endfor %}

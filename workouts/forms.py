@@ -196,16 +196,26 @@ class SportForm(forms.ModelForm):
 
 
 class ExerciseQuickForm(forms.ModelForm):
-    """Быстрое создание упражнения из живого режима: одно поле «название»."""
+    """Быстрое создание упражнения из живого режима: название и единица.
+
+    Единица по умолчанию — «вес × повторы», поэтому сценарий в зале остаётся
+    «ввёл название → создать»: чипы трогают только для планки и подобных.
+    """
 
     class Meta:
         model = Exercise
-        fields = ("name",)
+        fields = ("name", "measurement")
         error_messages = {"name": {"required": "Введите название."}}
 
     def __init__(self, *args, user, **kwargs):
         self.user = user
         super().__init__(*args, **kwargs)
+        # Пустое значение считаем «как обычно», а не ошибкой: чипы могут не приехать
+        # из устаревшей вкладки, а прерывать создание упражнения из-за этого глупо.
+        self.fields["measurement"].required = False
+
+    def clean_measurement(self):
+        return self.cleaned_data.get("measurement") or Exercise.Measurement.WEIGHT_REPS
 
     def clean_name(self):
         return self.cleaned_data["name"].strip()
@@ -214,7 +224,9 @@ class ExerciseQuickForm(forms.ModelForm):
         """Вернуть видимое упражнение с таким именем или создать личное.
 
         Посреди тренировки ввод существующего названия означает «добавь его»,
-        а не ошибку дубля — намеренное отличие от SportForm.
+        а не ошибку дубля — намеренное отличие от SportForm. Единица при этом
+        не применяется: переопределить измерение чужого (в том числе глобального)
+        упражнения вводом его названия нельзя.
         """
         name = self.cleaned_data["name"]
         existing = Exercise.objects.visible_to(self.user).filter(name__iexact=name).first()

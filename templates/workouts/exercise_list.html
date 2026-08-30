@@ -25,13 +25,17 @@
         <span class="app-row-name">{{ exercise.name }}</span>
         <span class="app-row-meta">
           {% if exercise.muscle_group %}{{ exercise.muscle_group }}{% endif %}
+          {# Единицу показываем только у непривычных: «вес × повторы» и так по умолчанию. #}
+          {% if exercise.measurement_label %}
+            {% if exercise.muscle_group %} · {% endif %}{{ exercise.measurement_label }}
+          {% endif %}
           {% if not exercise.is_global %}
-            {% if exercise.muscle_group %} · {% endif %}моё · {{ exercise.usage_label }}
+            {% if exercise.muscle_group or exercise.measurement_label %} · {% endif %}моё · {{ exercise.usage_label }}
           {% endif %}
         </span>
       </a>
       {% if exercise.record_display %}
-        <span class="app-row-value num">{{ exercise.record_display }} кг</span>
+        <span class="app-row-value num">{{ exercise.record_display }}</span>
       {% endif %}
       {% if exercise.is_global %}
         {% include "includes/chevron.html" %}

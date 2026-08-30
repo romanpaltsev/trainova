@@ -24,8 +24,8 @@
         <dd class="num">{{ workout.exercises_count|default:0 }}</dd>
       </div>
       <div>
-        <dt>тоннаж</dt>
-        <dd class="num">{{ workout.tonnage|floatformat:0|default:"—" }} кг</dd>
+        <dt>{{ workout.workload.label }}</dt>
+        <dd class="num">{{ workout.workload.value }}</dd>
       </div>
     {% else %}
       {% with cardio=workout.cardio %}

@@ -35,7 +35,7 @@ def clamp_rest_seconds(seconds):
 
 
 def rest_display(seconds):
-    """Отдых как 1:30 — так он показан на таймере живого режима."""
+    """Секунды как 1:30 — так показаны и отдых, и удержание подхода."""
     return f"{seconds // 60}:{seconds % 60:02d}"
 
 
@@ -45,6 +45,23 @@ def decimal_display(value):
     if value == value.to_integral():
         value = value.quantize(Decimal(1))
     return f"{value}".replace(".", ",")
+
+
+def ru_plural(number, one, few, many):
+    """Русское склонение: 1 подход, 2 подхода, 5 подходов.
+
+    Живёт рядом с остальными форматтерами: подписи значений собираются здесь же,
+    а не в services, чтобы модель умела показать своё значение сама.
+    """
+    tail = abs(number) % 100
+    if 11 <= tail <= 14:
+        return many
+    tail %= 10
+    if tail == 1:
+        return one
+    if 2 <= tail <= 4:
+        return few
+    return many
 
 
 class CatalogQuerySet(models.QuerySet):
@@ -132,8 +149,23 @@ class Sport(CatalogItem):
 
 
 class Exercise(CatalogItem):
+    class Measurement(models.TextChoices):
+        """В чём считается подход. Планку не взвешивают, подтягивания не всегда."""
+
+        WEIGHT_REPS = "weight_reps", "Вес × повторы"
+        REPS = "reps", "Повторы"
+        TIME = "time", "Время"
+        TIME_WEIGHT = "time_weight", "Время + вес"
+
     name = models.CharField("название", max_length=80)
     muscle_group = models.CharField("группа мышц", max_length=60, blank=True)
+    measurement = models.CharField(
+        "измерение",
+        max_length=12,
+        choices=Measurement,
+        default=Measurement.WEIGHT_REPS,
+        help_text="Килограммы с повторами, только повторы или время удержания.",
+    )
 
     class Meta(CatalogItem.Meta):
         abstract = False
@@ -154,6 +186,71 @@ class Exercise(CatalogItem):
                 violation_error_message="Глобальное упражнение с таким названием уже есть.",
             ),
         ]
+
+
+# Какие поля подхода осмысленны для каждой единицы — и в каком порядке они стоят
+# на экране. Остальные поля обязаны быть нулём: это же проверяет ограничение
+# set_fields_match_measurement. Больше двух полей не бывает: на 375px три
+# степпера (две кнопки 44px плюс значение) не помещаются.
+MEASUREMENT_FIELDS = {
+    Exercise.Measurement.WEIGHT_REPS: ("weight_kg", "reps"),
+    Exercise.Measurement.REPS: ("reps",),
+    Exercise.Measurement.TIME: ("duration_sec",),
+    Exercise.Measurement.TIME_WEIGHT: ("duration_sec", "weight_kg"),
+}
+
+# Метрика упражнения — поле подхода, по которому считаются рекорд и прогресс,
+# и подпись к нему. Тот же приём, что у кардио: единица выбирается по данным,
+# а не зашита в шаблон (ср. CardioDetails.metric_label).
+METRIC_FIELDS = {
+    Exercise.Measurement.WEIGHT_REPS: "weight_kg",
+    Exercise.Measurement.REPS: "reps",
+    Exercise.Measurement.TIME: "duration_sec",
+    Exercise.Measurement.TIME_WEIGHT: "duration_sec",
+}
+METRIC_LABELS = {
+    Exercise.Measurement.WEIGHT_REPS: "вес",
+    Exercise.Measurement.REPS: "повторы",
+    Exercise.Measurement.TIME: "удержание",
+    Exercise.Measurement.TIME_WEIGHT: "удержание",
+}
+# Единица оси графика и тултипа; у времени формат особый — «1:30», а не «90 сек».
+METRIC_UNITS = {
+    Exercise.Measurement.WEIGHT_REPS: "кг",
+    Exercise.Measurement.REPS: "",
+    Exercise.Measurement.TIME: "",
+    Exercise.Measurement.TIME_WEIGHT: "",
+}
+# Единицы, у которых метрика — секунды: их значения показываются как «1:30».
+TIME_MEASUREMENTS = frozenset({Exercise.Measurement.TIME, Exercise.Measurement.TIME_WEIGHT})
+
+# Шаг степпера по полю подхода. Живёт здесь, а не во вьюхе: по нему считается
+# арифметика тапа и подписывается кнопка, и расходиться этим двум нельзя.
+SET_STEPS = {"weight_kg": Decimal("2.5"), "reps": 1, "duration_sec": 15}
+# Подпись поля и то, что читает скринридер на кнопках «−» и «+».
+FIELD_INPUT = {
+    "weight_kg": {"label": "Вес, кг", "aria": "2,5 кг"},
+    "reps": {"label": "Повторы", "aria": "повтор"},
+    "duration_sec": {"label": "Время", "aria": "15 секунд"},
+}
+
+
+def step_display(field):
+    """Подпись шага под степпером: «2,5» · «1» · «15 с»."""
+    step = SET_STEPS[field]
+    if field == "duration_sec":
+        return f"{step} с"
+    return decimal_display(step) if isinstance(step, Decimal) else str(step)
+
+
+def metric_display(measurement, value):
+    """Значение метрики с единицей: «83,75 кг», «12 повторов», «1:30»."""
+    if measurement in TIME_MEASUREMENTS:
+        return rest_display(int(value))
+    if measurement == Exercise.Measurement.REPS:
+        count = int(value)
+        return f"{count} {ru_plural(count, 'повтор', 'повтора', 'повторов')}"
+    return f"{decimal_display(Decimal(str(value)))} кг"
 
 
 class WorkoutQuerySet(models.QuerySet):
@@ -288,6 +385,27 @@ class Workout(models.Model):
         return int((timezone.now() - self.started_at).total_seconds() // 60)
 
     @property
+    def workload(self):
+        """Третья метрика силовой карточки: тоннаж, повторы или удержание.
+
+        Что показать, решает содержимое: у тренировки из одной планки тоннаж
+        нулевой, и колонка «0 кг» выглядела бы сломанной. Значения ждём
+        аннотациями queryset'а (`stats.WORKLOAD_ANNOTATIONS`) — считать их
+        свойством означало бы отдельный запрос на каждую карточку ленты.
+        """
+        tonnage = getattr(self, "tonnage", None) or 0
+        if tonnage:
+            return {"label": "тоннаж", "value": f"{decimal_display(Decimal(str(tonnage)))} кг"}
+        reps = getattr(self, "total_reps", None) or 0
+        if reps:
+            word = ru_plural(reps, "повтор", "повтора", "повторов")
+            return {"label": "повторы", "value": f"{reps} {word}"}
+        seconds = getattr(self, "total_duration", None) or 0
+        if seconds:
+            return {"label": "удержание", "value": rest_display(seconds)}
+        return {"label": "тоннаж", "value": "—"}
+
+    @property
     def effective_rest_seconds(self):
         """Отдых тренировки, а при пустом — значение по умолчанию из профиля.
 
@@ -319,6 +437,15 @@ class StrengthSet(models.Model):
         validators=[MinValueValidator(0)],
     )
     reps = models.PositiveSmallIntegerField("повторения")
+    duration_sec = models.PositiveSmallIntegerField("время, сек", default=0)
+    # Снимок единицы упражнения на момент записи: если упражнение потом переведут
+    # в другие единицы, старая история должна читаться так, как её записали.
+    measurement = models.CharField(
+        "измерение",
+        max_length=12,
+        choices=Exercise.Measurement,
+        default=Exercise.Measurement.WEIGHT_REPS,
+    )
     # False = плановый подход живого режима; при завершении тренировки такие удаляются.
     done = models.BooleanField("выполнен", default=False)
 
@@ -334,11 +461,25 @@ class StrengthSet(models.Model):
                 fields=["workout", "exercise", "set_number"],
                 name="unique_set_number_per_exercise",
                 violation_error_message="Подход с таким номером для этого упражнения уже есть.",
-            )
+            ),
+            # Неприменимые к единице поля обязаны быть нулём: планка с повторами
+            # или подтягивания с весом — это не «странные данные», а сломанный
+            # подход, который потом соврёт в рекордах и тоннаже.
+            # Заодно поэтому тоннаж Sum(weight × reps) остаётся верным без фильтра.
+            models.CheckConstraint(
+                condition=(
+                    Q(measurement=Exercise.Measurement.WEIGHT_REPS, duration_sec=0)
+                    | Q(measurement=Exercise.Measurement.REPS, duration_sec=0, weight_kg=0)
+                    | Q(measurement=Exercise.Measurement.TIME, reps=0, weight_kg=0)
+                    | Q(measurement=Exercise.Measurement.TIME_WEIGHT, reps=0)
+                ),
+                name="set_fields_match_measurement",
+                violation_error_message="Значения подхода не совпадают с единицей упражнения.",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.exercise} · {self.set_number}: {self.weight_kg} кг × {self.reps}"
+        return f"{self.exercise} · {self.set_number}: {self.value_display}"
 
     def clean(self):
         if self.workout_id and not self.workout.sport.is_strength:
@@ -346,7 +487,10 @@ class StrengthSet(models.Model):
 
     @property
     def tonnage_kg(self):
-        """Тоннаж подхода — вес, поднятый за все повторения."""
+        """Тоннаж подхода — вес, поднятый за все повторения.
+
+        У временных подходов повторов нет, поэтому тоннаж честно нулевой.
+        """
         return self.weight_kg * self.reps
 
     @property
@@ -354,6 +498,48 @@ class StrengthSet(models.Model):
         """Вес как в макетах: 70 · 77,5 · 82,25. Форматирует всегда сервер, не JS."""
         # str: до перечитывания из БД значение может быть числом, а не Decimal.
         return decimal_display(Decimal(str(self.weight_kg)))
+
+    @property
+    def metric_value(self):
+        """Значение метрики подхода: вес, повторы или секунды удержания."""
+        return getattr(self, METRIC_FIELDS[self.measurement])
+
+    @property
+    def stepper_fields(self):
+        """Поля ввода этого подхода — ровно те, что осмысленны для его единицы."""
+        return [
+            {
+                "name": name,
+                "label": FIELD_INPUT[name]["label"],
+                "aria": FIELD_INPUT[name]["aria"],
+                "step": step_display(name),
+                "value": self.field_display(name),
+            }
+            for name in MEASUREMENT_FIELDS[self.measurement]
+        ]
+
+    def field_display(self, field):
+        """Значение одного поля для степпера: «77,5» · «8» · «1:30»."""
+        if field == "duration_sec":
+            return rest_display(self.duration_sec)
+        if field == "weight_kg":
+            return self.weight_display
+        return str(self.reps)
+
+    @property
+    def value_display(self):
+        """Подход строкой — единственное место, где собирается «сколько сделано».
+
+        «83,75 кг × 8» · «8 повторов» · «1:30» · «1:30 · 20 кг».
+        """
+        measurement = self.measurement
+        if measurement == Exercise.Measurement.TIME:
+            return rest_display(self.duration_sec)
+        if measurement == Exercise.Measurement.TIME_WEIGHT:
+            return f"{rest_display(self.duration_sec)} · {self.weight_display} кг"
+        if measurement == Exercise.Measurement.REPS:
+            return f"{self.reps} {ru_plural(self.reps, 'повтор', 'повтора', 'повторов')}"
+        return f"{self.weight_display} кг × {self.reps}"
 
 
 class CardioDetails(models.Model):

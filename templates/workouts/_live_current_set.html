@@ -3,6 +3,10 @@
   span со значением — кнопки не пересоздаются, серия быстрых тапов не теряется.
   Общая sync-очередь сериализует тапы и «Подход выполнен».
 
+  Поля зависят от единицы упражнения: вес и повторы, только повторы, время или
+  время с весом. Больше двух полей не бывает — на 375px три степпера (две кнопки
+  по 44px плюс значение) не помещаются.
+
   В черновике на месте «Подход выполнен» стоит «Начать тренировку»: рука в зале
   уже там. Признак берём у модели (workout.is_planned), а не из контекста —
   партиал рендерится и из live.html, и из live_region_response.
@@ -17,38 +21,29 @@
 
   {% if error %}<div class="invalid-feedback d-block mb-2">{{ error }}</div>{% endif %}
 
-  <div class="app-field-grid">
-    <div>
-      <div class="app-stepper-label">Вес, кг</div>
-      <div class="app-stepper">
-        <button type="button" class="app-stepper-btn" aria-label="Минус 2,5 кг"
-                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "weight", "dir": "down"}'
-                hx-target="#cs-weight" hx-swap="innerHTML"
-                hx-sync="closest .app-live-current:queue all">−</button>
-        <span id="cs-weight" class="num app-stepper-value">{{ set.weight_display }}</span>
-        <button type="button" class="app-stepper-btn" aria-label="Плюс 2,5 кг"
-                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "weight", "dir": "up"}'
-                hx-target="#cs-weight" hx-swap="innerHTML"
-                hx-sync="closest .app-live-current:queue all">+</button>
+  {% with fields=set.stepper_fields %}
+  <div class="app-field-grid{% if fields|length == 1 %} is-single{% endif %}">
+    {% for field in fields %}
+      <div>
+        <div class="app-stepper-label">{{ field.label }}</div>
+        <div class="app-stepper">
+          <button type="button" class="app-stepper-btn" aria-label="Минус {{ field.aria }}"
+                  hx-post="{% url 'set_adjust' set.pk %}"
+                  hx-vals='{"field": "{{ field.name }}", "dir": "down"}'
+                  hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
+                  hx-sync="closest .app-live-current:queue all">−</button>
+          <span id="cs-{{ field.name }}" class="num app-stepper-value">{{ field.value }}</span>
+          <button type="button" class="app-stepper-btn" aria-label="Плюс {{ field.aria }}"
+                  hx-post="{% url 'set_adjust' set.pk %}"
+                  hx-vals='{"field": "{{ field.name }}", "dir": "up"}'
+                  hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
+                  hx-sync="closest .app-live-current:queue all">+</button>
+        </div>
+        <div class="app-stepper-hint">шаг {{ field.step }}</div>
       </div>
-      <div class="app-stepper-hint">шаг 2,5</div>
-    </div>
-    <div>
-      <div class="app-stepper-label">Повторы</div>
-      <div class="app-stepper">
-        <button type="button" class="app-stepper-btn" aria-label="Минус повтор"
-                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "reps", "dir": "down"}'
-                hx-target="#cs-reps" hx-swap="innerHTML"
-                hx-sync="closest .app-live-current:queue all">−</button>
-        <span id="cs-reps" class="num app-stepper-value">{{ set.reps }}</span>
-        <button type="button" class="app-stepper-btn" aria-label="Плюс повтор"
-                hx-post="{% url 'set_adjust' set.pk %}" hx-vals='{"field": "reps", "dir": "up"}'
-                hx-target="#cs-reps" hx-swap="innerHTML"
-                hx-sync="closest .app-live-current:queue all">+</button>
-      </div>
-      <div class="app-stepper-hint">шаг 1</div>
-    </div>
+    {% endfor %}
   </div>
+  {% endwith %}
 
   {% if workout.is_planned %}
     <form method="post" action="{% url 'draft_start' workout.pk %}">

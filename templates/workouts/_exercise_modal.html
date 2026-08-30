@@ -18,6 +18,12 @@
            placeholder="Найти или создать" autofocus autocomplete="off"
            hx-get="{% url 'live_exercises' workout.pk %}"
            hx-trigger="input changed delay:300ms"
+           {% comment %}
+             Включаем контейнер результатов, а не сами чипы: чипы есть только когда
+             предложено создание, и селектор по ним ругался бы «no matches» в консоли
+             на каждом поиске существующего упражнения. Контейнер не свапается.
+           {% endcomment %}
+           hx-include="#exercise-results"
            hx-target="#exercise-results" hx-swap="innerHTML" hx-sync="this:replace">
     {% if form %}
       {% for error in form.name.errors %}

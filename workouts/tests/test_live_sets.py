@@ -26,7 +26,7 @@ def test_weight_stepper_changes_weight(client, user):
     client.force_login(user)
     row = planned_set(user, weight_kg=80)
 
-    response = adjust(client, row, "weight", "up")
+    response = adjust(client, row, "weight_kg", "up")
 
     row.refresh_from_db()
     assert row.weight_kg == Decimal("82.5")
@@ -48,7 +48,7 @@ def test_weight_does_not_go_below_zero(client, user):
     client.force_login(user)
     row = planned_set(user, weight_kg=0)
 
-    adjust(client, row, "weight", "down")
+    adjust(client, row, "weight_kg", "down")
 
     row.refresh_from_db()
     assert row.weight_kg == 0
@@ -59,7 +59,7 @@ def test_weight_clamps_at_upper_limit(client, user):
     client.force_login(user)
     row = planned_set(user, weight_kg=Decimal("999.99"))
 
-    response = adjust(client, row, "weight", "up")
+    response = adjust(client, row, "weight_kg", "up")
 
     row.refresh_from_db()
     assert response.status_code == 200
@@ -68,7 +68,7 @@ def test_weight_clamps_at_upper_limit(client, user):
 
 @pytest.mark.parametrize(
     ("field", "direction"),
-    [("weight", "sideways"), ("height", "up"), ("", "")],
+    [("weight_kg", "sideways"), ("height", "up"), ("", "")],
 )
 def test_stepper_rejects_unknown_field_or_direction(client, user, field, direction):
     client.force_login(user)
@@ -83,7 +83,7 @@ def test_done_set_cannot_be_adjusted(client, user):
     client.force_login(user)
     row = planned_set(user, done=True)
 
-    response = adjust(client, row, "weight", "up")
+    response = adjust(client, row, "weight_kg", "up")
 
     assert response.status_code == 404
 
@@ -93,7 +93,7 @@ def test_sets_of_finished_workout_are_immutable(client, user):
     finished = WorkoutFactory(user=user)
     row = StrengthSetFactory(workout=finished, set_number=1, done=False)
 
-    response = adjust(client, row, "weight", "up")
+    response = adjust(client, row, "weight_kg", "up")
 
     assert response.status_code == 404
 
@@ -101,7 +101,7 @@ def test_sets_of_finished_workout_are_immutable(client, user):
 @pytest.mark.parametrize(
     ("url_name", "payload"),
     [
-        pytest.param("set_adjust", {"field": "weight", "dir": "up"}, id="adjust"),
+        pytest.param("set_adjust", {"field": "weight_kg", "dir": "up"}, id="adjust"),
         pytest.param("set_done", {}, id="done"),
         pytest.param("set_undo", {}, id="undo"),
         pytest.param("set_delete", {}, id="delete"),

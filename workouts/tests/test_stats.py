@@ -7,7 +7,7 @@ import pytest
 from django.utils import timezone
 
 from workouts import stats
-from workouts.models import Sport
+from workouts.models import Exercise, Sport
 from workouts.tests.factories import (
     CardioDetailsFactory,
     ExerciseFactory,
@@ -282,16 +282,49 @@ def test_strength_records_take_max_weight_per_exercise(user):
 
     records = stats.strength_records(user)
 
-    assert [(record["name"], record["weight_display"]) for record in records] == [
-        ("Присед", "110"),
-        ("Жим лёжа", "82,5"),
+    assert [(record["name"], record["value_display"]) for record in records] == [
+        ("Присед", "110 кг"),
+        ("Жим лёжа", "82,5 кг"),
     ]
 
 
-def test_strength_records_exclude_zero_weight_sets(user):
-    plank = ExerciseFactory(name="Планка")
+def test_strength_records_use_the_unit_of_the_exercise(user):
+    """У планки рекорд — лучшее удержание, а не нулевой вес."""
+    plank = ExerciseFactory(name="Планка", measurement=Exercise.Measurement.TIME)
+    pullups = ExerciseFactory(name="Подтягивания", measurement=Exercise.Measurement.REPS)
     workout = workout_on(user, TODAY)
-    StrengthSetFactory(workout=workout, exercise=plank, set_number=1, weight_kg=0, reps=60)
+    StrengthSetFactory(
+        workout=workout,
+        exercise=plank,
+        set_number=1,
+        measurement=Exercise.Measurement.TIME,
+        weight_kg=0,
+        reps=0,
+        duration_sec=90,
+    )
+    StrengthSetFactory(
+        workout=workout,
+        exercise=pullups,
+        set_number=1,
+        measurement=Exercise.Measurement.REPS,
+        weight_kg=0,
+        reps=12,
+    )
+
+    records = stats.strength_records(user)
+
+    # Порядок — по приоритету единицы: удержания раньше повторов.
+    assert [(r["name"], r["metric_label"], r["value_display"]) for r in records] == [
+        ("Планка", "удержание", "1:30"),
+        ("Подтягивания", "повторы", "12 повторов"),
+    ]
+
+
+def test_strength_records_skip_exercises_without_result(user):
+    """Пустой плановый подход (0×0) рекордом не становится."""
+    bench = ExerciseFactory(name="Жим лёжа")
+    workout = workout_on(user, TODAY)
+    StrengthSetFactory(workout=workout, exercise=bench, set_number=1, weight_kg=0, reps=0)
 
     assert stats.strength_records(user) == []
 
@@ -396,7 +429,7 @@ def test_exercise_progress_orders_workouts_by_date(user):
     progress = stats.exercise_progress(user, bench)
 
     assert [group["workout"] for group in progress] == [early, late]
-    assert [group["max_weight"] for group in progress] == [70.0, 80.0]
+    assert [group["max_value"] for group in progress] == [70.0, 80.0]
 
 
 def test_exercise_progress_groups_sets_with_max_weight(user):
@@ -410,7 +443,8 @@ def test_exercise_progress_groups_sets_with_max_weight(user):
     progress = stats.exercise_progress(user, bench)
 
     assert len(progress) == 1
-    assert progress[0]["max_weight"] == 77.5
+    assert progress[0]["max_value"] == 77.5
+    assert progress[0]["max_value_display"] == "77,5 кг"
     assert [row.set_number for row in progress[0]["sets"]] == [1, 2]
 
 
@@ -441,7 +475,8 @@ def test_exercise_spotlight_picks_top_record_with_sparkline(user):
     spotlight = stats.exercise_spotlight(user)
 
     assert spotlight["exercise"] == bench
-    assert spotlight["record_display"] == "83"  # 70 + 13
+    assert spotlight["record_display"] == "83 кг"  # 70 + 13
+    assert spotlight["metric_label"] == "вес"
     assert spotlight["count_label"] == "14 тренировок"
     assert len(spotlight["sparkline"]) == stats.SPARKLINE_POINTS
     assert spotlight["sparkline"][-1] == 70.0  # свежая тренировка — минимальный offset

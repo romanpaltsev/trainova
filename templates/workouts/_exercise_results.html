@@ -14,10 +14,23 @@
   {% if not offer_create %}<p class="text-secondary-app mb-0">Ничего не найдено.</p>{% endif %}
 {% endfor %}
 {% if offer_create %}
-  {% comment %}Название едет hidden-полем: в hx-vals кавычки пользователя сломали бы JSON.{% endcomment %}
+  {% comment %}
+    Название едет hidden-полем: в hx-vals кавычки пользователя сломали бы JSON.
+    Единица выбирается тут же — иначе планку пришлось бы потом переводить руками.
+    Выбор уезжает и в поиск (hx-include у поля ввода), поэтому следующая буква
+    его не сбрасывает.
+  {% endcomment %}
   <form hx-post="{% url 'live_exercises' workout.pk %}" hx-target="#modal" hx-swap="innerHTML"
         hx-disabled-elt="find button">
     <input type="hidden" name="name" value="{{ q }}">
+    <div class="app-stepper-label mt-2">Измерение</div>
+    <div class="app-chips mb-2" role="group" aria-label="Измерение упражнения">
+      {% for value, label in measurement_choices %}
+        <input type="radio" name="measurement" id="new-measure-{{ value }}" value="{{ value }}"
+               class="app-chip-input" {% if selected_measurement == value %}checked{% endif %}>
+        <label class="app-chip" for="new-measure-{{ value }}">{{ label }}</label>
+      {% endfor %}
+    </div>
     <button type="submit" class="app-pick-row app-pick-create">+ Создать «{{ q }}»</button>
   </form>
 {% endif %}

@@ -7,21 +7,42 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, Max, Sum
+from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, Max, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import formats, timezone
 
 from workouts.models import (
+    METRIC_FIELDS,
+    METRIC_LABELS,
     SPEED_THRESHOLD_KMH,
     Exercise,
     Sport,
     StrengthSet,
     Workout,
     decimal_display,
+    metric_display,
+    ru_plural,
 )
-from workouts.services import ru_plural
 
 SPARKLINE_POINTS = 12
+
+# Аннотации для `Workout.workload`: все три суммы идут по одному join'у на подходы,
+# поэтому считаются одним запросом и не размножают строки друг друга. Повторы
+# суммируются только у повторных упражнений — в весовых они уже вошли в тоннаж.
+# Порядок единиц в блоке «Личные рекорды»: сначала весовая работа (главная метрика
+# зала), потом удержания, потом повторы. Внутри единицы сортирует само значение.
+RECORD_ORDER = (
+    Exercise.Measurement.WEIGHT_REPS,
+    Exercise.Measurement.TIME_WEIGHT,
+    Exercise.Measurement.TIME,
+    Exercise.Measurement.REPS,
+)
+
+WORKLOAD_ANNOTATIONS = {
+    "tonnage": Sum(F("sets__weight_kg") * F("sets__reps")),
+    "total_reps": Sum("sets__reps", filter=Q(sets__measurement=Exercise.Measurement.REPS)),
+    "total_duration": Sum("sets__duration_sec"),
+}
 
 
 def week_start(date):
@@ -199,8 +220,8 @@ def weekly_chart(user, today=None, weeks=12):
 def workout_row(workout, today):
     """Строка тренировки для дашборда: «вчера · 1:02 · 7240 кг».
 
-    Тоннаж ожидается аннотацией queryset'а (как в ленте истории) — без неё
-    строка силовой обошлась бы отдельным запросом на карточку.
+    Метрика нагрузки ожидается аннотациями queryset'а (WORKLOAD_ANNOTATIONS) —
+    без них строка силовой обошлась бы отдельным запросом на карточку.
     """
     local_date = timezone.localtime(workout.started_at).date()
     if local_date == today:
@@ -213,8 +234,7 @@ def workout_row(workout, today):
         day_label = formats.date_format(local_date, "j b")
 
     if workout.sport.is_strength:
-        tonnage = getattr(workout, "tonnage", None) or 0
-        metric = f"{decimal_display(Decimal(tonnage))} кг"
+        metric = workout.workload["value"]
     else:
         metric = f"{workout.cardio.distance_display} км"
     return {
@@ -232,37 +252,59 @@ def latest_workouts(user, today=None, limit=5):
         Workout.objects.filter(user=user)
         .finished()
         .select_related("sport", "cardio")
-        .annotate(tonnage=Sum(F("sets__weight_kg") * F("sets__reps")))
+        .annotate(**WORKLOAD_ANNOTATIONS)
         .order_by("-started_at", "-id")[:limit]
     )
     return [workout_row(workout, today) for workout in workouts]
 
 
 def strength_records(user, limit=None):
-    """Максимальный вес по упражнениям; вес 0 (упражнения без веса) — не рекорд."""
+    """Рекорд каждого упражнения в его единице: вес, повторы или удержание.
+
+    Один запрос на все единицы: тянем три максимума, а метрику выбираем в Python.
+    Нулевая метрика рекордом не считается — упражнение просто ещё не выполняли.
+    """
     rows = (
         StrengthSet.objects.filter(
             workout__user=user,
             # Явный аналог .finished(): плановые подходы активной тренировки
-            # копируют прошлые веса и рекордами быть не должны.
+            # копируют прошлые значения и рекордами быть не должны.
             workout__duration_min__isnull=False,
-            weight_kg__gt=0,
+            # Рекорд — в той единице, в которой упражнение измеряется сейчас:
+            # иначе у переведённого упражнения нашлось бы два рекорда сразу.
+            measurement=F("exercise__measurement"),
         )
-        .values("exercise_id", "exercise__name")
-        .annotate(weight=Max("weight_kg"))
-        .order_by("-weight", "exercise__name")
+        .values("exercise_id", "exercise__name", "measurement")
+        .annotate(
+            top_weight=Max("weight_kg"),
+            top_reps=Max("reps"),
+            top_duration=Max("duration_sec"),
+        )
     )
-    if limit is not None:
-        rows = rows[:limit]
-    return [
-        {
-            "exercise_id": row["exercise_id"],
-            "name": row["exercise__name"],
-            "weight": float(row["weight"]),
-            "weight_display": decimal_display(row["weight"]),
-        }
-        for row in rows
-    ]
+    records = []
+    for row in rows:
+        measurement = row["measurement"]
+        value = {
+            "weight_kg": row["top_weight"],
+            "reps": row["top_reps"],
+            "duration_sec": row["top_duration"],
+        }[METRIC_FIELDS[measurement]]
+        if not value:
+            continue
+        records.append(
+            {
+                "exercise_id": row["exercise_id"],
+                "name": row["exercise__name"],
+                "measurement": measurement,
+                "metric_label": METRIC_LABELS[measurement],
+                "value": float(value),
+                "value_display": metric_display(measurement, value),
+            }
+        )
+    # Сравнивать 100 кг с 90 секундами бессмысленно, поэтому сначала приоритет
+    # единицы, а внутри единицы — само значение.
+    records.sort(key=lambda r: (RECORD_ORDER.index(r["measurement"]), -r["value"], r["name"]))
+    return records[:limit] if limit is not None else records
 
 
 def cardio_records(user):
@@ -338,15 +380,17 @@ def exercise_progress(user, exercise):
                     "workout": row.workout,
                     "date": local_date,
                     "label": f"{local_date:%d.%m}",
-                    "max_weight": 0.0,
+                    "max_value": 0.0,
                     "sets": [],
                 }
             )
         group = progress[seen[row.workout_id]]
         group["sets"].append(row)
-        group["max_weight"] = max(group["max_weight"], float(row.weight_kg))
+        group["max_value"] = max(group["max_value"], float(row.metric_value))
     for group in progress:
-        group["max_weight_display"] = decimal_display(Decimal(str(group["max_weight"])))
+        # Метрика берётся у упражнения, а не у подхода: если упражнение перевели
+        # в другую единицу, график должен говорить на одном языке.
+        group["max_value_display"] = metric_display(exercise.measurement, group["max_value"])
     return progress
 
 
@@ -360,22 +404,26 @@ def exercise_spotlight(user, records=None):
     if not top:
         return None
     exercise = Exercise.objects.get(pk=top[0]["exercise_id"])
-    # Максимум веса по тренировке одним запросом: тянуть всю историю подходов
+    # Максимум метрики по тренировке одним запросом: тянуть всю историю подходов
     # ради 12 точек спарклайна незачем.
     rows = (
         StrengthSet.objects.filter(
             exercise=exercise, workout__user=user, workout__duration_min__isnull=False
         )
         .values_list("workout_id")
-        .annotate(top_weight=Max("weight_kg"), started_at=Max("workout__started_at"))
+        .annotate(
+            top_value=Max(METRIC_FIELDS[exercise.measurement]),
+            started_at=Max("workout__started_at"),
+        )
         .order_by("started_at")
     )
-    weights = [float(row[1]) for row in rows]
+    values = [float(row[1]) for row in rows]
     return {
         "exercise": exercise,
-        "record_display": top[0]["weight_display"],
+        "record_display": top[0]["value_display"],
+        "metric_label": top[0]["metric_label"],
         "count_label": (
-            f"{len(weights)} {ru_plural(len(weights), 'тренировка', 'тренировки', 'тренировок')}"
+            f"{len(values)} {ru_plural(len(values), 'тренировка', 'тренировки', 'тренировок')}"
         ),
-        "sparkline": weights[-SPARKLINE_POINTS:],
+        "sparkline": values[-SPARKLINE_POINTS:],
     }

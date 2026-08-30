@@ -53,6 +53,12 @@ EXERCISES = [
     ("Планка", "Пресс"),
 ]
 
+# Упражнения, которые считаются не в килограммах. Применяется только при создании:
+# существующие записи seed не трогает, иначе он откатывал бы единицу, изменённую
+# админом. Подтягивания и отжимания оставлены весовыми намеренно — их часто делают
+# с утяжелением, и «только повторы» отняли бы возможность записать вес.
+MEASUREMENTS = {"планка": Exercise.Measurement.TIME}
+
 # Стартовые записи «Что нового»: (тип, заголовок, текст, дата публикации).
 # Даты фиксированные, а не timezone.now(): команда должна давать одинаковый
 # результат при каждом запуске. Время — полдень, как у тренировок за прошедший
@@ -117,7 +123,12 @@ class Command(BaseCommand):
         for name, muscle_group in EXERCISES:
             exercise = Exercise.objects.global_only().filter(name__iexact=name).first()
             if exercise is None:
-                Exercise.objects.create(name=name, muscle_group=muscle_group, owner=None)
+                Exercise.objects.create(
+                    name=name,
+                    muscle_group=muscle_group,
+                    owner=None,
+                    measurement=MEASUREMENTS.get(name.lower(), Exercise.Measurement.WEIGHT_REPS),
+                )
                 created += 1
         return created
 

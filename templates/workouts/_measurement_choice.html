@@ -1,0 +1,29 @@
+{% comment %}
+  Блок «Измерение» на странице упражнения. У своих упражнений — чипы, каждый
+  сохраняется сразу и свапает этот же блок; у глобальных — приглушённая строка,
+  их правит только админ.
+
+  Смена единицы не меняет записанные подходы: у каждого свой снимок единицы,
+  поэтому старая история читается так, как её записали.
+{% endcomment %}
+<div id="measurement-choice" class="app-profile-block">
+  <div class="app-profile-block-title">Измерение</div>
+  {% if can_edit_measurement %}
+    <div class="app-chips" role="group" aria-label="Измерение упражнения">
+      {% for value, label in exercise.Measurement.choices %}
+        <input type="radio" name="measurement" id="measure-{{ value }}" value="{{ value }}"
+               class="app-chip-input" {% if exercise.measurement == value %}checked{% endif %}
+               hx-post="{% url 'exercise_measurement' exercise.pk %}"
+               hx-target="#measurement-choice" hx-swap="outerHTML">
+        <label class="app-chip" for="measure-{{ value }}">{{ label }}</label>
+      {% endfor %}
+    </div>
+    {% if saved %}
+      <p class="app-queue-hint mt-2 mb-0">
+        Сохранено. Записанные подходы остались в прежних единицах.
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="app-queue-hint mb-0">{{ exercise.get_measurement_display|lower }}</p>
+  {% endif %}
+</div>

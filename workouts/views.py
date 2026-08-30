@@ -10,7 +10,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Q, Sum
+from django.db.models import Count, Q
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -22,24 +22,41 @@ from django.views.generic import DeleteView, ListView, TemplateView, View
 from workouts import services, stats
 from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
 from workouts.models import (
+    MEASUREMENT_FIELDS,
+    METRIC_LABELS,
+    METRIC_UNITS,
     REST_DELTAS,
+    SET_STEPS,
+    TIME_MEASUREMENTS,
     ChangelogEntry,
     Exercise,
     Sport,
     StrengthSet,
     Workout,
     clamp_rest_seconds,
-    decimal_display,
+    metric_display,
     rest_display,
+    ru_plural,
 )
 from workouts.stats import week_start, week_title
 
 HISTORY_PAGE_SIZE = 10
 
-# Живой режим: шаги степперов и границы значений.
-SET_STEPS = {"weight": Decimal("2.5"), "reps": 1}
+# Живой режим: границы значений. Шаги живут в модели (SET_STEPS) — по ним же
+# подписаны кнопки; ключи там — поля модели, поэтому применимость поля к единице
+# упражнения проверяется по MEASUREMENT_FIELDS без словаря-переводчика.
 MAX_WEIGHT_KG = Decimal("999.99")  # max_digits=5 у StrengthSet.weight_kg
 MAX_REPS = 999
+MAX_DURATION_SEC = 3600  # час удержания — с большим запасом
+SET_LIMITS = {"weight_kg": MAX_WEIGHT_KG, "reps": MAX_REPS, "duration_sec": MAX_DURATION_SEC}
+# Что обязано быть заполнено, чтобы подход считался выполненным: у весовых это
+# повторы (вес 0 — «со своим весом»), у удержаний — время.
+REQUIRED_FIELD = {
+    Exercise.Measurement.WEIGHT_REPS: ("reps", "Укажите повторения."),
+    Exercise.Measurement.REPS: ("reps", "Укажите повторения."),
+    Exercise.Measurement.TIME: ("duration_sec", "Укажите время."),
+    Exercise.Measurement.TIME_WEIGHT: ("duration_sec", "Укажите время."),
+}
 EXERCISE_RESULTS_LIMIT = 30
 # Дашборд: силовых рекордов в блоке (кардио добавляются по числу видов).
 STRENGTH_RECORDS_LIMIT = 3
@@ -63,7 +80,7 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
             # Иначе каждая силовая карточка делала бы свой COUNT по подходам
             .annotate(
                 exercises_count=Count("sets__exercise", distinct=True),
-                tonnage=Sum(F("sets__weight_kg") * F("sets__reps")),
+                **stats.WORKLOAD_ANNOTATIONS,
             )
             # Сортировку задаём явно: в запросах с GROUP BY Django игнорирует
             # Meta.ordering, а пагинации нужен детерминированный порядок.
@@ -221,7 +238,7 @@ def exercises_label(count):
     """
     if not count:
         return "пусто"
-    word = services.ru_plural(count, "упражнение", "упражнения", "упражнений")
+    word = ru_plural(count, "упражнение", "упражнения", "упражнений")
     return f"{count} {word}"
 
 
@@ -455,12 +472,21 @@ class LiveExerciseView(LoginRequiredMixin, View):
             bool(query)
             and not Exercise.objects.visible_to(request.user).filter(name__iexact=query).exists()
         )
+        # Выбранная единица возвращается на круг: чипы живут в свапаемом блоке
+        # результатов, и без этого следующая набранная буква сбросила бы выбор.
+        chosen = request.GET.get("measurement") or request.POST.get("measurement") or ""
         return {
             "workout": workout,
             "exercises": list(exercises[:EXERCISE_RESULTS_LIMIT]),
             "q": query,
             "offer_create": offer_create,
             "form": form,
+            "measurement_choices": Exercise.Measurement.choices,
+            "selected_measurement": (
+                chosen
+                if chosen in Exercise.Measurement.values
+                else Exercise.Measurement.WEIGHT_REPS
+            ),
         }
 
 
@@ -499,8 +525,8 @@ class LiveSetAddView(LoginRequiredMixin, View):
                     workout=workout,
                     exercise=exercise,
                     set_number=last.set_number + 1 if last else 1,
-                    weight_kg=last.weight_kg if last else 0,
-                    reps=last.reps if last else 0,
+                    measurement=exercise.measurement,
+                    **services.set_values(exercise.measurement, last),
                 )
         except IntegrityError:
             pass  # даблтап — второй подход не нужен
@@ -522,7 +548,7 @@ class LiveRestView(LoginRequiredMixin, View):
 
 
 class SetAdjustView(LoginRequiredMixin, View):
-    """Степперы веса и повторов: каждый тап сохраняется сразу."""
+    """Степперы веса, повторов и времени: каждый тап сохраняется сразу."""
 
     def post(self, request, pk):
         field = request.POST.get("field", "")
@@ -530,14 +556,18 @@ class SetAdjustView(LoginRequiredMixin, View):
         if field not in SET_STEPS or direction not in {"up", "down"}:
             return HttpResponseBadRequest("Недопустимый шаг")
         row = live_set_or_404(request, pk, undone_only=True, for_update=True)
+        if field not in MEASUREMENT_FIELDS[row.measurement]:
+            # Вес у планки писать нельзя: подход упёрся бы в ограничение
+            # set_fields_match_measurement, а это 500 вместо внятного отказа.
+            return HttpResponseBadRequest("Поле не подходит единице упражнения")
         step = SET_STEPS[field] if direction == "up" else -SET_STEPS[field]
-        if field == "weight":
-            row.weight_kg = min(MAX_WEIGHT_KG, max(Decimal(0), Decimal(str(row.weight_kg)) + step))
-            row.save(update_fields=["weight_kg"])
-            return HttpResponse(row.weight_display)
-        row.reps = min(MAX_REPS, max(0, row.reps + step))
-        row.save(update_fields=["reps"])
-        return HttpResponse(str(row.reps))
+        if field == "weight_kg":
+            value = min(MAX_WEIGHT_KG, max(Decimal(0), Decimal(str(row.weight_kg)) + step))
+        else:
+            value = min(SET_LIMITS[field], max(0, getattr(row, field) + step))
+        setattr(row, field, value)
+        row.save(update_fields=[field])
+        return HttpResponse(row.field_display(field))
 
 
 class SetDoneView(LoginRequiredMixin, View):
@@ -549,8 +579,9 @@ class SetDoneView(LoginRequiredMixin, View):
         if row.done:
             # Даблтап: подход уже записан, отдых перезапускать нельзя.
             return live_region_response(request, row.workout)
-        if row.reps < 1:
-            return live_region_response(request, row.workout, error="Укажите повторения.")
+        field, message = REQUIRED_FIELD[row.measurement]
+        if getattr(row, field) < 1:
+            return live_region_response(request, row.workout, error=message)
         row.done = True
         row.save(update_fields=["done"])
         return live_region_response(request, row.workout, restart_timer=True)
@@ -629,11 +660,16 @@ class WorkoutFinishView(LoginRequiredMixin, View):
 
 
 class WorkoutSummaryView(LoginRequiredMixin, View):
-    """Итог силовой тренировки: упражнения с подходами и тоннаж."""
+    """Итог силовой тренировки: упражнения с подходами и метрика нагрузки."""
 
     def get(self, request, pk):
         workout = get_object_or_404(
-            Workout.objects.filter(user=request.user).select_related("sport"), pk=pk
+            # Аннотации нагрузки — тем же запросом: их читает workout.workload,
+            # а метрика итога должна совпадать с карточкой в ленте.
+            Workout.objects.filter(user=request.user)
+            .annotate(**stats.WORKLOAD_ANNOTATIONS)
+            .select_related("sport"),
+            pk=pk,
         )
         if not workout.sport.is_strength:
             raise Http404("У кардио свой экран правки")
@@ -641,14 +677,13 @@ class WorkoutSummaryView(LoginRequiredMixin, View):
             return redirect("workout_live", pk=workout.pk)
         groups = services.exercise_groups(workout)
         for group in groups:
-            group["tonnage"] = sum((s.tonnage_kg for s in group["sets"]), Decimal(0))
+            group["total"] = services.exercise_total(group["sets"])
         return render(
             request,
             "workouts/workout_summary.html",
             {
                 "workout": workout,
                 "groups": groups,
-                "total_tonnage": sum((g["tonnage"] for g in groups), Decimal(0)),
                 "nav_active": "history",
             },
         )
@@ -757,8 +792,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         records = [
             {
                 "label": row["name"],
-                "value": f"{row['weight_display']} кг",
-                "sub": "",
+                "value": row["value_display"],
+                # Подпись метрики — только у непривычных единиц: у веса она
+                # очевидна из «кг», а «удержание» и «повторы» стоит назвать.
+                "sub": ""
+                if row["measurement"] == Exercise.Measurement.WEIGHT_REPS
+                else row["metric_label"],
                 "url": reverse("exercise_detail", args=[row["exercise_id"]]),
                 "is_spotlight": index == 0,
             }
@@ -793,7 +832,7 @@ class DashboardWeekView(LoginRequiredMixin, View):
             .finished()
             .filter(started_at__gte=first_moment, started_at__lt=next_week)
             .select_related("sport", "cardio")
-            .annotate(tonnage=Sum(F("sets__weight_kg") * F("sets__reps")))
+            .annotate(**stats.WORKLOAD_ANNOTATIONS)
             .order_by("-started_at", "-id")
         )
         today = timezone.localdate()
@@ -808,7 +847,7 @@ class DashboardWeekView(LoginRequiredMixin, View):
 
 
 class ExerciseDetailView(LoginRequiredMixin, View):
-    """Страница упражнения: график максимального веса и история подходов.
+    """Страница упражнения: график метрики и история подходов.
 
     Страница глобального упражнения видна всем, но данные — только свои:
     прогресс фильтруется по request.user.
@@ -818,12 +857,13 @@ class ExerciseDetailView(LoginRequiredMixin, View):
         exercise = get_object_or_404(Exercise.objects.visible_to(request.user), pk=pk)
         progress = stats.exercise_progress(request.user, exercise)
         count = len(progress)
+        metric_label = METRIC_LABELS[exercise.measurement]
         if count:
-            record = max(group["max_weight"] for group in progress)
-            workouts_word = services.ru_plural(count, "тренировка", "тренировки", "тренировок")
+            record = max(group["max_value"] for group in progress)
+            workouts_word = ru_plural(count, "тренировка", "тренировки", "тренировок")
             stats_line = f"{count} {workouts_word}"
             if record:
-                stats_line += f" · рекорд {decimal_display(Decimal(str(record)))} кг"
+                stats_line += f" · рекорд {metric_display(exercise.measurement, record)}"
         else:
             stats_line = "ещё не было в тренировках"
         return render(
@@ -834,13 +874,37 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 "history": list(reversed(progress)),
                 "chart": {
                     "labels": [group["label"] for group in progress],
-                    "values": [group["max_weight"] for group in progress],
+                    "values": [group["max_value"] for group in progress],
                     "colorKey": "strength",
-                    "unit": "кг",
+                    # Время подписывается как 1:30, поэтому формат отдельно от единицы.
+                    "unit": METRIC_UNITS[exercise.measurement],
+                    "format": "time" if exercise.measurement in TIME_MEASUREMENTS else "",
                 },
+                "chart_title": f"Максимум: {metric_label}",
+                "metric_label": metric_label,
+                "can_edit_measurement": exercise.owner_id == request.user.pk,
                 "stats_line": stats_line,
                 "nav_active": "dashboard",
             },
+        )
+
+
+class ExerciseMeasurementView(LoginRequiredMixin, View):
+    """Смена единицы своего упражнения. Записанные подходы не меняются: у них
+    свой снимок единицы, и история остаётся в том виде, в котором её записали."""
+
+    def post(self, request, pk):
+        # Глобальное упражнение правит только админ, чужое личное — никто.
+        exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
+        measurement = request.POST.get("measurement", "")
+        if measurement not in Exercise.Measurement.values:
+            return HttpResponseBadRequest("Неизвестная единица")
+        exercise.measurement = measurement
+        exercise.save(update_fields=["measurement"])
+        return render(
+            request,
+            "workouts/_measurement_choice.html",
+            {"exercise": exercise, "can_edit_measurement": True, "saved": True},
         )
 
 
@@ -851,7 +915,7 @@ def usage_label(count):
     """Подпись строки справочника: «в 3 тренировках» или «не использовалось»."""
     if not count:
         return "не использовалось"
-    word = services.ru_plural(count, "тренировке", "тренировках", "тренировках")
+    word = ru_plural(count, "тренировке", "тренировках", "тренировках")
     return f"в {count} {word}"
 
 
@@ -887,10 +951,18 @@ class ExerciseListView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         my_records = stats.strength_records(self.request.user)
-        records = {row["exercise_id"]: row["weight_display"] for row in my_records}
+        records = {row["exercise_id"]: row["value_display"] for row in my_records}
         for exercise in context["exercises"]:
+            # Рекорд приходит уже с единицей внутри: «83,75 кг», «12 повторов», «1:30».
             exercise.record_display = records.get(exercise.pk)
             exercise.usage_label = usage_label(exercise.workouts_count)
+            # Единицу показываем только у непривычных упражнений: приписка «вес ×
+            # повторы» к каждому из двух десятков глобальных была бы шумом.
+            exercise.measurement_label = (
+                None
+                if exercise.measurement == Exercise.Measurement.WEIGHT_REPS
+                else exercise.get_measurement_display().lower()
+            )
         context["query"] = self.request.GET.get("q", "").strip()
         context["mine_only"] = bool(self.request.GET.get("mine"))
         return context

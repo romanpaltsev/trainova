@@ -784,6 +784,11 @@ body {
   margin-bottom: 0.75rem;
 }
 
+/* Одно поле (только повторы или только время) занимает всю ширину карточки */
+.app-live-current .app-field-grid.is-single {
+  grid-template-columns: 1fr;
+}
+
 .app-stepper-label {
   margin-bottom: 0.375rem;
   font-size: 0.75rem;

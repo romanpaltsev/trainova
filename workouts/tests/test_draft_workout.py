@@ -180,7 +180,7 @@ def test_draft_sets_are_adjustable_and_removable(client, user):
     row = StrengthSetFactory(workout=planned, set_number=1, weight_kg=70, reps=8, done=False)
     extra = StrengthSetFactory(workout=planned, set_number=2, weight_kg=70, reps=8, done=False)
 
-    client.post(reverse("set_adjust", args=[row.pk]), {"field": "weight", "dir": "up"})
+    client.post(reverse("set_adjust", args=[row.pk]), {"field": "weight_kg", "dir": "up"})
     client.post(reverse("set_delete", args=[extra.pk]))
 
     row.refresh_from_db()

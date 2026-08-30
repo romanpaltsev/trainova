@@ -27,8 +27,8 @@
       <dd class="num">{{ groups|length }}</dd>
     </div>
     <div>
-      <dt>тоннаж</dt>
-      <dd class="num">{{ total_tonnage|floatformat:0 }} кг</dd>
+      <dt>{{ workout.workload.label }}</dt>
+      <dd class="num">{{ workout.workload.value }}</dd>
     </div>
   </dl>
 </section>
@@ -41,14 +41,14 @@
           {{ group.exercise.name }}
         </a>
       </h2>
-      <span class="app-live-exercise-meta">{{ group.tonnage|floatformat:0 }} кг</span>
+      <span class="app-live-exercise-meta">{{ group.total }}</span>
     </div>
     <div class="app-live-sets">
       {% for set in group.sets %}
         <div class="app-live-set">
           <span class="app-live-set-num">{{ set.display_number }}</span>
           <span class="app-live-set-value">
-            <span class="num">{{ set.weight_display }}</span> кг × <span class="num">{{ set.reps }}</span>
+            <span class="num">{{ set.value_display }}</span>
           </span>
         </div>
       {% endfor %}
