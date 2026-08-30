@@ -361,9 +361,10 @@ def test_draft_is_absent_from_history_and_filter_chips(client, user):
     response = client.get(reverse("workout_history"))
 
     assert list(response.context["workouts"]) == [finished]
+    # Чип вида спорта черновика тоже не появляется: он вёл бы в пустую ленту.
     assert list(response.context["sports_used"]) == [finished.sport]
     assert "Кроссфит" not in response.content.decode()
-    assert planned.pk
+    assert Workout.objects.filter(pk=planned.pk).planned().exists()
 
 
 def test_draft_is_absent_from_dashboard_aggregations(user):
