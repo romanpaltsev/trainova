@@ -5,8 +5,7 @@
 {% comment %}Фокус-режим, как в макете: нижней навигации нет, шапка остаётся.{% endcomment %}
 {% block bottom_nav %}{% endblock %}
 
-{% comment %}Две колонки живого режима появятся отдельным этапом; пока узкая колонна.{% endcomment %}
-{% block main_class %}app-main-form{% endblock %}
+{% block main_class %}app-main-dual{% endblock %}
 
 {% block content %}
 {% comment %}
@@ -14,6 +13,12 @@
   У черновика таймер не рендерится вовсе (пустой data-started дал бы «NaN:NaN»),
   карточки отдыха тоже нет — отдыхать до старта нечего.
 {% endcomment %}
+{% comment %}
+  На десктопе экран раскладывается в две колонки: слева текущее упражнение со
+  степперами, справа план и выполненное. Порядок в разметке остаётся мобильным —
+  колонки делает CSS.
+{% endcomment %}
+<div class="app-live-screen">
 <div class="app-live-head">
   <div>
     <h1 class="app-page-title mb-0">{{ workout.sport.name }}</h1>
@@ -39,6 +44,7 @@
 
 {% if not workout.is_planned %}{% include "workouts/_live_rest.html" %}{% endif %}
 {% include "workouts/_live_exercises.html" %}
+</div>
 {% endblock %}
 
 {% block extra_scripts %}

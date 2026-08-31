@@ -4,6 +4,11 @@
   обновляет только OOB-ответ «Подход выполнен».
 {% endcomment %}
 <div id="exercises"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% comment %}
+    Три участка — «сейчас», «план», «выполнено». Порядок тот же, что был, поэтому
+    на телефоне ничего не меняется; на десктопе CSS разводит их по колонкам.
+  {% endcomment %}
+  <div class="app-live-now">
   {% if current_group %}
     <section class="app-card app-live-exercise">
       <div class="app-live-exercise-head">
@@ -56,6 +61,9 @@
     </section>
   {% endif %}
 
+  </div>
+
+  <div class="app-live-plan">
   {% if queue_groups %}
     <h2 class="app-section-title">Дальше</h2>
     {% for group in queue_groups %}
@@ -86,7 +94,9 @@
           hx-get="{% url 'live_exercises' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
     + Упражнение
   </button>
+  </div>
 
+  <div class="app-live-done">
   {% if done_groups %}
     <h2 class="app-section-title">Выполнено</h2>
     {% for group in done_groups %}
@@ -104,4 +114,5 @@
       </section>
     {% endfor %}
   {% endif %}
+  </div>
 </div>

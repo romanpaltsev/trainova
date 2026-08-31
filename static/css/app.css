@@ -1782,6 +1782,38 @@ body {
   /* График в панели крупнее: он и есть причина открыть упражнение */
   .app-exercise .app-chart-body { height: 360px; }
 
+  /* ---------- Живой режим и черновик: две колонки ----------
+
+     Слева текущее упражнение со степперами, справа план и выполненное. Рабочая
+     колонка остаётся 34rem: на степперах держится главный сценарий, и расползание
+     им только вредит. #exercises отдаёт свой бокс через display: contents —
+     его id и класс переезжают вместе со свопом, а пустому div терять нечего. */
+  .app-live-screen {
+    display: grid;
+    grid-template-columns: minmax(0, var(--app-measure-form)) minmax(0, 22rem);
+    column-gap: var(--app-space-8);
+    justify-content: center;
+    align-items: start;
+  }
+
+  .app-live-head { grid-column: 1 / -1; }
+
+  /* Таймер отдыха остаётся на виду: без липкости он уезжал вверх, пока
+     прокручиваешь к нужному упражнению. z-index — потому что карточка текущего
+     упражнения идёт в разметке позже и иначе рисовалась бы поверх. */
+  .app-live-screen .app-rest {
+    grid-column: 1 / -1;
+    position: sticky;
+    top: calc(var(--app-header-height) + var(--app-space-4));
+    z-index: 2;
+  }
+
+  #exercises { display: contents; }
+
+  .app-live-now { grid-column: 1; }
+  .app-live-plan,
+  .app-live-done { grid-column: 2; }
+
   /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
   .app-dash {
     display: grid;
