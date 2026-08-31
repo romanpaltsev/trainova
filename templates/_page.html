@@ -17,7 +17,14 @@
   <link rel="manifest" href="{% url 'manifest' %}">
   <link rel="icon" href="{% static 'img/icon.svg' %}" type="image/svg+xml">
   <link rel="icon" href="{% static 'img/icon-192.png' %}" sizes="192x192" type="image/png">
-  <link rel="apple-touch-icon" href="{% static 'img/icon-192.png' %}">
+  {% comment %}
+    iOS ставит иконку на рабочий стол только из apple-touch-icon, причём ждёт
+    180×180 без альфа-канала: PNG с прозрачными углами он может проигнорировать,
+    и тогда вместо значка появляется скриншот страницы. Своё скругление iOS
+    накладывает сам, поэтому файл — полноразмерный квадрат.
+  {% endcomment %}
+  <link rel="apple-touch-icon" sizes="180x180"
+        href="{% static 'img/apple-touch-icon-180.png' %}">
   {% comment %}iOS: без этих тегов ярлык открывается в Safari и берёт имя из <title>.{% endcomment %}
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Дневник">
