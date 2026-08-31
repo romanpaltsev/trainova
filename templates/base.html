@@ -1,4 +1,14 @@
 {% extends "_page.html" %}
+{% load static %}
+
+{% comment %}
+  Шрифт крупных чисел (.num) нужен на каждом экране приложения — дашборд,
+  живой режим, история, профиль, — поэтому предзагружаем его здесь, а не в
+  _page.html: страницам входа и регистрации он не нужен.
+{% endcomment %}
+{% block extra_preload %}
+  <link rel="preload" href="{% static 'fonts/unbounded-subset.woff2' %}" as="font" type="font/woff2" crossorigin>
+{% endblock %}
 
 {% block body %}
 <header class="app-header">

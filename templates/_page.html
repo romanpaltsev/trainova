@@ -46,6 +46,25 @@
   {% endcomment %}
   <meta name="htmx-config" content='{"timeout": 10000}'>
 
+  {% comment %}
+    Шрифты объявлены в fonts.css, поэтому браузер узнаёт о них только после того,
+    как скачает и разберёт этот файл — на целый круг позже, чем мог бы. Preload
+    начинает загрузку сразу и укорачивает подмену системного шрифта на фирменный.
+    Здесь только два сабсета Manrope: они нужны на любой странице, включая вход.
+    Остальные сабсеты Manrope браузер не запрашивает никогда (проверено замером),
+    предзагружать их значило бы качать зря. crossorigin обязателен даже со своего
+    домена: шрифты всегда идут анонимным CORS-запросом, и без него preload
+    не совпадёт с настоящим запросом и файл скачается дважды.
+  {% endcomment %}
+  <link rel="preload" href="{% static 'fonts/manrope-cyrillic.woff2' %}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{% static 'fonts/manrope-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
+  {% comment %}
+    Шрифт чисел предзагружают только страницы приложения (base.html): на входе
+    и регистрации класса .num нет, и там это были бы 35 КБ впустую. Отдельный
+    блок, а не extra_head: тот могут переопределить страницы, и preload потерялся бы.
+  {% endcomment %}
+  {% block extra_preload %}{% endblock %}
+
   <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
   <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}">

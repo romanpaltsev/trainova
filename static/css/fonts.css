@@ -1,4 +1,25 @@
-/* Локальные шрифты. Сгенерировано из Google Fonts css2 (сабсеты latin + cyrillic). */
+/* Локальные шрифты. Сгенерировано из Google Fonts css2 (сабсеты latin + cyrillic).
+ *
+ * Manrope несёт весь текст, поэтому взят штатными сабсетами Google целиком.
+ * Unbounded (класс .num) рисует только числа с единицами — «6398 кг», «1:45»,
+ * «12,3 км», «8 повторов», — то есть цифры, знаки и кириллицу, но никогда
+ * латинские буквы. Штатные сабсеты давали на это 82 КБ на каждой первой
+ * загрузке (latin 50 КБ + cyrillic 31 КБ), причём латинский файл почти целиком
+ * состоял из букв, которые в .num не попадают. Поэтому вместо них один файл
+ * ровно под нужный набор символов — 35 КБ, и первый экран легче на 46 КБ.
+ *
+ * Как перегенерировать (набор символов взят с запасом: цифры, знаки и ВСЯ
+ * базовая кириллица, чтобы новое слово внутри .num ничего не сломало):
+ *
+ *   TEXT='0123456789 :,.·×/—–-+%()АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщъыьэюя'
+ *   curl -A 'Mozilla/5.0 Chrome/140' --get \
+ *     --data-urlencode "text=$TEXT" \
+ *     'https://fonts.googleapis.com/css2?family=Unbounded:wght@200..900&display=swap'
+ *   # в ответе один @font-face — скачать его woff2 в static/fonts/unbounded-subset.woff2
+ *   # и перенести сюда unicode-range из ответа.
+ *
+ * User-Agent обязателен: без него Google отдаёт ttf вместо woff2.
+ */
 
 /* Manrope · cyrillic-ext */
 @font-face {
@@ -40,42 +61,16 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Unbounded · cyrillic-ext */
+/* Unbounded · сабсет под .num: цифры, знаки и базовая кириллица.
+ * unicode-range — из ответа Google: он описывает, что в файле реально есть.
+ * Символ вне диапазона файл даже не запросит и отрисуется фолбэком
+ * (system-ui) — предъявить ему нечего, качать нечего.
+ */
 @font-face {
   font-family: 'Unbounded';
   font-style: normal;
   font-weight: 200 900;
   font-display: swap;
-  src: url(../fonts/unbounded-cyrillic-ext.woff2) format('woff2');
-  unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
-}
-
-/* Unbounded · cyrillic */
-@font-face {
-  font-family: 'Unbounded';
-  font-style: normal;
-  font-weight: 200 900;
-  font-display: swap;
-  src: url(../fonts/unbounded-cyrillic.woff2) format('woff2');
-  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
-}
-
-/* Unbounded · latin-ext */
-@font-face {
-  font-family: 'Unbounded';
-  font-style: normal;
-  font-weight: 200 900;
-  font-display: swap;
-  src: url(../fonts/unbounded-latin-ext.woff2) format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-/* Unbounded · latin */
-@font-face {
-  font-family: 'Unbounded';
-  font-style: normal;
-  font-weight: 200 900;
-  font-display: swap;
-  src: url(../fonts/unbounded-latin.woff2) format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+  src: url(../fonts/unbounded-subset.woff2) format('woff2');
+  unicode-range: U+20, U+25, U+28-29, U+2B-3A, U+B7, U+D7, U+306, U+308, U+401, U+40E, U+410-44F, U+451, U+45E, U+4C1-4C2, U+4D0-4D3, U+4D6-4D7, U+4DC-4DF, U+4E4-4E7, U+4EC-4ED, U+4F0-4F1, U+4F4-4F5, U+4F8-4F9, U+2013-2014;
 }
