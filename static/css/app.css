@@ -109,7 +109,11 @@ body {
 /* ---------- Основная область ---------- */
 
 .app-main {
-  padding: 0.5rem 1rem calc(var(--app-bottom-nav-height) + 1.5rem);
+  /* Нижняя навигация фиксированная, поэтому её высоту страница компенсирует
+     отступом. В standalone на iPhone навигация выше на домашнюю полосу
+     (env(safe-area-inset-bottom) ≈ 34px), и без этого слагаемого последний
+     элемент страницы — «Показать ещё» в истории — уезжал под неё. */
+  padding: 0.5rem 1rem calc(var(--app-bottom-nav-height) + env(safe-area-inset-bottom) + 1.5rem);
 }
 
 .app-page-title {
@@ -420,6 +424,10 @@ body {
   align-items: flex-end;
   justify-content: center;
   padding: 1rem;
+  /* Модалка — шторка, прижатая к низу. В standalone на iPhone её нижний край и
+     последняя строка списка попадали в зону домашней полосы, где живёт
+     системный жест. На десктопе слагаемое равно нулю и ничего не меняет. */
+  padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   background-color: var(--app-backdrop);
 }
 
