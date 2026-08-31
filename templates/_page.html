@@ -27,7 +27,14 @@
         href="{% static 'img/apple-touch-icon-180.png' %}">
   {% comment %}iOS: без этих тегов ярлык открывается в Safari и берёт имя из <title>.{% endcomment %}
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Дневник">
+  {% comment %}
+    Имя ярлыка на рабочем столе — Trainova, а не «Дневник тренировок»: короткое
+    имя без пробелов лучше читается под иконкой, где iOS обрезает подпись.
+    Тексты интерфейса при этом остаются русскими.
+  {% endcomment %}
+  <meta name="apple-mobile-web-app-title" content="Trainova">
+  {% comment %}То же имя для закреплённых сайтов в Edge и Windows.{% endcomment %}
+  <meta name="application-name" content="Trainova">
   <meta name="mobile-web-app-capable" content="yes">
 
   {% comment %}

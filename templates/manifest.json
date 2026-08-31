@@ -1,7 +1,12 @@
 {% load static %}{
   "id": "/",
-  "name": "Дневник тренировок",
-  "short_name": "Дневник",
+  {% comment %}
+    Имя приложения на рабочем столе — Trainova (см. тот же тег
+    apple-mobile-web-app-title в _page.html). description остаётся русским:
+    его показывают магазины и диалоги установки, где места больше.
+  {% endcomment %}
+  "name": "Trainova",
+  "short_name": "Trainova",
   "description": "Запись силовых и кардио-тренировок",
   "lang": "ru",
   "start_url": "/",

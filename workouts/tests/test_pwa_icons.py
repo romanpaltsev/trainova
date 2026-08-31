@@ -50,6 +50,23 @@ def test_apple_touch_icon_is_linked_in_head(client):
     assert "apple-touch-icon-180.png" in links[0]
 
 
+def test_home_screen_name_is_trainova(client):
+    """Ярлык подписывается коротким латинским именем — под иконкой мало места.
+
+    Проверяются оба места сразу: iOS читает meta, Android и режим
+    веб-приложения iOS 18 — манифест. Разъедутся — на разных телефонах у
+    одного приложения окажутся разные имена.
+    """
+    manifest = json.loads(client.get(reverse("manifest")).content.decode())
+    links = client.get(reverse("account_login")).content.decode()
+
+    assert manifest["name"] == "Trainova"
+    assert manifest["short_name"] == "Trainova"
+    assert '<meta name="apple-mobile-web-app-title" content="Trainova">' in links
+    # А тексты интерфейса остаются русскими.
+    assert "Дневник тренировок" in links
+
+
 def test_manifest_icons_are_png_only(client):
     """SVG в манифесте iOS не растеризует, поэтому список — только растровый."""
     manifest = json.loads(client.get(reverse("manifest")).content.decode())
