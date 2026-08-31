@@ -2,6 +2,8 @@
 
 {% block title %}{% if workout %}Правка тренировки{% else %}Новая тренировка{% endif %} · Дневник тренировок{% endblock %}
 
+{% block main_class %}app-main-form{% endblock %}
+
 {% block content %}
 <div class="app-screen-head">
   <a class="app-icon-btn" href="{% url 'workout_history' %}" aria-label="Назад">

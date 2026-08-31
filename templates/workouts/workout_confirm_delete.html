@@ -2,6 +2,8 @@
 
 {% block title %}{% if workout.is_planned %}Удалить черновик{% else %}Удалить тренировку{% endif %} · Дневник тренировок{% endblock %}
 
+{% block main_class %}app-main-narrow{% endblock %}
+
 {% block content %}
 <h1 class="app-page-title">
   {% if workout.is_planned %}Удалить черновик?{% else %}Удалить тренировку?{% endif %}

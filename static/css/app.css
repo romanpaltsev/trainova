@@ -431,7 +431,7 @@ body {
 
 .app-modal {
   width: 100%;
-  max-width: 26rem;
+  max-width: var(--app-measure-narrow);
   padding: 1.25rem;
 }
 
@@ -563,7 +563,7 @@ body {
 
 .app-auth-card {
   width: 100%;
-  max-width: 26rem;
+  max-width: var(--app-measure-narrow);
   padding: 1.5rem;
 }
 
@@ -582,7 +582,7 @@ body {
 
 .app-auth-footer {
   width: 100%;
-  max-width: 26rem;
+  max-width: var(--app-measure-narrow);
   margin-top: 1.25rem;
   text-align: center;
   color: var(--app-text-secondary);
@@ -1575,31 +1575,27 @@ body {
 .app-pick-row:focus-visible { outline-offset: -2px; }
 
 @media (min-width: 768px) {
-  .app-field-grid { max-width: 34rem; }
-  .app-form-actions { max-width: 26rem; }
-  .app-computed { max-width: 34rem; }
-  .app-workout { max-width: 44rem; }
-  /* Живой режим на десктопе — узкая колонна, как форма кардио */
-  .app-live-head,
-  .app-rest,
-  .app-live-exercise,
-  .app-queue-row,
-  .app-live-add-tile { max-width: 34rem; }
+  /* Ширины компонентов здесь больше не задаются: их даёт мера страницы
+     (--app-measure на .app-main). Остаются только ширины самих элементов —
+     модалка, карточка входа, ряд кнопок формы: это не мера страницы. */
+  .app-form-actions { max-width: var(--app-measure-narrow); }
   .app-rest-time { font-size: 4.5rem; }
   /* Дашборд: четыре плитки в ряд, график выше */
   .app-dash-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .app-stat.is-desktop { display: flex; flex-direction: column; }
   .app-chart-body { height: 320px; }
-  .app-exercise-chart,
-  .app-exercise-workout { max-width: 44rem; }
-  /* Профиль, справочники и новости — узкая колонна, как форма кардио */
-  .app-profile-user,
-  .app-profile-block,
-  .app-rows,
-  .app-search,
-  .app-news,
-  .app-profile-version { max-width: 34rem; }
   .app-modal-backdrop { align-items: center; }
+  /* Прокрутка чипов мышью бесполезна и прячет часть фильтров за краем */
+  .app-filters {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+  .app-empty {
+    max-width: var(--app-measure-form);
+    margin-inline: auto;
+    padding: var(--app-space-12) var(--app-space-8);
+  }
   /* На широком экране карточка входа стоит по центру, а не прижата к верху */
   .app-auth { justify-content: center; padding-bottom: 4rem; }
   .app-auth-brand { margin-top: 0; }
@@ -1631,6 +1627,7 @@ body {
     max-width: var(--app-measure);
     margin-inline: auto;
   }
+  .app-main-narrow { --app-measure: var(--app-measure-narrow); }
   .app-main-form { --app-measure: var(--app-measure-form); }
   .app-main-read { --app-measure: var(--app-measure-read); }
   .app-main-feed { --app-measure: var(--app-measure-read); }
@@ -1646,9 +1643,9 @@ body {
     padding-block-end: var(--app-space-4);
   }
   .app-main { padding-bottom: var(--app-space-16); }
-  .app-main-dual { --app-measure: var(--app-measure-dual); }
-  .app-main-feed,
-  .app-main-catalog { --app-measure: none; }
+  /* Меры app-main-dual / app-main-feed расширяются здесь вместе со своими
+     сетками — до тех пор колонка остаётся такой же, как на 768px, иначе
+     одноколоночное содержимое растянулось бы на 1120px. */
 
   /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
   .app-dash {

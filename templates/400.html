@@ -2,10 +2,12 @@
 
 {% block title %}Неверный запрос · Дневник тренировок{% endblock %}
 
+{% block main_class %}app-main-form{% endblock %}
+
 {% block content %}
 <h1 class="app-page-title">Неверный запрос</h1>
 
-<div class="app-card app-empty" style="max-width: 34rem;">
+<div class="app-card app-empty">
   <p class="app-empty-text text-secondary-app">Запрос не удалось разобрать.</p>
   <div class="app-empty-actions">
     <a class="btn btn-accent" href="{% url 'dashboard' %}">На дашборд</a>
