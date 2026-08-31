@@ -79,9 +79,25 @@ def test_maskable_icon_is_opaque(client):
     assert color_type == 2
 
 
-def test_chrome_icons_keep_rounded_corners(client):
-    """А обычные иконки, наоборот, с прозрачными углами — их скругление своё."""
-    for name in ("img/icon-192.png", "img/icon-512.png"):
+def test_no_raster_icon_has_alpha_channel(client):
+    """Ни одна растровая иконка не должна быть прозрачной.
+
+    Прозрачную iOS молча игнорирует, а скругление всё равно накладывает
+    платформа. Скруглённая версия живёт в векторе — icon.svg.
+    """
+    for name in ("img/icon-192.png", "img/icon-512.png", "img/icon-maskable-512.png", APPLE_ICON):
         _, _, color_type = png_header(finders.find(name))
 
-        assert color_type == 6, f"{name} должна быть RGBA со прозрачными углами"
+        assert color_type == 2, f"{name} с альфа-каналом"
+
+
+@pytest.mark.parametrize("path", ["/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"])
+def test_icon_is_served_from_site_root(client, path):
+    """Вторая дорожка iOS: когда <link> не сработал, он просит иконку у корня."""
+    response = client.get(path)
+
+    assert response.status_code == 200
+    assert response["Content-Type"] == "image/png"
+    body = b"".join(response.streaming_content)
+    assert body[:8] == b"\x89PNG\r\n\x1a\n"
+    assert len(body) == Path(finders.find(APPLE_ICON)).stat().st_size

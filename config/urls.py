@@ -9,6 +9,9 @@ urlpatterns = [
     path("accounts/", include("allauth.urls")),
     path("manifest.webmanifest", views.manifest, name="manifest"),
     path("favicon.ico", views.favicon),
+    # iOS просит эти пути у корня, если не смог воспользоваться <link>.
+    path("apple-touch-icon.png", views.apple_touch_icon),
+    path("apple-touch-icon-precomposed.png", views.apple_touch_icon),
     # Префикс accounts/ принадлежит allauth, поэтому свои экраны аккаунта
     # живут в корне — как дашборд.
     path("", include("accounts.urls")),
