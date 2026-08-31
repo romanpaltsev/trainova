@@ -69,7 +69,6 @@ body {
   text-decoration: none;
 }
 
-.app-nav a:hover { color: var(--app-text); }
 .app-nav a.is-active { color: var(--app-text); }
 
 .app-icon-btn {
@@ -83,11 +82,6 @@ body {
   border-radius: var(--app-radius-pill);
   background-color: transparent;
   color: var(--app-text-secondary);
-}
-
-.app-icon-btn:hover {
-  background-color: var(--app-raised);
-  color: var(--app-text);
 }
 
 .app-avatar {
@@ -335,7 +329,8 @@ body {
   color: var(--app-danger);
 }
 
-.btn-danger-quiet:hover,
+/* :hover этой кнопки живёт в секции отделки; здесь остаётся фокус — он нужен
+   и на тач-устройствах, где hover-медиазапрос не срабатывает. */
 .btn-danger-quiet:focus {
   border-color: var(--app-danger);
   color: var(--app-danger);
@@ -359,8 +354,6 @@ body {
   color: var(--app-text);
   text-decoration: none;
 }
-
-.app-workout-link:hover { border-color: var(--app-text-muted); }
 
 .app-workout-head {
   display: flex;
@@ -528,7 +521,7 @@ body {
   color: var(--app-on-accent);
 }
 
-.btn-accent:hover,
+/* :hover — в секции отделки; фокус и нажатие остаются здесь. */
 .btn-accent:focus,
 .btn-accent:active {
   background-color: var(--app-accent);
@@ -549,13 +542,7 @@ body {
   text-decoration: none;
 }
 
-.app-link:hover {
-  color: var(--app-text);
-  text-decoration: underline;
-}
-
 .app-link-accent { color: var(--app-accent-text); }
-.app-link-accent:hover { color: var(--app-accent-text); }
 
 /* ---------- Экраны входа/регистрации ---------- */
 
@@ -992,11 +979,6 @@ body {
   text-decoration: none;
 }
 
-.app-pick-row:hover {
-  background-color: var(--app-raised);
-  color: var(--app-text);
-}
-
 .app-pick-meta {
   margin-left: auto;
   color: var(--app-text-muted);
@@ -1175,7 +1157,6 @@ body {
 }
 
 .app-latest-row:last-child { margin-bottom: 0; }
-.app-latest-row:hover { border-color: var(--app-text-muted); }
 
 .app-latest-text {
   display: flex;
@@ -1214,8 +1195,6 @@ body {
   text-decoration: none;
 }
 
-a.app-records-item:hover { border-color: var(--app-text-muted); }
-
 .app-records-label {
   font-size: 0.9375rem;
   color: var(--app-text-secondary);
@@ -1236,8 +1215,6 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
   color: var(--app-text);
   text-decoration: none;
 }
-
-.app-spotlight:hover { border-color: var(--app-text-muted); }
 
 .app-spotlight-head {
   display: flex;
@@ -1270,7 +1247,6 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
 }
 
 .app-exercise-link { color: var(--app-text); text-decoration: none; }
-.app-exercise-link:hover { text-decoration: underline; }
 
 /* ---------- Профиль и справочники ---------- */
 
@@ -1360,8 +1336,6 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
   text-decoration: none;
 }
 
-.app-row:hover { border-color: var(--app-text-muted); }
-
 .app-row-icon {
   flex: 0 0 auto;
   display: inline-flex;
@@ -1410,8 +1384,6 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
   flex: 0 0 auto;
   color: var(--app-text-muted);
 }
-
-.app-row-delete:hover { color: var(--app-danger); }
 
 .app-rest-value {
   flex: 1 1 auto;
@@ -1482,6 +1454,125 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
 }
 
 /* ---------- Десктоп ---------- */
+
+/* ---------- Отделка: наведение, фокус, переходы ----------
+
+   Все hover-состояния собраны здесь. Раньше они были размазаны по компонентам,
+   и при добавлении новых порядок в каскаде начинал решать судьбу. Декларации
+   перенесены дословно — изменилось только место и то, что они теперь внутри
+   @media (hover: hover).
+
+   Анимируем только цвет, фон, рамку, filter, тень и transform. НИКОГДА
+   width/height/padding/grid-template-* — они дёргают раскладку, и на длинном
+   списке истории это заметно. Единственный переход по width в проекте —
+   .app-progress-bar: это индикатор таймера отдыха, а не отделка. */
+
+.app-card,
+.btn,
+.app-chip,
+.app-icon-btn,
+.app-nav a,
+.app-link,
+.app-row,
+.app-row-delete,
+.app-workout,
+.app-latest-row,
+.app-records-item,
+.app-spotlight,
+.app-queue-row,
+.app-pick-row,
+.app-live-add-tile,
+.app-stepper-btn,
+.app-note-btn,
+.app-live-link,
+.app-rest-skip,
+.app-rest-adjust {
+  transition: var(--app-transition-ui);
+}
+
+/* Наведение — только там, где есть настоящий курсор. На тапе :hover залипает до
+   следующего тапа, и строка остаётся подсвеченной уже после перехода. */
+@media (hover: hover) and (pointer: fine) {
+  /* Карточки и строки, кликабельные целиком: рамка, подъём и тень */
+  .app-workout-link:hover,
+  .app-row:hover,
+  .app-latest-row:hover,
+  a.app-records-item:hover,
+  .app-spotlight:hover,
+  .app-queue-row:hover,
+  .app-live-add-tile:hover {
+    border-color: var(--app-text-muted);
+    transform: translateY(var(--app-lift));
+    box-shadow: var(--app-shadow-hover);
+  }
+
+  /* Нажатие возвращает элемент на место — иначе клик не ощущается */
+  .app-workout-link:active,
+  .app-row:active,
+  .app-latest-row:active,
+  a.app-records-item:active,
+  .app-spotlight:active,
+  .app-queue-row:active,
+  .app-live-add-tile:active {
+    transform: translateY(0);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  /* Поверхности-кнопки: подсветка яркостью, чтобы не изобретать цвет вне макетов */
+  .app-chip:hover,
+  .app-stepper-btn:hover,
+  .app-rest-adjust:hover,
+  .btn-quiet:hover {
+    filter: var(--app-hover-filter);
+  }
+
+  /* Тихие текстовые кнопки: усиление контраста */
+  .app-note-btn:hover,
+  .app-live-link:hover,
+  .app-rest-skip:hover,
+  .app-nav a:hover {
+    color: var(--app-text);
+  }
+
+  .app-icon-btn:hover,
+  .app-pick-row:hover {
+    background-color: var(--app-raised);
+    color: var(--app-text);
+  }
+
+  .app-link:hover {
+    color: var(--app-text);
+    text-decoration: underline;
+  }
+
+  .app-link-accent:hover { color: var(--app-accent-text); }
+  .app-exercise-link:hover { text-decoration: underline; }
+  .app-row-delete:hover { color: var(--app-danger); }
+
+  .btn-danger-quiet:hover {
+    border-color: var(--app-danger);
+    color: var(--app-danger);
+  }
+
+  .btn-accent:hover {
+    background-color: var(--app-accent);
+    border-color: var(--app-accent);
+    color: var(--app-on-accent);
+    filter: brightness(0.94);
+  }
+}
+
+/* Видимый фокус с клавиатуры. :where() даёт нулевую специфичность, поэтому любое
+   компонентное правило его перебьёт. Текстовые поля исключены — у них свой ринг
+   (.form-control:focus). [tabindex] нужен ради .app-stepper-value: у ручного
+   ввода значения подхода видимого фокуса не было вовсе. */
+:where(a, button, summary, [tabindex]):focus-visible {
+  outline: var(--app-focus-outline);
+  outline-offset: var(--app-focus-offset);
+}
+
+/* Внутри прокручиваемого списка обводку снаружи срезает край контейнера. */
+.app-pick-row:focus-visible { outline-offset: -2px; }
 
 @media (min-width: 768px) {
   .app-field-grid { max-width: 34rem; }
