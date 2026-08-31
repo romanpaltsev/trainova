@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import factory
 from django.utils import timezone
 
@@ -7,6 +9,7 @@ from workouts.models import (
     ChangelogEntry,
     Exercise,
     ExerciseNote,
+    ExerciseSettings,
     Sport,
     StrengthSet,
     Workout,
@@ -29,6 +32,17 @@ class ExerciseFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Упражнение {n}")
     muscle_group = "Грудь"
     owner = None
+
+
+class ExerciseSettingsFactory(factory.django.DjangoModelFactory):
+    """Настройки упражнения у пользователя: пока это только шаг веса."""
+
+    class Meta:
+        model = ExerciseSettings
+
+    user = factory.SubFactory(UserFactory)
+    exercise = factory.SubFactory(ExerciseFactory)
+    weight_step = Decimal("2.5")
 
 
 class WorkoutFactory(factory.django.DjangoModelFactory):
