@@ -41,7 +41,12 @@
   </div>
 </header>
 
-<main class="app-main">
+{% comment %}
+  main_class задаёт меру содержимого страницы (см. --app-measure в app.css):
+  ширина — свойство страницы, а не компонента, иначе один и тот же .app-rows
+  тянул бы одну ширину в профиле, справочнике и «моих видах спорта».
+{% endcomment %}
+<main class="app-main {% block main_class %}{% endblock %}">
   {% if messages %}
     {% for message in messages %}
       <div class="app-alert app-alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>

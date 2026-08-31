@@ -26,6 +26,11 @@
   --app-shadow-card: 0 1px 2px rgba(15, 23, 32, 0.04);
   --app-accent-glow: 0 6px 20px rgba(198, 241, 62, 0.28);
   --app-backdrop: rgba(15, 23, 32, 0.45);
+
+  /* Наведение подсвечивает поверхность яркостью, а не новым цветом: приём уже
+     работает у .btn-accent, и он не изобретает цвет вне макетов. */
+  --app-hover-filter: brightness(0.97);
+  --app-shadow-hover: 0 6px 18px rgba(15, 23, 32, 0.10);
 }
 
 [data-bs-theme="dark"] {
@@ -50,6 +55,10 @@
   --app-shadow-card: none;
   --app-accent-glow: 0 6px 24px rgba(198, 241, 62, 0.22);
   --app-backdrop: rgba(3, 5, 8, 0.66);
+
+  /* В тёмной теме поверхность под курсором светлеет, а не темнеет. */
+  --app-hover-filter: brightness(1.14);
+  --app-shadow-hover: 0 6px 20px rgba(0, 0, 0, 0.45);
 }
 
 /* Радиусы, размеры, шрифты — общие для тем */
@@ -64,6 +73,55 @@
   --app-tap-target: 44px;
   --app-header-height: 56px;
   --app-bottom-nav-height: 64px;
+
+  /* Шкала отступов: имя = значение в четвертях rem (4 = 1rem). Управляет
+     расстояниями между блоками. Оптические подгонки внутри компонентов
+     (0.125 / 0.375 / 0.625 / 0.875rem) в шкалу не тянем — они не про ритм
+     страницы, а про конкретный элемент. */
+  --app-space-1: 0.25rem;
+  --app-space-2: 0.5rem;
+  --app-space-3: 0.75rem;
+  --app-space-4: 1rem;
+  --app-space-5: 1.25rem;
+  --app-space-6: 1.5rem;
+  --app-space-8: 2rem;
+  --app-space-12: 3rem;
+  --app-space-14: 3.5rem;
+  --app-space-16: 4rem;
+
+  /* Боковой отступ страницы. Один и тот же у шапки и у .app-main — иначе на
+     широком мониторе лого и контент стоят на разных вертикалях.
+     Переопределяется по брейкпоинтам ниже. */
+  --app-gutter: var(--app-space-4);
+
+  /* Меры содержимого. Ширину задаёт страница, а не компонент: один и тот же
+     .app-rows живёт в профиле, справочнике и «моих видах спорта», и это три
+     разные раскладки. */
+  --app-measure-narrow: 26rem;
+  --app-measure-form: 34rem;
+  --app-measure-read: 44rem;
+  --app-measure-dual: 70rem;
+  --app-measure-page: 90rem;
+
+  /* Движение. Быстрое — на цвет и фон, чтобы отклик читался мгновенно;
+     базовое — на тень и подъём, где резкость выглядит дёрганой. */
+  --app-motion-fast: 120ms;
+  --app-motion-base: 180ms;
+  --app-motion-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --app-lift: -1px;
+  --app-transition-ui:
+    background-color var(--app-motion-fast) var(--app-motion-ease),
+    border-color var(--app-motion-fast) var(--app-motion-ease),
+    color var(--app-motion-fast) var(--app-motion-ease),
+    filter var(--app-motion-fast) var(--app-motion-ease),
+    box-shadow var(--app-motion-base) var(--app-motion-ease),
+    transform var(--app-motion-base) var(--app-motion-ease);
+
+  /* Фокус с клавиатуры. Лаймовый --bs-focus-ring-color на светлой теме почти
+     не виден, поэтому обводка берёт «чернильный» акцент — он читаем в обеих
+     темах. --bs-focus-ring-color остаётся тем, чем был: рингом текстовых полей. */
+  --app-focus-outline: 2px solid var(--app-accent-text);
+  --app-focus-offset: 2px;
 }
 
 /* Переопределение переменных Bootstrap нашими токенами */
@@ -95,4 +153,25 @@
   --bs-border-radius-lg: var(--app-radius-card);
   --bs-border-radius-xl: var(--app-radius-card);
   --bs-border-radius-pill: var(--app-radius-pill);
+}
+
+/* Боковой отступ страницы растёт вместе с экраном. Задаётся здесь один раз,
+   а шапка и .app-main его только читают — так они не могут разойтись. */
+@media (min-width: 768px) {
+  :root { --app-gutter: var(--app-space-6); }
+}
+
+@media (min-width: 1200px) {
+  :root { --app-gutter: var(--app-space-14); }
+}
+
+/* Уважение к настройке ОС. Гасим токены движения, а не
+   «* { transition: none !important }»: иначе умрёт и функциональный переход
+   полосы таймера отдыха (.app-progress-bar), а она не украшение, а индикатор. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --app-motion-fast: 0.01ms;
+    --app-motion-base: 0.01ms;
+    --app-lift: 0px;
+  }
 }

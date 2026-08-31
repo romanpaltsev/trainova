@@ -35,8 +35,12 @@ body {
   gap: 1.5rem;
   min-height: var(--app-header-height);
   /* env(safe-area-inset-top): в standalone на телефоне с «бровью» контент
-     иначе уезжает под статус-бар (viewport-fit=cover). */
-  padding: calc(0.5rem + env(safe-area-inset-top)) 1rem 0.5rem;
+     иначе уезжает под статус-бар (viewport-fit=cover). Задаём тремя
+     свойствами, а не шорткатом: медиазапросы меняют только вертикальный
+     отступ, и шорткат там затирал бы безопасную зону. */
+  padding-block-start: calc(var(--app-space-2) + env(safe-area-inset-top));
+  padding-block-end: var(--app-space-2);
+  padding-inline: var(--app-gutter);
   background-color: var(--app-bg);
 }
 
@@ -113,7 +117,8 @@ body {
      отступом. В standalone на iPhone навигация выше на домашнюю полосу
      (env(safe-area-inset-bottom) ≈ 34px), и без этого слагаемого последний
      элемент страницы — «Показать ещё» в истории — уезжал под неё. */
-  padding: 0.5rem 1rem calc(var(--app-bottom-nav-height) + env(safe-area-inset-bottom) + 1.5rem);
+  padding: var(--app-space-2) var(--app-gutter)
+    calc(var(--app-bottom-nav-height) + env(safe-area-inset-bottom) + var(--app-space-6));
 }
 
 .app-page-title {
@@ -1507,21 +1512,52 @@ a.app-records-item:hover { border-color: var(--app-text-muted); }
   /* На широком экране карточка входа стоит по центру, а не прижата к верху */
   .app-auth { justify-content: center; padding-bottom: 4rem; }
   .app-auth-brand { margin-top: 0; }
-  .app-header { padding: 0.75rem 1.5rem; }
+  /* Шапка ограничена той же мерой, что и контент: без этого на мониторе шире
+     1440px лого уезжает к краю окна, а страница стоит по центру. */
+  .app-header {
+    max-width: var(--app-measure-page);
+    margin-inline: auto;
+    /* Безопасную зону сохраняем и здесь: iPhone в standalone-ландшафте шире
+       768px, и padding-block затёр бы её вместе с отступом. */
+    padding-block-start: calc(var(--app-space-3) + env(safe-area-inset-top));
+    padding-block-end: var(--app-space-3);
+  }
   .app-nav { display: flex; }
   .app-header-cta { display: inline-flex; }
   .app-bottom-nav { display: none; }
   .app-main {
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 1rem 1.5rem 3rem;
+    max-width: var(--app-measure-page);
+    margin-inline: auto;
+    padding: var(--app-space-4) var(--app-gutter) var(--app-space-12);
+    /* Мера содержимого по умолчанию: во всю колонку страницы. Экраны, которым
+       нужна колонка поуже, ставят свой модификатор через {% block main_class %}. */
+    --app-measure: none;
   }
+  /* Единственное место, где решается «во всю ширину или колонкой по центру».
+     Центрируются и заголовки — поэтому h2 профиля больше не разъезжаются
+     с блоками, которые они подписывают. */
+  .app-main > * {
+    max-width: var(--app-measure);
+    margin-inline: auto;
+  }
+  .app-main-form { --app-measure: var(--app-measure-form); }
+  .app-main-read { --app-measure: var(--app-measure-read); }
+  .app-main-feed { --app-measure: var(--app-measure-read); }
+  .app-main-catalog { --app-measure: var(--app-measure-form); }
+  /* До 1200px двухколоночные экраны живут одной колонкой. */
+  .app-main-dual { --app-measure: var(--app-measure-form); }
   .app-page-title { font-size: 2rem; }
 }
 
 @media (min-width: 1200px) {
-  .app-header { padding: 1rem 3.5rem; }
-  .app-main { padding: 1rem 3.5rem 4rem; }
+  .app-header {
+    padding-block-start: calc(var(--app-space-4) + env(safe-area-inset-top));
+    padding-block-end: var(--app-space-4);
+  }
+  .app-main { padding-bottom: var(--app-space-16); }
+  .app-main-dual { --app-measure: var(--app-measure-dual); }
+  .app-main-feed,
+  .app-main-catalog { --app-measure: none; }
 
   /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
   .app-dash {
