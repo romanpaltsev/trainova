@@ -29,6 +29,18 @@ window.appCharts = (function () {
     registry.push({ chart, restyle });
   }
 
+  // Уничтожение со снятием записи из реестра. Без этого мёртвый график остаётся
+  // в массиве вместе со своими данными, а Chart.js падает с «Canvas is already
+  // in use», если тот же canvas переиспользовать.
+  function destroy(chart) {
+    if (!chart) return;
+    const index = registry.findIndex(function (entry) {
+      return entry.chart === chart;
+    });
+    if (index >= 0) registry.splice(index, 1);
+    chart.destroy();
+  }
+
   new MutationObserver(function () {
     const t = theme();
     registry.forEach(function (entry) {
@@ -329,5 +341,5 @@ window.appCharts = (function () {
     return chart;
   }
 
-  return { buildStackedBar, buildLine, buildSparkline };
+  return { buildStackedBar, buildLine, buildSparkline, destroy };
 })();

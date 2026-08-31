@@ -5,70 +5,7 @@
 {% block main_class %}app-main-read{% endblock %}
 
 {% block content %}
-<div class="app-screen-head">
-  <a class="app-icon-btn" href="{% url 'dashboard' %}" aria-label="Назад">
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <path d="M15 18l-6-6 6-6"/>
-    </svg>
-  </a>
-  <div>
-    <h1 class="app-page-title mb-0">{{ exercise.name }}</h1>
-    <div class="text-secondary-app">{{ stats_line }}</div>
-  </div>
-</div>
-
-{% include "workouts/_measurement_choice.html" %}
-{% include "workouts/_weight_step_choice.html" %}
-{% include "workouts/_muscle_group_choice.html" %}
-
-{% if chart.values|length == 1 %}
-  {% include "includes/empty_state.html" with text="График появится со второй тренировки с этим упражнением." %}
-{% endif %}
-{% if chart.values|length > 1 %}
-  <section class="app-card app-chart-card app-exercise-chart">
-    <div class="app-chart-head">
-      <h2 class="app-chart-title">{{ chart_title }}</h2>
-    </div>
-    <div class="app-chart-legend">
-      <span class="app-chart-legend-item">
-        <span class="app-sport-dot" style="--dot: var(--app-sport-strength)"></span>
-        {{ exercise.name }}
-      </span>
-    </div>
-    <div class="app-chart-body">
-      <canvas id="exercise-chart" role="img"
-              aria-label="{{ chart_title }} по тренировкам"></canvas>
-    </div>
-  </section>
-{% endif %}
-
-<h2 class="app-section-title">История подходов</h2>
-{% for group in history %}
-  <section class="app-card app-live-exercise app-exercise-workout">
-    <div class="app-live-exercise-head">
-      <a class="app-link" href="{% url 'workout_summary' group.workout.pk %}">
-        {{ group.workout.started_at|date:"D, j b"|lower }}
-      </a>
-      <span class="app-live-exercise-meta">до {{ group.max_value_display }}</span>
-    </div>
-    {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}
-    <div class="app-live-sets">
-      {% for set in group.sets %}
-        <div class="app-live-set">
-          <span class="app-live-set-num">{{ forloop.counter }}</span>
-          <span class="app-live-set-value">
-            <span class="num">{{ set.value_display }}</span>
-          </span>
-        </div>
-      {% endfor %}
-    </div>
-  </section>
-{% empty %}
-  {% include "includes/empty_state.html" with text="Этого упражнения ещё не было в тренировках. Добавьте его в живом режиме силовой тренировки." %}
-{% endfor %}
-
-{{ chart|json_script:"exercise-chart-data" }}
+{% include "workouts/_exercise_detail_body.html" %}
 {% endblock %}
 
 {% block extra_scripts %}

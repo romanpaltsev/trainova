@@ -1009,6 +1009,12 @@ body {
    очевидно нажимаемая, и указатель там лишний. */
 .app-workout > .app-pick-chevron { display: none; }
 
+/* ---------- Справочник упражнений ---------- */
+
+/* Панель детали живёт только в мастер-детали на ≥1200px. По умолчанию её нет —
+   на мобильном упражнение открывается отдельной страницей, как и раньше. */
+.app-catalog-detail { display: none; }
+
 /* ---------- Дашборд ---------- */
 
 .app-dash-head {
@@ -1705,6 +1711,76 @@ body {
 
   .app-news-title,
   .app-news-body { grid-column: 2; }
+
+  /* ---------- Справочник упражнений: мастер-деталь ---------- */
+
+  .app-main-catalog { --app-measure: none; }
+
+  .app-catalog {
+    display: grid;
+    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    gap: var(--app-space-6);
+    align-items: start;
+  }
+
+  /* Список остаётся на месте при прокрутке детали, а сам прокручивается внутри:
+     иначе двести упражнений утаскивали бы панель вниз. */
+  .app-catalog-list {
+    position: sticky;
+    top: calc(var(--app-header-height) + var(--app-space-4));
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100dvh - var(--app-header-height) - var(--app-space-8));
+  }
+
+  .app-catalog-list .app-rows {
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  /* Список прокручивается внутри колонки ограниченной высоты, а .app-rows —
+     колонка flex. Без запрета сжатия строки схлопывались до min-height 56px, и
+     двухстрочное название вылезало за границу строки, накрывая соседей. */
+  .app-catalog-list .app-row { flex: 0 0 auto; }
+
+  .app-catalog-detail { display: block; }
+
+  /* Выбранная строка списка */
+  .app-row.is-active {
+    border-color: var(--app-accent);
+    background-color: var(--app-raised);
+  }
+
+  /* Настройки упражнения — в ряд. auto-fit, а не repeat(3): блок «Шаг веса»
+     рендерится не у каждого упражнения, и жёсткая сетка оставила бы дыру. */
+  .app-settings-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--app-space-4);
+    align-items: start;
+    margin-bottom: var(--app-space-4);
+  }
+
+  .app-exercise-head { margin-bottom: var(--app-space-4); }
+
+  /* График — сразу под заголовком: он и есть причина открыть упражнение, а блок
+     настроек с чипами шага веса занимает почти весь первый экран. На мобильном
+     порядок в разметке остаётся прежним, здесь его меняет order. */
+  .app-exercise {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-exercise > .app-exercise-head,
+  .app-exercise > .app-screen-head { order: 0; }
+  .app-exercise > .app-chart-card,
+  .app-exercise > .app-empty { order: 1; }
+  .app-exercise > .app-settings-row { order: 2; }
+  .app-exercise > .app-section-title { order: 3; }
+  .app-exercise > .app-cards-2 { order: 4; }
+
+  /* График в панели крупнее: он и есть причина открыть упражнение */
+  .app-exercise .app-chart-body { height: 360px; }
 
   /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
   .app-dash {

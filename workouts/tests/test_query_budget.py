@@ -61,6 +61,15 @@ def test_exercise_page_query_budget(client, user, django_assert_max_num_queries)
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
+def test_exercise_panel_query_budget(client, user, django_assert_max_num_queries):
+    """Панель мастер-детали — та же вьюха: партиал не должен добавлять запросов."""
+    bench = fill_history(user)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(8):
+        client.get(reverse("exercise_detail", args=[bench.pk]), headers={"HX-Request": "true"})
+
+
 def test_catalog_query_budget(client, user, django_assert_max_num_queries):
     fill_history(user)
 

@@ -2,9 +2,16 @@
 
 {% block title %}Упражнения · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-form{% endblock %}
+{% block main_class %}app-main-catalog{% endblock %}
 
 {% block content %}
+{% comment %}
+  На десктопе это мастер-деталь: слева список, справа выбранное упражнение.
+  На мобильном панель скрыта (CSS), и строки остаются обычными ссылками на
+  отдельную страницу — так экран работает и без JS.
+{% endcomment %}
+<div class="app-catalog">
+<div class="app-catalog-list">
 <h1 class="app-page-title">Упражнения</h1>
 
 <div class="app-chips app-filters">
@@ -14,7 +21,11 @@
      href="{% url 'exercise_list' %}?mine=1{% if query %}&q={{ query|urlencode }}{% endif %}">Мои</a>
 </div>
 
-<form method="get" class="app-search" role="search">
+{% comment %}
+  action обязателен: без него форма уходит на текущий URL, а после выбора
+  упражнения адрес — /exercises/5/, и поиск отрендерил бы деталь с болтающимся ?q.
+{% endcomment %}
+<form method="get" action="{% url 'exercise_list' %}" class="app-search" role="search">
   {% if mine_only %}<input type="hidden" name="mine" value="1">{% endif %}
   <input type="search" name="q" value="{{ query }}" class="form-control"
          placeholder="Найти упражнение" autocomplete="off" aria-label="Найти упражнение">
@@ -61,4 +72,22 @@
     {% endif %}
   {% endfor %}
 </div>
+</div>
+
+{% comment %}
+  Панель детали. Сервер здесь ничего не предвыбирает: он не знает ширину экрана,
+  и автовыбор заставил бы считать прогресс упражнения даже на телефоне, где
+  панели нет. Бюджет запросов каталога это и охраняет.
+{% endcomment %}
+<div class="app-catalog-detail" id="exercise-panel" role="region" aria-label="Упражнение">
+  {% include "includes/empty_state.html" with title="Упражнение" text="Выберите упражнение в списке — здесь появятся график прогресса, настройки и история подходов." %}
+</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+  {% load static %}
+  <script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+  <script src="{% static 'js/charts.js' %}"></script>
+  <script src="{% static 'js/exercise.js' %}"></script>
 {% endblock %}

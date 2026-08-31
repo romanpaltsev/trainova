@@ -998,9 +998,20 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 stats_line += f" · рекорд {metric_display(exercise.measurement, record)}"
         else:
             stats_line = "ещё не было в тренировках"
+        # Панель мастер-детали и отдельная страница — один и тот же контент:
+        # HTMX-запрос получает только тело, обычный — тело внутри базы. Тот же
+        # приём, что у WorkoutHistoryView. Отдельного URL нет намеренно: иначе
+        # у упражнения появилась бы вторая дверь, которую пришлось бы защищать
+        # отдельно. Если однажды появится hx-push-url, условие обязано стать
+        # «HX-Request и не HX-History-Restore-Request»: при промахе своего кеша
+        # истории htmx дозапрашивает URL с обоими заголовками и ждёт страницу.
+        in_panel = bool(request.headers.get("HX-Request"))
+        template = (
+            "workouts/_exercise_detail_body.html" if in_panel else "workouts/exercise_detail.html"
+        )
         return render(
             request,
-            "workouts/exercise_detail.html",
+            template,
             {
                 "exercise": exercise,
                 "history": list(reversed(progress)),
@@ -1019,7 +1030,8 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 "muscle_groups": muscle_groups_for(request.user),
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "stats_line": stats_line,
-                "nav_active": "dashboard",
+                "in_panel": in_panel,
+                "nav_active": "exercises",
             },
         )
 
