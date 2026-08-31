@@ -22,6 +22,7 @@ from django.views.generic import DeleteView, ListView, TemplateView, View
 from workouts import services, stats
 from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
 from workouts.models import (
+    DEFAULT_WEIGHT_STEP,
     MAX_WEIGHT_KG,
     MEASUREMENT_FIELDS,
     METRIC_LABELS,
@@ -32,19 +33,24 @@ from workouts.models import (
     SET_LIMITS,
     SET_STEPS,
     TIME_MEASUREMENTS,
+    WEIGHT_STEP_CHOICES,
     ChangelogEntry,
     Exercise,
     ExerciseNote,
+    ExerciseSettings,
     Sport,
     StrengthSet,
     Workout,
     chosen_muscle_group,
     clamp_rest_seconds,
+    decimal_display,
     metric_display,
     muscle_groups_for,
     parse_field_value,
+    parse_weight_step,
     rest_display,
     ru_plural,
+    with_weight_step,
 )
 from workouts.stats import week_start, week_title
 
@@ -264,9 +270,12 @@ def live_workout_or_404(request, pk):
 
 def live_set_or_404(request, pk, *, undone_only=False, for_update=False, started_only=False):
     """Свой подход своей незавершённой тренировки; подходы завершённых неизменяемы."""
-    queryset = StrengthSet.objects.filter(
-        workout__user=request.user, workout__duration_min__isnull=True
-    ).select_related("workout", "exercise")
+    queryset = with_weight_step(
+        StrengthSet.objects.filter(
+            workout__user=request.user, workout__duration_min__isnull=True
+        ).select_related("workout", "exercise"),
+        request.user.pk,
+    )
     if started_only:
         # «Подход выполнен» до старта невозможно: в черновике время ещё не идёт.
         queryset = queryset.filter(workout__started_at__isnull=False)
@@ -650,7 +659,10 @@ class SetAdjustView(LoginRequiredMixin, View):
             # Вес у планки писать нельзя: подход упёрся бы в ограничение
             # set_fields_match_measurement, а это 500 вместо внятного отказа.
             return HttpResponseBadRequest("Поле не подходит единице упражнения")
-        step = SET_STEPS[field] if direction == "up" else -SET_STEPS[field]
+        # Вес шагает по настройке упражнения, остальные поля — по общему шагу.
+        step = row.effective_weight_step if field == "weight_kg" else SET_STEPS[field]
+        if direction == "down":
+            step = -step
         if field == "weight_kg":
             value = min(MAX_WEIGHT_KG, max(Decimal(0), Decimal(str(row.weight_kg)) + step))
         else:
@@ -974,7 +986,7 @@ class ExerciseDetailView(LoginRequiredMixin, View):
     """
 
     def get(self, request, pk):
-        exercise = get_object_or_404(Exercise.objects.visible_to(request.user), pk=pk)
+        exercise = visible_exercise_with_step(request.user, pk)
         progress = stats.exercise_progress(request.user, exercise)
         count = len(progress)
         metric_label = METRIC_LABELS[exercise.measurement]
@@ -1003,6 +1015,7 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 "chart_title": f"Максимум: {metric_label}",
                 "metric_label": metric_label,
                 "can_edit_measurement": exercise.owner_id == request.user.pk,
+                **weight_step_context(exercise),
                 "muscle_groups": muscle_groups_for(request.user),
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "stats_line": stats_line,
@@ -1039,6 +1052,68 @@ def usage_label(count):
         return "не использовалось"
     word = ru_plural(count, "тренировке", "тренировках", "тренировках")
     return f"в {count} {word}"
+
+
+def visible_exercise_with_step(user, pk):
+    """Видимое упражнение вместе с шагом веса этого пользователя — одним запросом."""
+    queryset = with_weight_step(Exercise.objects.visible_to(user), user.pk, exercise_ref="pk")
+    return get_object_or_404(queryset, pk=pk)
+
+
+def weight_step_context(exercise, *, saved=False, error=""):
+    """Контекст блока «Шаг веса» — и на странице упражнения, и в ответе на сохранение.
+
+    Шаг берётся из аннотации visible_exercise_with_step: отдельный запрос сделал бы
+    страницу упражнения дороже ради одного числа.
+    """
+    step = getattr(exercise, "weight_step", None) or DEFAULT_WEIGHT_STEP
+    return {
+        "exercise": exercise,
+        "weight_step": step,
+        "weight_step_display": decimal_display(step),
+        "weight_step_choices": [
+            {"value": value, "display": decimal_display(value), "chosen": value == step}
+            for value in WEIGHT_STEP_CHOICES
+        ],
+        # Своё значение показываем в поле, только если оно не совпало ни с одним чипом.
+        "weight_step_own": ""
+        if any(value == step for value in WEIGHT_STEP_CHOICES)
+        else decimal_display(step),
+        "shows_weight_step": "weight_kg" in MEASUREMENT_FIELDS[exercise.measurement],
+        "saved": saved,
+        "error": error,
+    }
+
+
+class ExerciseWeightStepView(LoginRequiredMixin, View):
+    """Шаг кнопок «−» и «+» для веса этого упражнения.
+
+    В отличие от единицы и группы мышц правится у ЛЮБОГО видимого упражнения,
+    включая глобальные: это личная настройка, чужих данных она не трогает, а
+    настроить шаг у «Приседаний со штангой» — ровно тот случай, ради которого
+    настройка и появилась.
+    """
+
+    def post(self, request, pk):
+        exercise = visible_exercise_with_step(request.user, pk)
+        if "weight_kg" not in MEASUREMENT_FIELDS[exercise.measurement]:
+            return HttpResponseBadRequest("У этого упражнения нет веса")
+
+        # Своё поле перебивает чип — то же правило, что у группы мышц.
+        raw = request.POST.get("weight_step_own") or request.POST.get("weight_step") or ""
+        try:
+            step = parse_weight_step(raw)
+        except ValueError as error:
+            context = weight_step_context(exercise, error=str(error))
+            return render(request, "workouts/_weight_step_choice.html", context)
+
+        ExerciseSettings.objects.update_or_create(
+            user=request.user, exercise=exercise, defaults={"weight_step": step}
+        )
+        # Значение только что записано — перечитывать его из базы незачем.
+        exercise.weight_step = step
+        context = weight_step_context(exercise, saved=True)
+        return render(request, "workouts/_weight_step_choice.html", context)
 
 
 class ExerciseMuscleGroupView(LoginRequiredMixin, View):

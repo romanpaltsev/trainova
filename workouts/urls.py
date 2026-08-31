@@ -14,6 +14,11 @@ urlpatterns = [
         name="exercise_measurement",
     ),
     path(
+        "exercises/<int:pk>/weight-step/",
+        views.ExerciseWeightStepView.as_view(),
+        name="exercise_weight_step",
+    ),
+    path(
         "exercises/<int:pk>/muscle-group/",
         views.ExerciseMuscleGroupView.as_view(),
         name="exercise_muscle_group",

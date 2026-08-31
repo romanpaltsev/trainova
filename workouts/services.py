@@ -16,6 +16,7 @@ from workouts.models import (
     metric_display,
     rest_display,
     ru_plural,
+    with_weight_step,
 )
 
 
@@ -95,7 +96,11 @@ def exercise_groups(workout):
     Порядок добавления восстанавливается по id подходов: отдельного поля порядка нет,
     а плановые строки создаются в момент добавления упражнения.
     """
-    rows = list(workout.sets.select_related("exercise").order_by("id"))
+    # Шаг веса подмешивается той же выборкой: отдельный запрос на упражнение
+    # сделал бы экран зависимым от их числа.
+    rows = list(
+        with_weight_step(workout.sets.select_related("exercise"), workout.user_id).order_by("id")
+    )
     groups = []
     index = {}
     for row in rows:

@@ -1,0 +1,41 @@
+{% load l10n %}
+{% comment %}
+  Блок «Шаг веса» на странице упражнения: на столько меняют вес кнопки «−» и «+»
+  в живом режиме. У приседа со штангой удобен один шаг, у гантелей другой.
+
+  В отличие от «Измерения» и «Группы мышц» правится и у глобальных упражнений:
+  это личная настройка, у каждого пользователя своя, чужих данных она не трогает.
+
+  Формы здесь нет намеренно: каждый чип и поле «свой» постят себя сами, как в
+  блоке «Измерение». Внутри общей формы клик по чипу отправлял бы вместе с ним и
+  прежнее значение поля «свой» — а оно перебивает чип, и выбор не применялся бы.
+{% endcomment %}
+{% if shows_weight_step %}
+<div id="weight-step-choice" class="app-profile-block">
+  <div class="app-profile-block-title">Шаг веса</div>
+  <div class="app-chips" role="group" aria-label="Шаг веса">
+    {% for choice in weight_step_choices %}
+      <input type="radio" name="weight_step" id="step-{{ forloop.counter }}"
+             {% comment %}unlocalize: под ru-ru Decimal ушёл бы с запятой, а его разбирает сервер.{% endcomment %}
+             value="{{ choice.value|unlocalize }}" class="app-chip-input"
+             {% if choice.chosen %}checked{% endif %}
+             hx-post="{% url 'exercise_weight_step' exercise.pk %}"
+             hx-target="#weight-step-choice" hx-swap="outerHTML">
+      <label class="app-chip" for="step-{{ forloop.counter }}">{{ choice.display }}</label>
+    {% endfor %}
+    <input type="text" class="form-control app-group-input" name="weight_step_own"
+           inputmode="decimal" maxlength="6" placeholder="свой"
+           aria-label="Свой шаг веса, кг" value="{{ weight_step_own }}"
+           hx-post="{% url 'exercise_weight_step' exercise.pk %}"
+           hx-target="#weight-step-choice" hx-swap="outerHTML"
+           hx-trigger="keyup[key=='Enter']">
+  </div>
+  {% if error %}
+    <div class="invalid-feedback d-block mt-2">{{ error }}</div>
+  {% elif saved %}
+    <p class="app-queue-hint mt-2 mb-0">Сохранено: {{ weight_step_display }} кг за тап.</p>
+  {% else %}
+    <p class="app-queue-hint mt-2 mb-0">Сейчас {{ weight_step_display }} кг за тап.</p>
+  {% endif %}
+</div>
+{% endif %}
