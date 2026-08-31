@@ -178,6 +178,7 @@ def test_history_hides_active_workout(client, user):
         pytest.param("live_set_add", {"exercise": "1"}, id="add-set"),
         pytest.param("live_exercise_select", {"exercise": "1"}, id="select"),
         pytest.param("live_exercises", {"name": "Жим лёжа"}, id="attach"),
+        pytest.param("live_note", {"exercise": "1", "text": "подмена"}, id="note"),
         pytest.param("workout_finish", {}, id="finish"),
     ],
 )

@@ -9,6 +9,7 @@ from django.utils import timezone
 from workouts.tests.factories import (
     CardioDetailsFactory,
     ExerciseFactory,
+    ExerciseNoteFactory,
     StrengthSetFactory,
     WorkoutFactory,
 )
@@ -54,7 +55,8 @@ def test_exercise_page_query_budget(client, user, django_assert_max_num_queries)
     bench = fill_history(user)
 
     client.force_login(user)
-    with django_assert_max_num_queries(6):
+    # Седьмой запрос — заметки упражнения: один на всю историю, а не на тренировку.
+    with django_assert_max_num_queries(7):
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
@@ -76,6 +78,24 @@ def test_live_screen_query_budget(client, user, django_assert_max_num_queries, q
 
     client.force_login(user)
     with django_assert_max_num_queries(8):
+        client.get(reverse("workout_live", args=[active.pk]))
+
+
+@pytest.mark.parametrize("queued", [1, 6], ids=["one-exercise", "six-exercises"])
+def test_live_screen_with_notes_query_budget(client, user, django_assert_max_num_queries, queued):
+    """Заметки берутся одним запросом на тренировку плюс одним на прошлую заметку
+    текущего упражнения — и это не зависит от числа упражнений в очереди."""
+    bench = fill_history(user)
+    active = WorkoutFactory(user=user, duration_min=None)
+    # Текущее упражнение с историей: только тогда считается прошлая заметка.
+    StrengthSetFactory(workout=active, exercise=bench, set_number=1, done=False)
+    ExerciseNoteFactory(workout=active, exercise=bench, text="узкий хват")
+    for number, exercise in enumerate(ExerciseFactory.create_batch(queued), start=2):
+        StrengthSetFactory(workout=active, exercise=exercise, set_number=number, done=False)
+        ExerciseNoteFactory(workout=active, exercise=exercise, text="заметка очереди")
+
+    client.force_login(user)
+    with django_assert_max_num_queries(10):
         client.get(reverse("workout_live", args=[active.pk]))
 
 

@@ -48,6 +48,9 @@ urlpatterns = [
         name="live_exercise_select",
     ),
     path("workouts/<int:pk>/live/sets/", views.LiveSetAddView.as_view(), name="live_set_add"),
+    # Упражнение — параметром, как у live_set_add и live_exercise_select: тогда
+    # маршрут добавляется в общие таблицы тестов изоляции с одним args=[pk].
+    path("workouts/<int:pk>/live/note/", views.ExerciseNoteView.as_view(), name="live_note"),
     path("workouts/<int:pk>/live/rest/", views.LiveRestView.as_view(), name="live_rest"),
     path("workouts/<int:pk>/finish/", views.WorkoutFinishView.as_view(), name="workout_finish"),
     path("workouts/<int:pk>/summary/", views.WorkoutSummaryView.as_view(), name="workout_summary"),

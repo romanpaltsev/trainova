@@ -1,0 +1,31 @@
+{% comment %}
+  Заметка к упражнению. Сохранение отвечает пустым телом (модалка закрывается)
+  плюс OOB-обновлением региона упражнений — тот же приём, что у «+ Упражнение».
+  Текст в textarea пишется в одну строку: отступы шаблона иначе попали бы в значение.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="note-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="note-modal-title">Заметка к упражнению</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <p class="app-queue-hint mb-2">{{ exercise.name }}</p>
+
+    <form hx-post="{% url 'live_note' workout.pk %}" hx-target="#modal" hx-swap="innerHTML"
+          hx-disabled-elt="find button">
+      <input type="hidden" name="exercise" value="{{ exercise.pk }}">
+      <textarea name="text" class="form-control" rows="3" maxlength="{{ max_length }}"
+                placeholder="напр. болело плечо, взял узкий хват" autofocus>{{ text }}</textarea>
+      {% if error %}<div class="invalid-feedback d-block mt-2">{{ error }}</div>{% endif %}
+      <p class="app-queue-hint mt-2 mb-0">Пустая заметка — то же, что её удалить.</p>
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -29,6 +29,10 @@ REST_MIN_SECONDS = 15
 REST_MAX_SECONDS = 600
 REST_DELTAS = {"-15", "15"}
 
+# Длина заметки к упражнению: CharField, а не TextField с max_length, —
+# чтобы границу держала и база, а не только форма.
+NOTE_MAX_LENGTH = 500
+
 
 def clamp_rest_seconds(seconds):
     return max(REST_MIN_SECONDS, min(REST_MAX_SECONDS, seconds))
@@ -540,6 +544,48 @@ class StrengthSet(models.Model):
         if measurement == Exercise.Measurement.REPS:
             return f"{self.reps} {ru_plural(self.reps, 'повтор', 'повтора', 'повторов')}"
         return f"{self.weight_display} кг × {self.reps}"
+
+
+class ExerciseNote(models.Model):
+    """Заметка к упражнению в конкретной тренировке: «болело плечо», «узкий хват».
+
+    Пары «тренировка + упражнение» в схеме нет — группы собираются на ходу в
+    services.exercise_groups, а StrengthSet описывает отдельный подход, поэтому
+    заметке нужна своя строка.
+    """
+
+    workout = models.ForeignKey(
+        Workout,
+        verbose_name="тренировка",
+        on_delete=models.CASCADE,
+        related_name="exercise_notes",
+    )
+    # CASCADE, а не PROTECT как у подхода: заметка без упражнения бессмысленна, а
+    # PROTECT добавил бы ещё одну причину «упражнение нельзя удалить» — причём
+    # заметка могла остаться там, где подходов уже нет, и объяснить это было бы нечем.
+    exercise = models.ForeignKey(
+        Exercise,
+        verbose_name="упражнение",
+        on_delete=models.CASCADE,
+        related_name="notes",
+    )
+    text = models.CharField("заметка", max_length=NOTE_MAX_LENGTH)
+
+    class Meta:
+        verbose_name = "заметка к упражнению"
+        verbose_name_plural = "заметки к упражнениям"
+        constraints = [
+            # «Заметки нет» — это отсутствие строки, а не пустой текст: у состояния
+            # одно представление, и шаблонам не нужно различать пустоту и отсутствие.
+            models.UniqueConstraint(
+                fields=["workout", "exercise"],
+                name="unique_note_per_workout_exercise",
+                violation_error_message="Заметка к этому упражнению в тренировке уже есть.",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.exercise} · {self.text[:40]}"
 
 
 class CardioDetails(models.Model):

@@ -843,6 +843,29 @@ body {
   font-size: 1.125rem;
 }
 
+/* Заметка упражнения: строка-кнопка под подсказкой «прошлый раз».
+   Своя заметка читается как текст, пустая — как действие. */
+.app-note-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: 100%;
+  min-height: var(--app-tap-target);
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: var(--app-text-secondary);
+  font-size: 0.9375rem;
+  text-align: left;
+}
+
+.app-note-btn.is-empty {
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+.app-note-icon { flex: 0 0 auto; }
+
 .app-live-links {
   display: flex;
   align-items: center;

@@ -25,11 +25,13 @@ from workouts.models import (
     MEASUREMENT_FIELDS,
     METRIC_LABELS,
     METRIC_UNITS,
+    NOTE_MAX_LENGTH,
     REST_DELTAS,
     SET_STEPS,
     TIME_MEASUREMENTS,
     ChangelogEntry,
     Exercise,
+    ExerciseNote,
     Sport,
     StrengthSet,
     Workout,
@@ -533,6 +535,78 @@ class LiveSetAddView(LoginRequiredMixin, View):
         return live_region_response(request, workout)
 
 
+class ExerciseNoteView(LoginRequiredMixin, View):
+    """Заметка к упражнению тренировки: модалка на GET, сохранение на POST.
+
+    Упражнение резолвится ЧЕРЕЗ тренировку, а тренировка — через
+    live_workout_or_404, поэтому чужая тренировка, завершённая (заметка после
+    записи только читается) и упражнение не из этой тренировки дают 404 без
+    отдельных проверок.
+
+    Формы здесь нет намеренно: пустой текст означает «убрать заметку», а
+    ModelForm на непустом поле счёл бы это ошибкой. Остальные эндпоинты живого
+    режима тоже читают POST напрямую и отдают error в шаблон.
+    """
+
+    def get(self, request, pk):
+        workout, exercise = self.resolve(request, pk, request.GET.get("exercise", ""))
+        return self.render_modal(request, workout, exercise, self.text(workout, exercise))
+
+    def post(self, request, pk):
+        workout, exercise = self.resolve(request, pk, request.POST.get("exercise", ""))
+        text = request.POST.get("text", "").strip()
+        if len(text) > NOTE_MAX_LENGTH:
+            return self.render_modal(
+                request, workout, exercise, text, error="Заметка слишком длинная."
+            )
+        if text:
+            # update_or_create безопасен под ATOMIC_REQUESTS: внутри он свой
+            # savepoint, поэтому гонка двух вкладок не отравит транзакцию.
+            ExerciseNote.objects.update_or_create(
+                workout=workout, exercise=exercise, defaults={"text": text}
+            )
+        else:
+            ExerciseNote.objects.filter(workout=workout, exercise=exercise).delete()
+        # Пустое тело закрывает модалку, регион упражнений обновляется out-of-band.
+        # restart_timer не передаём: сохранение заметки не должно перезапускать отдых.
+        return live_region_response(request, workout, oob=True)
+
+    @staticmethod
+    def resolve(request, pk, exercise_id):
+        workout = live_workout_or_404(request, pk)
+        if not exercise_id.isdecimal():
+            raise Http404("Упражнение не найдено")
+        # Через подходы тренировки: это строже, чем visible_to — чужое личное
+        # упражнение сюда не попадёт по определению.
+        exercise = get_object_or_404(
+            Exercise.objects.filter(sets__workout=workout).distinct(), pk=int(exercise_id)
+        )
+        return workout, exercise
+
+    @staticmethod
+    def text(workout, exercise):
+        return (
+            ExerciseNote.objects.filter(workout=workout, exercise=exercise)
+            .values_list("text", flat=True)
+            .first()
+            or ""
+        )
+
+    @staticmethod
+    def render_modal(request, workout, exercise, text, error=""):
+        return render(
+            request,
+            "workouts/_note_modal.html",
+            {
+                "workout": workout,
+                "exercise": exercise,
+                "text": text,
+                "max_length": NOTE_MAX_LENGTH,
+                "error": error,
+            },
+        )
+
+
 class LiveRestView(LoginRequiredMixin, View):
     """Сохранение длительности отдыха тренировки (кнопки ±15 на нетикающем таймере)."""
 
@@ -609,6 +683,9 @@ class SetDeleteView(LoginRequiredMixin, View):
         row.delete()
         # Номера не пересчитываются: на экране подходы нумеруются по позиции,
         # а перенумерация рисковала бы упереться в уникальный индекс.
+        # Если это был последний подход упражнения, его заметке в тренировке
+        # больше не место — иначе она всплыла бы при повторном добавлении.
+        services.drop_orphan_notes(workout)
         return live_region_response(request, workout)
 
 
@@ -649,6 +726,9 @@ class WorkoutFinishView(LoginRequiredMixin, View):
             # Даблтап или кнопка «назад»: тренировка уже завершена.
             return redirect("workout_summary", pk=workout.pk)
         workout.sets.filter(done=False).delete()
+        # Упражнение, которое так и не сделали, уходит вместе с плановыми
+        # подходами — и его заметка тоже.
+        services.drop_orphan_notes(workout)
         if not workout.sets.exists():
             workout.delete()
             messages.info(request, "Тренировка не записана: нет выполненных подходов.")

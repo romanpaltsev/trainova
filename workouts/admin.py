@@ -4,6 +4,7 @@ from workouts.models import (
     CardioDetails,
     ChangelogEntry,
     Exercise,
+    ExerciseNote,
     Sport,
     StrengthSet,
     Workout,
@@ -46,6 +47,13 @@ class StrengthSetInline(admin.TabularInline):
     fields = ("exercise", "set_number", "measurement", "weight_kg", "reps", "duration_sec", "done")
 
 
+class ExerciseNoteInline(admin.TabularInline):
+    model = ExerciseNote
+    extra = 0
+    autocomplete_fields = ("exercise",)
+    fields = ("exercise", "text")
+
+
 class CardioDetailsInline(admin.StackedInline):
     model = CardioDetails
     extra = 0
@@ -61,7 +69,7 @@ class WorkoutAdmin(admin.ModelAdmin):
     date_hierarchy = "started_at"
     search_fields = ("user__email", "note")
     autocomplete_fields = ("user", "sport")
-    inlines = (StrengthSetInline, CardioDetailsInline)
+    inlines = (StrengthSetInline, ExerciseNoteInline, CardioDetailsInline)
 
     @admin.display(description="состояние")
     def state(self, obj):

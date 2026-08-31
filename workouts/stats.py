@@ -16,6 +16,7 @@ from workouts.models import (
     METRIC_LABELS,
     SPEED_THRESHOLD_KMH,
     Exercise,
+    ExerciseNote,
     Sport,
     StrengthSet,
     Workout,
@@ -387,10 +388,21 @@ def exercise_progress(user, exercise):
         group = progress[seen[row.workout_id]]
         group["sets"].append(row)
         group["max_value"] = max(group["max_value"], float(row.metric_value))
+    # Заметки одним запросом на всю историю упражнения, а не по тренировке.
+    notes = (
+        dict(
+            ExerciseNote.objects.filter(exercise=exercise, workout__user=user).values_list(
+                "workout_id", "text"
+            )
+        )
+        if progress
+        else {}
+    )
     for group in progress:
         # Метрика берётся у упражнения, а не у подхода: если упражнение перевели
         # в другую единицу, график должен говорить на одном языке.
         group["max_value_display"] = metric_display(exercise.measurement, group["max_value"])
+        group["note"] = notes.get(group["workout"].pk, "")
     return progress
 
 

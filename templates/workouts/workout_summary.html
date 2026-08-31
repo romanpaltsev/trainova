@@ -43,6 +43,7 @@
       </h2>
       <span class="app-live-exercise-meta">{{ group.total }}</span>
     </div>
+    {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}
     <div class="app-live-sets">
       {% for set in group.sets %}
         <div class="app-live-set">

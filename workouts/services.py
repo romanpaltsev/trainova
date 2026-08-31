@@ -10,6 +10,7 @@ from workouts.models import (
     MEASUREMENT_FIELDS,
     METRIC_FIELDS,
     Exercise,
+    ExerciseNote,
     StrengthSet,
     decimal_display,
     metric_display,
@@ -102,12 +103,48 @@ def exercise_groups(workout):
             index[row.exercise_id] = len(groups)
             groups.append({"exercise": row.exercise, "sets": []})
         groups[index[row.exercise_id]]["sets"].append(row)
+    # Заметки одним запросом на всю тренировку: в цикле по группам это был бы
+    # запрос на упражнение, и бюджет экрана рос бы вместе с их числом.
+    notes = notes_by_exercise(workout) if groups else {}
     for group in groups:
         group["sets"].sort(key=lambda item: item.set_number)
+        group["note"] = notes.get(group["exercise"].pk, "")
         # Номер на экране — позиция в списке: в set_number могут остаться пропуски.
         for position, row in enumerate(group["sets"], start=1):
             row.display_number = position
     return groups
+
+
+def notes_by_exercise(workout):
+    """Заметки тренировки: {exercise_id: текст}."""
+    return dict(ExerciseNote.objects.filter(workout=workout).values_list("exercise_id", "text"))
+
+
+def last_note(previous, exercise):
+    """Заметка из той же тренировки, что дала подходы для подстановки.
+
+    Именно из той же: подсказка «прошлый раз» уже говорит об одной конкретной
+    тренировке, и заметка рядом должна быть про неё, а не про какую-то давнюю.
+    """
+    if not previous:
+        return ""
+    return (
+        ExerciseNote.objects.filter(workout_id=previous[0].workout_id, exercise=exercise)
+        .values_list("text", flat=True)
+        .first()
+        or ""
+    )
+
+
+def drop_orphan_notes(workout):
+    """Убрать заметки упражнений, которых в тренировке больше нет.
+
+    Группы строятся из подходов, поэтому такая заметка уже не видна — но всплыла бы,
+    если то же упражнение добавить в тренировку снова.
+    """
+    ExerciseNote.objects.filter(workout=workout).exclude(
+        exercise__in=workout.sets.values("exercise")
+    ).delete()
 
 
 def live_groups(workout):
@@ -131,7 +168,11 @@ def live_groups(workout):
             group["current_set"] = pending[0]
             # Остальные плановые подходы показываются как план под текущим.
             group["upcoming"] = pending[1:]
-            group["hint"] = last_time_hint(last_sets(workout.user, group["exercise"]))
+            previous = last_sets(workout.user, group["exercise"])
+            group["hint"] = last_time_hint(previous)
+            # Заметка только у текущего упражнения: у строк очереди подсказка
+            # короткая, а запрос на каждую сделал бы экран зависимым от их числа.
+            group["last_note"] = last_note(previous, group["exercise"])
         elif group["exercise"].pk in pending_ids:
             group["state"] = "queue"
             group["hint"] = queue_hint(sets)

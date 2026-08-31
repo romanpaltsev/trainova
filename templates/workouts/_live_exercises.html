@@ -11,6 +11,11 @@
         <span class="app-sport-dot" style="--dot: var(--app-sport-strength)"></span>
       </div>
       <p class="app-live-last">{{ current_group.hint }}</p>
+      {% comment %}
+        Заметка стоит под заголовком, а не в ряду ссылок про подходы: она про
+        упражнение, и третья ссылка в том ряду переносилась бы на 375px.
+      {% endcomment %}
+      {% include "workouts/_live_note.html" with group=current_group %}
 
       {% if current_group.done_sets %}
         <div class="app-live-sets">
@@ -61,6 +66,10 @@
         <span class="app-queue-text">
           <span class="app-queue-name">{{ group.exercise.name }}</span>
           <span class="app-queue-hint">{{ group.hint }}</span>
+          {% comment %}Только текст: сама строка очереди — button, вложенная кнопка невалидна.{% endcomment %}
+          {% if group.note %}
+            <span class="app-queue-hint">{{ group.note|truncatechars:60 }}</span>
+          {% endif %}
         </span>
         <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -86,6 +95,7 @@
           <h2 class="app-live-exercise-name">{{ group.exercise.name }}</h2>
           <span class="app-live-exercise-meta">{{ group.hint }}</span>
         </div>
+        {% include "workouts/_live_note.html" with group=group %}
         <div class="app-live-sets">
           {% for set in group.done_sets %}
             {% include "workouts/_live_done_set.html" %}

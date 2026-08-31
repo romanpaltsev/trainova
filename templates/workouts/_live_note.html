@@ -1,0 +1,18 @@
+{% comment %}
+  Заметка упражнения в карточке живого режима: прошлая — строкой, своя — кнопкой.
+  Один партиал на текущее и выполненное упражнение: иначе заметка исчезала бы с
+  экрана в тот момент, когда последний подход отмечен выполненным.
+
+  Ждёт `group` (из services.live_groups) и `workout`.
+{% endcomment %}
+{% if group.last_note %}
+  <p class="app-live-last">заметка в прошлый раз: {{ group.last_note|truncatechars:120 }}</p>
+{% endif %}
+<button type="button" class="app-note-btn{% if not group.note %} is-empty{% endif %}"
+        aria-label="{% if group.note %}Изменить заметку{% else %}Добавить заметку{% endif %}"
+        hx-get="{% url 'live_note' workout.pk %}"
+        hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
+        hx-target="#modal" hx-swap="innerHTML">
+  {% include "includes/pencil.html" %}
+  <span>{% if group.note %}{{ group.note|truncatechars:80 }}{% else %}Заметка{% endif %}</span>
+</button>

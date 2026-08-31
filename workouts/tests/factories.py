@@ -6,6 +6,7 @@ from workouts.models import (
     CardioDetails,
     ChangelogEntry,
     Exercise,
+    ExerciseNote,
     Sport,
     StrengthSet,
     Workout,
@@ -69,6 +70,15 @@ class RepsSetFactory(StrengthSetFactory):
     measurement = Exercise.Measurement.REPS
     weight_kg = 0
     reps = 12
+
+
+class ExerciseNoteFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ExerciseNote
+
+    workout = factory.SubFactory(WorkoutFactory)
+    exercise = factory.SubFactory(ExerciseFactory)
+    text = "Болело плечо"
 
 
 class CardioDetailsFactory(factory.django.DjangoModelFactory):
