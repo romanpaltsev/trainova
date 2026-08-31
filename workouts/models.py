@@ -2,10 +2,10 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
-from django.db.models.functions import Lower
+from django.db.models.functions import Coalesce, Lower
 from django.utils import timezone
 from django.utils.timezone import localtime
 
@@ -269,7 +269,16 @@ TIME_MEASUREMENTS = frozenset({Exercise.Measurement.TIME, Exercise.Measurement.T
 # Шаг степпера по полю подхода. Живёт здесь, а не во вьюхе: по нему считается
 # арифметика тапа, подписывается кнопка и предсказывается значение на клиенте —
 # расходиться этим трём нельзя.
-SET_STEPS = {"weight_kg": Decimal("2.5"), "reps": 1, "duration_sec": 15}
+#
+# Вес — единственное поле, шаг которого настраивается: у приседа со штангой он
+# один, у гантельного жима другой. Значение берётся из ExerciseSettings, а здесь
+# лежит умолчание для упражнений, которым шаг не задавали.
+DEFAULT_WEIGHT_STEP = Decimal("2.5")
+WEIGHT_STEP_MIN = Decimal("0.25")
+WEIGHT_STEP_MAX = Decimal("50")
+# Чипы частых значений: микроблины, стандартные блины и «пятёрка» для ног.
+WEIGHT_STEP_CHOICES = [Decimal(v) for v in ("0.5", "1", "1.25", "2.5", "5")]
+SET_STEPS = {"weight_kg": DEFAULT_WEIGHT_STEP, "reps": 1, "duration_sec": 15}
 # Границы значений подхода. Вес ограничен max_digits=5 самого поля, остальные —
 # здравым смыслом. Их же сервер отдаёт клиенту в data-атрибутах степпера.
 MAX_WEIGHT_KG = Decimal("999.99")
@@ -278,20 +287,42 @@ MAX_DURATION_SEC = 3600  # час удержания — с большим за�
 SET_LIMITS = {"weight_kg": MAX_WEIGHT_KG, "reps": MAX_REPS, "duration_sec": MAX_DURATION_SEC}
 # Как значение выглядит и как его предсказывает клиент до ответа сервера.
 FIELD_FORMATS = {"weight_kg": "decimal", "reps": "int", "duration_sec": "time"}
-# Подпись поля и то, что читает скринридер на кнопках «−» и «+».
+# Подпись поля; у веса озвучка кнопки собирается из его шага.
 FIELD_INPUT = {
-    "weight_kg": {"label": "Вес, кг", "aria": "2,5 кг"},
+    "weight_kg": {"label": "Вес, кг", "aria": "{step} кг"},
     "reps": {"label": "Повторы", "aria": "повтор"},
     "duration_sec": {"label": "Время", "aria": "15 секунд"},
 }
 
 
-def step_display(field):
-    """Подпись шага под степпером: «2,5» · «1» · «15 с»."""
-    step = SET_STEPS[field]
+def step_display(field, weight_step=None):
+    """Подпись шага под степпером: «2,5» · «1» · «15 с».
+
+    weight_step — шаг веса этого упражнения; None означает «как обычно».
+    """
+    step = weight_step if field == "weight_kg" and weight_step is not None else SET_STEPS[field]
     if field == "duration_sec":
         return f"{step} с"
     return decimal_display(step) if isinstance(step, Decimal) else str(step)
+
+
+def parse_weight_step(text):
+    """Введённый руками шаг веса → Decimal, или ValueError с текстом для человека.
+
+    Разбор здесь, а не на клиенте, — как у значения подхода в parse_field_value.
+    """
+    cleaned = (text or "").strip().replace(",", ".")
+    if not cleaned:
+        raise ValueError("Укажите шаг, например 0,5.")
+    try:
+        step = Decimal(cleaned).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except InvalidOperation as error:
+        raise ValueError("Шаг — это число, например 0,5.") from error
+    if step < WEIGHT_STEP_MIN or step > WEIGHT_STEP_MAX:
+        raise ValueError(
+            f"Шаг — от {decimal_display(WEIGHT_STEP_MIN)} до {decimal_display(WEIGHT_STEP_MAX)} кг."
+        )
+    return step
 
 
 def parse_field_value(field, text):
@@ -610,21 +641,31 @@ class StrengthSet(models.Model):
         предсказанное значение сразу, не дожидаясь ответа, а правила при этом
         остаются в одном месте — здесь.
         """
+        weight_step = self.effective_weight_step
         return [
             {
                 "name": name,
                 "label": FIELD_INPUT[name]["label"],
-                "aria": FIELD_INPUT[name]["aria"],
-                "step": step_display(name),
+                "aria": FIELD_INPUT[name]["aria"].format(step=step_display(name, weight_step)),
+                "step": step_display(name, weight_step),
                 "value": self.field_display(name),
                 "raw": getattr(self, name),
-                "step_raw": SET_STEPS[name],
+                "step_raw": weight_step if name == "weight_kg" else SET_STEPS[name],
                 "max_raw": SET_LIMITS[name],
                 "format": FIELD_FORMATS[name],
                 "inputmode": "decimal" if name == "weight_kg" else "numeric",
             }
             for name in MEASUREMENT_FIELDS[self.measurement]
         ]
+
+    @property
+    def effective_weight_step(self):
+        """Шаг веса этого упражнения: из аннотации with_weight_step или умолчание.
+
+        Падение на умолчание, а не ошибка: подход рендерится и там, где аннотацию
+        никто не вешал (например, в тестах и в админке).
+        """
+        return getattr(self, "weight_step", None) or DEFAULT_WEIGHT_STEP
 
     def field_display(self, field):
         """Значение одного поля для степпера: «77,5» · «8» · «1:30»."""
@@ -690,6 +731,79 @@ class ExerciseNote(models.Model):
 
     def __str__(self):
         return f"{self.exercise} · {self.text[:40]}"
+
+
+def with_weight_step(queryset, user, *, exercise_ref="exercise"):
+    """Подмешать шаг веса упражнения — одним запросом, без N+1.
+
+    Годится и для подходов (exercise_ref="exercise"), и для самих упражнений
+    (exercise_ref="pk"). Строки настроек может не быть, поэтому Coalesce
+    подставляет умолчание. Аннотация называется так же, как поле настроек:
+    читающий код не знает, откуда значение взялось.
+    """
+    own_step = ExerciseSettings.objects.filter(
+        user=user, exercise=models.OuterRef(exercise_ref)
+    ).values("weight_step")[:1]
+    return queryset.annotate(
+        weight_step=Coalesce(
+            models.Subquery(
+                own_step, output_field=models.DecimalField(max_digits=4, decimal_places=2)
+            ),
+            models.Value(
+                DEFAULT_WEIGHT_STEP,
+                output_field=models.DecimalField(max_digits=4, decimal_places=2),
+            ),
+        )
+    )
+
+
+class ExerciseSettings(models.Model):
+    """Настройки упражнения у конкретного пользователя.
+
+    Отдельная модель, а не поля в Exercise: глобальные упражнения правит только
+    админ, а шаг веса у приседа со штангой каждый настраивает под свой зал —
+    и у приглашённых друзей он свой. Сюда же добавляются будущие настройки
+    упражнения, поэтому имя модели про настройки вообще, а не про шаг.
+
+    Строки нет — действуют умолчания; она появляется при первом изменении.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="пользователь",
+        on_delete=models.CASCADE,
+        related_name="exercise_settings",
+    )
+    # CASCADE, как у заметки: настройка без упражнения бессмысленна, а PROTECT
+    # добавил бы ещё одну причину «личное упражнение нельзя удалить».
+    exercise = models.ForeignKey(
+        Exercise,
+        verbose_name="упражнение",
+        on_delete=models.CASCADE,
+        related_name="user_settings",
+    )
+    weight_step = models.DecimalField(
+        "шаг веса, кг",
+        max_digits=4,
+        decimal_places=2,
+        default=DEFAULT_WEIGHT_STEP,
+        validators=[MinValueValidator(WEIGHT_STEP_MIN), MaxValueValidator(WEIGHT_STEP_MAX)],
+        help_text="На столько меняют вес кнопки «−» и «+» в живом режиме.",
+    )
+
+    class Meta:
+        verbose_name = "настройки упражнения"
+        verbose_name_plural = "настройки упражнений"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "exercise"],
+                name="unique_settings_per_user_exercise",
+                violation_error_message="Настройки этого упражнения у вас уже есть.",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.exercise} · шаг {decimal_display(self.weight_step)} кг"
 
 
 class CardioDetails(models.Model):

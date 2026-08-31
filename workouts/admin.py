@@ -5,6 +5,7 @@ from workouts.models import (
     ChangelogEntry,
     Exercise,
     ExerciseNote,
+    ExerciseSettings,
     Sport,
     StrengthSet,
     Workout,
@@ -36,6 +37,16 @@ class SportAdmin(CatalogAdmin):
 class ExerciseAdmin(CatalogAdmin):
     list_display = ("name", "muscle_group", "measurement", "owner_display")
     list_filter = ("measurement", "muscle_group", "owner")
+
+
+@admin.register(ExerciseSettings)
+class ExerciseSettingsAdmin(admin.ModelAdmin):
+    """Личные настройки упражнений — на случай разбора «почему шаг такой»."""
+
+    list_display = ("user", "exercise", "weight_step")
+    list_filter = ("user",)
+    search_fields = ("user__email", "exercise__name")
+    autocomplete_fields = ("user", "exercise")
 
 
 class StrengthSetInline(admin.TabularInline):
