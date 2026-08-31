@@ -1,4 +1,4 @@
-bootstrap 5.3.8
+bootstrap 5.3.8 — только bootstrap.min.css, JS-бандл не вендорим (см. templates/_page.html)
 htmx 2.0.10
 alpinejs 3.16.3
 chart.js 4.5.1

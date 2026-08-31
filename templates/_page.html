@@ -80,7 +80,14 @@
   {% block body %}{% endblock %}
 
   <script src="{% static 'js/theme.js' %}"></script>
-  <script src="{% static 'vendor/bootstrap/bootstrap.bundle.min.js' %}"></script>
+  {% comment %}
+    От Bootstrap здесь только стили: его JS не подключён и не вендорится.
+    Модалки и мелкий интерактив — на Alpine, переключение тем — атрибутом
+    data-bs-theme, а в 5.3 color modes работают чистым CSS. Bundle весил
+    80 КБ, которые телефон качал и разбирал впустую. Если однажды понадобится
+    компонент Bootstrap с поведением (dropdown, collapse, tooltip) — вернуть
+    файл в static/vendor/bootstrap/ и подключить здесь.
+  {% endcomment %}
   <script src="{% static 'vendor/htmx/htmx.min.js' %}"></script>
   <script src="{% static 'vendor/alpine/alpine.min.js' %}" defer></script>
   {% block extra_scripts %}{% endblock %}
