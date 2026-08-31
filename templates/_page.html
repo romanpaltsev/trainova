@@ -23,6 +23,15 @@
   <meta name="apple-mobile-web-app-title" content="Дневник">
   <meta name="mobile-web-app-capable" content="yes">
 
+  {% comment %}
+    Таймаут запроса. По умолчанию у htmx его нет вовсе, и на мобильной сети
+    повисший запрос не завершается никогда: очередь hx-sync (степперы живого
+    режима) не сдвигается, и значение на экране застывает до перезагрузки.
+    Десять секунд — заметно больше любого нормального ответа и заметно меньше
+    терпения человека со штангой.
+  {% endcomment %}
+  <meta name="htmx-config" content='{"timeout": 10000}'>
+
   <link rel="stylesheet" href="{% static 'vendor/bootstrap/bootstrap.min.css' %}">
   <link rel="stylesheet" href="{% static 'css/fonts.css' %}">
   <link rel="stylesheet" href="{% static 'css/tokens.css' %}">

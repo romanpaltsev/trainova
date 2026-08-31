@@ -31,6 +31,25 @@
         <label class="app-chip" for="new-measure-{{ value }}">{{ label }}</label>
       {% endfor %}
     </div>
+
+    {% comment %}
+      Группа мышц: чипы из уже принятых значений и отдельное поле для своей.
+      Имена разные — своё значение перебивает чип по явному правилу на сервере,
+      а не по порядку полей в форме. Написание сервер приводит к уже принятому.
+    {% endcomment %}
+    <div class="app-stepper-label">Группа мышц</div>
+    <div class="app-chips mb-2" role="group" aria-label="Группа мышц"
+         x-data="{ own: '{{ selected_muscle_group|escapejs }}' }">
+      {% for group in muscle_groups %}
+        <input type="radio" name="muscle_group" id="new-group-{{ forloop.counter }}"
+               value="{{ group }}" class="app-chip-input"
+               {% if selected_muscle_group == group %}checked{% endif %} @change="own = ''">
+        <label class="app-chip" for="new-group-{{ forloop.counter }}">{{ group }}</label>
+      {% endfor %}
+      <input type="text" class="form-control app-group-input" name="muscle_group_own"
+             maxlength="{{ muscle_group_max_length }}" placeholder="своя"
+             aria-label="Своя группа мышц" x-model="own">
+    </div>
     <button type="submit" class="app-pick-row app-pick-create">+ Создать «{{ q }}»</button>
   </form>
 {% endif %}

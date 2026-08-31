@@ -1,0 +1,36 @@
+{% comment %}
+  Блок «Группа мышц» на странице упражнения. У своих упражнений — чипы уже
+  принятых значений плюс поле для своей; у глобальных приглушённая строка, их
+  правит только админ. Приём тот же, что у блока «Измерение».
+{% endcomment %}
+<div id="muscle-group-choice" class="app-profile-block">
+  <div class="app-profile-block-title">Группа мышц</div>
+  {% if can_edit_measurement %}
+    <form hx-post="{% url 'exercise_muscle_group' exercise.pk %}"
+          hx-target="#muscle-group-choice" hx-swap="outerHTML"
+          x-data="{ own: '' }">
+      <div class="app-chips" role="group" aria-label="Группа мышц">
+        {% for group in muscle_groups %}
+          <input type="radio" name="muscle_group" id="group-{{ forloop.counter }}"
+                 value="{{ group }}" class="app-chip-input"
+                 {% if exercise.muscle_group == group %}checked{% endif %}
+                 @change="own = ''; $el.form.requestSubmit()">
+          <label class="app-chip" for="group-{{ forloop.counter }}">{{ group }}</label>
+        {% endfor %}
+        <input type="text" class="form-control app-group-input" name="muscle_group_own"
+               maxlength="{{ max_length }}" placeholder="своя"
+               aria-label="Своя группа мышц" x-model="own"
+               @keydown.enter.prevent="$el.form.requestSubmit()">
+      </div>
+      {% if saved %}
+        <p class="app-queue-hint mt-2 mb-0">
+          {% if exercise.muscle_group %}Сохранено.{% else %}Группа убрана.{% endif %}
+        </p>
+      {% endif %}
+    </form>
+  {% else %}
+    <p class="app-queue-hint mb-0">
+      {% if exercise.muscle_group %}{{ exercise.muscle_group }}{% else %}не указана{% endif %}
+    </p>
+  {% endif %}
+</div>

@@ -1,3 +1,4 @@
+{% load l10n %}
 {% comment %}
   Панель текущего подхода. Степперы сохраняют каждый тап сразу и свапают только
   span со значением — кнопки не пересоздаются, серия быстрых тапов не теряется.
@@ -24,22 +25,49 @@
   {% with fields=set.stepper_fields %}
   <div class="app-field-grid{% if fields|length == 1 %} is-single{% endif %}">
     {% for field in fields %}
-      <div>
+      {% comment %}
+        Тап по числу открывает ввод руками: сорок тапов по «+» ради сотни
+        килограммов больше не нужны. Пока поле открыто, кнопки ±44px скрыты —
+        иначе на 375px полю осталось бы ~55px.
+      {% endcomment %}
+      <div class="app-stepper-field" x-data="stepperInput()"
+           data-field="{{ field.name }}" data-value-url="{% url 'set_value' set.pk %}">
         <div class="app-stepper-label">{{ field.label }}</div>
         <div class="app-stepper">
           <button type="button" class="app-stepper-btn" aria-label="Минус {{ field.aria }}"
+                  x-show="!editing" data-dir="down"
                   hx-post="{% url 'set_adjust' set.pk %}"
                   hx-vals='{"field": "{{ field.name }}", "dir": "down"}'
                   hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
                   hx-sync="closest .app-live-current:queue all">−</button>
-          <span id="cs-{{ field.name }}" class="num app-stepper-value">{{ field.value }}</span>
+          <span id="cs-{{ field.name }}" class="num app-stepper-value" x-ref="value"
+                x-show="!editing" role="button" tabindex="0"
+                aria-label="{{ field.label }} — ввести значение"
+                @click="open()" @keydown.enter.prevent="open()"
+                {% comment %}unlocalize: под ru-ru Decimal вышел бы с запятой, а его читает parseFloat.{% endcomment %}
+                data-step="{{ field.step_raw|unlocalize }}" data-max="{{ field.max_raw|unlocalize }}"
+                data-format="{{ field.format }}">{{ field.value }}</span>
           <button type="button" class="app-stepper-btn" aria-label="Плюс {{ field.aria }}"
+                  x-show="!editing" data-dir="up"
                   hx-post="{% url 'set_adjust' set.pk %}"
                   hx-vals='{"field": "{{ field.name }}", "dir": "up"}'
                   hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
                   hx-sync="closest .app-live-current:queue all">+</button>
+          <input type="text" class="form-control app-stepper-input" x-ref="input" x-cloak
+                 x-show="editing" inputmode="{{ field.inputmode }}"
+                 aria-label="{{ field.label }}"
+                 hx-post="{% url 'set_value' set.pk %}" name="value"
+                 hx-vals='{"field": "{{ field.name }}"}'
+                 hx-trigger="keyup[key=='Enter'], blur"
+                 hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
+                 hx-sync="closest .app-live-current:queue all"
+                 @keydown.escape.stop="close()"
+                 @htmx:after-request="$event.detail.successful ? close() : failed($event.detail)">
         </div>
-        <div class="app-stepper-hint">шаг {{ field.step }}</div>
+        <div class="app-stepper-hint" x-show="!editing">шаг {{ field.step }}</div>
+        <div class="app-stepper-hint app-stepper-notice" hidden>не сохранено — проверьте связь</div>
+        <div class="invalid-feedback d-block app-stepper-hint" x-show="error" x-cloak
+             x-text="error"></div>
       </div>
     {% endfor %}
   </div>

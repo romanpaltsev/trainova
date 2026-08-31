@@ -6,7 +6,14 @@ from django import forms
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from workouts.models import CardioDetails, Exercise, Sport, Workout
+from workouts.models import (
+    CardioDetails,
+    Exercise,
+    Sport,
+    Workout,
+    chosen_muscle_group,
+    muscle_groups_for,
+)
 
 MAX_DURATION_HOURS = 24
 # Время, которое ставим тренировке, записанной за прошедший день: точное время
@@ -204,7 +211,7 @@ class ExerciseQuickForm(forms.ModelForm):
 
     class Meta:
         model = Exercise
-        fields = ("name", "measurement")
+        fields = ("name", "measurement", "muscle_group")
         error_messages = {"name": {"required": "Введите название."}}
 
     def __init__(self, *args, user, **kwargs):
@@ -216,6 +223,10 @@ class ExerciseQuickForm(forms.ModelForm):
 
     def clean_measurement(self):
         return self.cleaned_data.get("measurement") or Exercise.Measurement.WEIGHT_REPS
+
+    def clean_muscle_group(self):
+        """Группа мышц необязательна; выбор чипа и своё поле сводит одно правило."""
+        return chosen_muscle_group(self.data, muscle_groups_for(self.user))
 
     def clean_name(self):
         return self.cleaned_data["name"].strip()

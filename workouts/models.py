@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -32,6 +32,8 @@ REST_DELTAS = {"-15", "15"}
 # Длина заметки к упражнению: CharField, а не TextField с max_length, —
 # чтобы границу держала и база, а не только форма.
 NOTE_MAX_LENGTH = 500
+# Длина группы мышц — та же, что у поля Exercise.muscle_group.
+MUSCLE_GROUP_MAX_LENGTH = 60
 
 
 def clamp_rest_seconds(seconds):
@@ -192,6 +194,42 @@ class Exercise(CatalogItem):
         ]
 
 
+def muscle_groups_for(user):
+    """Группы мышц, уже использованные в видимых пользователю упражнениях.
+
+    Список строится из данных, а не из choices: набор групп у каждого свой.
+    order_by обязателен — Meta.ordering по name подмешал бы name в SELECT
+    и distinct перестал бы означать «разные группы».
+    """
+    return list(
+        Exercise.objects.visible_to(user)
+        .exclude(muscle_group="")
+        .order_by("muscle_group")
+        .values_list("muscle_group", flat=True)
+        .distinct()
+    )
+
+
+def normalize_muscle_group(text, known):
+    """Привести написание к уже существующему: иначе появятся «Грудь» и «грудь»."""
+    text = " ".join(text.split())
+    lowered = text.lower()
+    for name in known:
+        if name.lower() == lowered:
+            return name
+    return text
+
+
+def chosen_muscle_group(data, known):
+    """Группа мышц из присланной формы: своё поле перебивает выбранный чип.
+
+    Одно правило на два места (быстрое создание и правка на странице упражнения)
+    и без опоры на порядок полей в форме: имена у чипа и поля разные.
+    """
+    text = data.get("muscle_group_own") or data.get("muscle_group") or ""
+    return normalize_muscle_group(text[:MUSCLE_GROUP_MAX_LENGTH], known)
+
+
 # Какие поля подхода осмысленны для каждой единицы — и в каком порядке они стоят
 # на экране. Остальные поля обязаны быть нулём: это же проверяет ограничение
 # set_fields_match_measurement. Больше двух полей не бывает: на 375px три
@@ -229,8 +267,17 @@ METRIC_UNITS = {
 TIME_MEASUREMENTS = frozenset({Exercise.Measurement.TIME, Exercise.Measurement.TIME_WEIGHT})
 
 # Шаг степпера по полю подхода. Живёт здесь, а не во вьюхе: по нему считается
-# арифметика тапа и подписывается кнопка, и расходиться этим двум нельзя.
+# арифметика тапа, подписывается кнопка и предсказывается значение на клиенте —
+# расходиться этим трём нельзя.
 SET_STEPS = {"weight_kg": Decimal("2.5"), "reps": 1, "duration_sec": 15}
+# Границы значений подхода. Вес ограничен max_digits=5 самого поля, остальные —
+# здравым смыслом. Их же сервер отдаёт клиенту в data-атрибутах степпера.
+MAX_WEIGHT_KG = Decimal("999.99")
+MAX_REPS = 999
+MAX_DURATION_SEC = 3600  # час удержания — с большим запасом
+SET_LIMITS = {"weight_kg": MAX_WEIGHT_KG, "reps": MAX_REPS, "duration_sec": MAX_DURATION_SEC}
+# Как значение выглядит и как его предсказывает клиент до ответа сервера.
+FIELD_FORMATS = {"weight_kg": "decimal", "reps": "int", "duration_sec": "time"}
 # Подпись поля и то, что читает скринридер на кнопках «−» и «+».
 FIELD_INPUT = {
     "weight_kg": {"label": "Вес, кг", "aria": "2,5 кг"},
@@ -245,6 +292,53 @@ def step_display(field):
     if field == "duration_sec":
         return f"{step} с"
     return decimal_display(step) if isinstance(step, Decimal) else str(step)
+
+
+def parse_field_value(field, text):
+    """Введённое руками значение поля подхода → число, или ValueError.
+
+    Разбор на сервере, а не на клиенте: правила округления и границы уже здесь.
+    Вес принимает и «82,5», и «82.5»; время — и «90», и «1:30», потому что
+    именно так удержания показаны на экране (rest_display).
+    """
+    text = text.strip().replace(",", ".")
+    if not text:
+        raise ValueError("Введите значение.")
+    if field == "duration_sec":
+        return _parse_duration(text)
+    if field == "weight_kg":
+        try:
+            value = Decimal(text)
+        except InvalidOperation as error:
+            raise ValueError("Вес — это число, например 82,5.") from error
+        if value < 0:
+            raise ValueError("Вес не может быть отрицательным.")
+        # Округляем до сотых: max_digits=5 у поля не примет больше.
+        return min(MAX_WEIGHT_KG, value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+    try:
+        value = int(text)
+    except ValueError as error:
+        raise ValueError("Повторения — это целое число.") from error
+    if value < 0:
+        raise ValueError("Повторений не может быть меньше нуля.")
+    return min(MAX_REPS, value)
+
+
+def _parse_duration(text):
+    """«1:30» или «90» — в секунды. Секунды больше 59 в записи m:ss — опечатка."""
+    minutes, _, seconds = text.partition(":")
+    try:
+        if not seconds:
+            total = int(minutes)
+        else:
+            total = int(minutes) * 60 + int(seconds)
+            if not 0 <= int(seconds) < 60:
+                raise ValueError
+    except ValueError as error:
+        raise ValueError("Время — это 1:30 или 90 секунд.") from error
+    if total < 0:
+        raise ValueError("Время не может быть отрицательным.")
+    return min(MAX_DURATION_SEC, total)
 
 
 def metric_display(measurement, value):
@@ -510,7 +604,12 @@ class StrengthSet(models.Model):
 
     @property
     def stepper_fields(self):
-        """Поля ввода этого подхода — ровно те, что осмысленны для его единицы."""
+        """Поля ввода этого подхода — ровно те, что осмысленны для его единицы.
+
+        Шаг, границы и формат уезжают на клиент в data-атрибутах: тап рисует
+        предсказанное значение сразу, не дожидаясь ответа, а правила при этом
+        остаются в одном месте — здесь.
+        """
         return [
             {
                 "name": name,
@@ -518,6 +617,11 @@ class StrengthSet(models.Model):
                 "aria": FIELD_INPUT[name]["aria"],
                 "step": step_display(name),
                 "value": self.field_display(name),
+                "raw": getattr(self, name),
+                "step_raw": SET_STEPS[name],
+                "max_raw": SET_LIMITS[name],
+                "format": FIELD_FORMATS[name],
+                "inputmode": "decimal" if name == "weight_kg" else "numeric",
             }
             for name in MEASUREMENT_FIELDS[self.measurement]
         ]

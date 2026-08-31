@@ -22,11 +22,14 @@ from django.views.generic import DeleteView, ListView, TemplateView, View
 from workouts import services, stats
 from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
 from workouts.models import (
+    MAX_WEIGHT_KG,
     MEASUREMENT_FIELDS,
     METRIC_LABELS,
     METRIC_UNITS,
+    MUSCLE_GROUP_MAX_LENGTH,
     NOTE_MAX_LENGTH,
     REST_DELTAS,
+    SET_LIMITS,
     SET_STEPS,
     TIME_MEASUREMENTS,
     ChangelogEntry,
@@ -35,8 +38,11 @@ from workouts.models import (
     Sport,
     StrengthSet,
     Workout,
+    chosen_muscle_group,
     clamp_rest_seconds,
     metric_display,
+    muscle_groups_for,
+    parse_field_value,
     rest_display,
     ru_plural,
 )
@@ -44,13 +50,10 @@ from workouts.stats import week_start, week_title
 
 HISTORY_PAGE_SIZE = 10
 
-# Живой режим: границы значений. Шаги живут в модели (SET_STEPS) — по ним же
-# подписаны кнопки; ключи там — поля модели, поэтому применимость поля к единице
-# упражнения проверяется по MEASUREMENT_FIELDS без словаря-переводчика.
-MAX_WEIGHT_KG = Decimal("999.99")  # max_digits=5 у StrengthSet.weight_kg
-MAX_REPS = 999
-MAX_DURATION_SEC = 3600  # час удержания — с большим запасом
-SET_LIMITS = {"weight_kg": MAX_WEIGHT_KG, "reps": MAX_REPS, "duration_sec": MAX_DURATION_SEC}
+# Шаги и границы значений подхода живут в модели (SET_STEPS, SET_LIMITS): по ним
+# же подписаны кнопки и предсказывается значение на клиенте. Ключи там — поля
+# модели, поэтому применимость поля к единице упражнения проверяется по
+# MEASUREMENT_FIELDS без словаря-переводчика.
 # Что обязано быть заполнено, чтобы подход считался выполненным: у весовых это
 # повторы (вес 0 — «со своим весом»), у удержаний — время.
 REQUIRED_FIELD = {
@@ -474,9 +477,17 @@ class LiveExerciseView(LoginRequiredMixin, View):
             bool(query)
             and not Exercise.objects.visible_to(request.user).filter(name__iexact=query).exists()
         )
-        # Выбранная единица возвращается на круг: чипы живут в свапаемом блоке
-        # результатов, и без этого следующая набранная буква сбросила бы выбор.
+        # Выбранные единица и группа мышц возвращаются на круг: чипы живут в
+        # свапаемом блоке результатов, и без этого следующая набранная буква
+        # сбросила бы выбор.
         chosen = request.GET.get("measurement") or request.POST.get("measurement") or ""
+        group = (
+            request.GET.get("muscle_group_own")
+            or request.GET.get("muscle_group")
+            or request.POST.get("muscle_group_own")
+            or request.POST.get("muscle_group")
+            or ""
+        )
         return {
             "workout": workout,
             "exercises": list(exercises[:EXERCISE_RESULTS_LIMIT]),
@@ -489,6 +500,11 @@ class LiveExerciseView(LoginRequiredMixin, View):
                 if chosen in Exercise.Measurement.values
                 else Exercise.Measurement.WEIGHT_REPS
             ),
+            # Только при предложении создать: на поиске список групп не нужен,
+            # и лишний запрос на каждую набранную букву тоже.
+            "muscle_groups": muscle_groups_for(request.user) if offer_create else [],
+            "selected_muscle_group": group.strip(),
+            "muscle_group_max_length": MUSCLE_GROUP_MAX_LENGTH,
         }
 
 
@@ -639,6 +655,30 @@ class SetAdjustView(LoginRequiredMixin, View):
             value = min(MAX_WEIGHT_KG, max(Decimal(0), Decimal(str(row.weight_kg)) + step))
         else:
             value = min(SET_LIMITS[field], max(0, getattr(row, field) + step))
+        setattr(row, field, value)
+        row.save(update_fields=[field])
+        return HttpResponse(row.field_display(field))
+
+
+class SetValueView(LoginRequiredMixin, View):
+    """Ввод значения подхода руками: тап по числу вместо серии тапов по «+».
+
+    Абсолютное значение, а не шаг: человек написал ровно то, что хотел, и
+    сорока тапов по «+» для сотни килограммов больше не нужно.
+    """
+
+    def post(self, request, pk):
+        field = request.POST.get("field", "")
+        if field not in SET_STEPS:
+            return HttpResponseBadRequest("Недопустимое поле")
+        row = live_set_or_404(request, pk, undone_only=True, for_update=True)
+        if field not in MEASUREMENT_FIELDS[row.measurement]:
+            return HttpResponseBadRequest("Поле не подходит единице упражнения")
+        try:
+            value = parse_field_value(field, request.POST.get("value", ""))
+        except ValueError as error:
+            # 400 с человеческим текстом: его показывает клиент рядом со полем.
+            return HttpResponseBadRequest(str(error))
         setattr(row, field, value)
         row.save(update_fields=[field])
         return HttpResponse(row.field_display(field))
@@ -963,6 +1003,8 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 "chart_title": f"Максимум: {metric_label}",
                 "metric_label": metric_label,
                 "can_edit_measurement": exercise.owner_id == request.user.pk,
+                "muscle_groups": muscle_groups_for(request.user),
+                "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "stats_line": stats_line,
                 "nav_active": "dashboard",
             },
@@ -997,6 +1039,27 @@ def usage_label(count):
         return "не использовалось"
     word = ru_plural(count, "тренировке", "тренировках", "тренировках")
     return f"в {count} {word}"
+
+
+class ExerciseMuscleGroupView(LoginRequiredMixin, View):
+    """Группа мышц своего упражнения: чипы уже принятых значений плюс своё."""
+
+    def post(self, request, pk):
+        # Глобальное упражнение правит только админ, чужое личное — никто.
+        exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
+        exercise.muscle_group = chosen_muscle_group(request.POST, muscle_groups_for(request.user))
+        exercise.save(update_fields=["muscle_group"])
+        return render(
+            request,
+            "workouts/_muscle_group_choice.html",
+            {
+                "exercise": exercise,
+                "muscle_groups": muscle_groups_for(request.user),
+                "max_length": MUSCLE_GROUP_MAX_LENGTH,
+                "can_edit_measurement": True,
+                "saved": True,
+            },
+        )
 
 
 class ExerciseListView(LoginRequiredMixin, ListView):

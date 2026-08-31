@@ -17,6 +17,7 @@
 </div>
 
 {% include "workouts/_measurement_choice.html" %}
+{% include "workouts/_muscle_group_choice.html" %}
 
 {% if chart.values|length == 1 %}
   {% include "includes/empty_state.html" with text="График появится со второй тренировки с этим упражнением." %}

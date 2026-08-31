@@ -838,6 +838,23 @@ body {
   text-align: center;
 }
 
+/* Значение ждёт подтверждения сервера: показано предсказание, а не то, что в базе */
+.app-stepper-value.is-stale {
+  color: var(--app-text-muted);
+  text-decoration: underline dotted;
+  text-underline-offset: 0.25em;
+}
+
+/* Ручной ввод занимает всю ширину поля: кнопки на это время скрыты */
+.app-stepper-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--app-tap-target);
+  text-align: center;
+  font-family: var(--app-font-num);
+  font-size: clamp(1.125rem, 5vw, 1.5rem);
+}
+
 .app-btn-big {
   min-height: 56px;
   font-size: 1.125rem;

@@ -55,8 +55,9 @@ def test_exercise_page_query_budget(client, user, django_assert_max_num_queries)
     bench = fill_history(user)
 
     client.force_login(user)
-    # Седьмой запрос — заметки упражнения: один на всю историю, а не на тренировку.
-    with django_assert_max_num_queries(7):
+    # Седьмой запрос — заметки упражнения (один на всю историю), восьмой — список
+    # групп мышц для чипов. Оба не зависят от объёма истории.
+    with django_assert_max_num_queries(8):
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
