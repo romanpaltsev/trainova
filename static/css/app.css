@@ -1651,9 +1651,60 @@ body {
     padding-block-end: var(--app-space-4);
   }
   .app-main { padding-bottom: var(--app-space-16); }
-  /* Меры app-main-dual / app-main-feed расширяются здесь вместе со своими
-     сетками — до тех пор колонка остаётся такой же, как на 768px, иначе
-     одноколоночное содержимое растянулось бы на 1120px. */
+  /* Мера расширяется вместе с сеткой: профиль и итог тренировки раскладывают
+     содержимое в две колонки, поэтому им нужна широкая колонка страницы. */
+  .app-main-dual { --app-measure: var(--app-measure-dual); }
+
+  /* Профиль: секции в две колонки. align-items: start — иначе короткая секция
+     растянулась бы по высоте соседней. */
+  .app-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-4) var(--app-space-8);
+    align-items: start;
+  }
+
+  /* Общий примитив: карточки в две колонки (итог тренировки, история подходов). */
+  .app-cards-2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-4);
+    align-items: start;
+  }
+
+  .app-cards-2 > * {
+    max-width: none;
+    margin-bottom: 0;
+  }
+
+  .app-cards-2 > .app-empty { grid-column: 1 / -1; }
+
+  /* Сводка тренировки — во всю ширину, три числа расходятся по ней равномерно */
+  .app-summary-totals .app-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* «Что нового» таймлайном: даты выстраиваются в рейку слева, текст держит
+     комфортную для чтения меру. Двухколоночная «газета» здесь не годится —
+     хронология в колонках читается неверно. */
+  .app-news {
+    display: grid;
+    grid-template-columns: 7rem minmax(0, 1fr);
+    column-gap: var(--app-space-6);
+    margin-bottom: var(--app-space-3);
+  }
+
+  .app-news-head {
+    grid-row: 1 / 3;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--app-space-1);
+    margin-bottom: 0;
+  }
+
+  .app-news-title,
+  .app-news-body { grid-column: 2; }
 
   /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
   .app-dash {

@@ -18,7 +18,7 @@
   </div>
 </div>
 
-<section class="app-card app-live-exercise">
+<section class="app-card app-live-exercise app-summary-totals">
   <dl class="app-metrics mb-0">
     <div>
       <dt>время</dt>
@@ -35,6 +35,11 @@
   </dl>
 </section>
 
+{% comment %}
+  app-cards-2 — общий примитив «карточки в две колонки» на десктопе. Тот же
+  используется историей подходов на странице упражнения.
+{% endcomment %}
+<div class="app-cards-2">
 {% for group in groups %}
   <section class="app-card app-live-exercise">
     <div class="app-live-exercise-head">
@@ -60,6 +65,7 @@
 {% empty %}
   {% include "includes/empty_state.html" with text="В этой тренировке нет записанных подходов." %}
 {% endfor %}
+</div>
 
 <div class="app-form-actions">
   <form method="post" action="{% url 'workout_repeat' workout.pk %}">

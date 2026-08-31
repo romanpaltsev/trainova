@@ -26,103 +26,118 @@
   </div>
 </section>
 
-<h2 class="app-section-title">Настройки</h2>
+{% comment %}
+  Секции-обёртки нужны сетке: при плоском DOM (h2, блок, h2, блок)
+  двухколоночная раскладка развела бы заголовок и его блок по разным
+  колонкам. Заодно чинится структура документа — раньше h2 висели без секций.
+{% endcomment %}
+<div class="app-profile-grid">
+  <section class="app-profile-section">
+    <h2 class="app-section-title">Настройки</h2>
 
-<div class="app-card app-profile-block">
-  <div class="app-profile-block-title">Тема</div>
-  {% comment %}
-    data-app-theme-choice, а не data-app-theme-toggle: тот атрибут привязан
-    к двухпозиционному переключателю в шапке.
-  {% endcomment %}
-  <div class="app-chips app-theme-choice" data-app-theme-choice role="group" aria-label="Тема">
-    <input type="radio" name="app-theme" id="theme-light" value="light" class="app-chip-input">
-    <label class="app-chip" for="theme-light">Светлая</label>
-    <input type="radio" name="app-theme" id="theme-dark" value="dark" class="app-chip-input">
-    <label class="app-chip" for="theme-dark">Тёмная</label>
-    <input type="radio" name="app-theme" id="theme-system" value="system" class="app-chip-input">
-    <label class="app-chip" for="theme-system">Системная</label>
-  </div>
-</div>
+    <div class="app-card app-profile-block">
+      <div class="app-profile-block-title">Тема</div>
+      {% comment %}
+        data-app-theme-choice, а не data-app-theme-toggle: тот атрибут привязан
+        к двухпозиционному переключателю в шапке.
+      {% endcomment %}
+      <div class="app-chips app-theme-choice" data-app-theme-choice role="group" aria-label="Тема">
+        <input type="radio" name="app-theme" id="theme-light" value="light" class="app-chip-input">
+        <label class="app-chip" for="theme-light">Светлая</label>
+        <input type="radio" name="app-theme" id="theme-dark" value="dark" class="app-chip-input">
+        <label class="app-chip" for="theme-dark">Тёмная</label>
+        <input type="radio" name="app-theme" id="theme-system" value="system" class="app-chip-input">
+        <label class="app-chip" for="theme-system">Системная</label>
+      </div>
+    </div>
 
-<div class="app-rows">
-  <button type="button" class="app-row"
-          hx-get="{% url 'profile_rest' %}" hx-target="#modal" hx-swap="innerHTML">
-    <span class="app-row-text">
-      <span class="app-row-name">Отдых между подходами</span>
-      <span class="app-row-meta">значение по умолчанию для таймера</span>
-    </span>
-    {% include "accounts/_rest_row_value.html" %}
-    {% include "includes/chevron.html" %}
-  </button>
-</div>
+    <div class="app-rows">
+      <button type="button" class="app-row"
+              hx-get="{% url 'profile_rest' %}" hx-target="#modal" hx-swap="innerHTML">
+        <span class="app-row-text">
+          <span class="app-row-name">Отдых между подходами</span>
+          <span class="app-row-meta">значение по умолчанию для таймера</span>
+        </span>
+        {% include "accounts/_rest_row_value.html" %}
+        {% include "includes/chevron.html" %}
+      </button>
+    </div>
+  </section>
 
-<h2 class="app-section-title">Мои справочники</h2>
+  <section class="app-profile-section">
+    <h2 class="app-section-title">Мои справочники</h2>
 
-<div class="app-rows">
-  <a class="app-row" href="{% url 'exercise_list' %}?mine=1">
-    <span class="app-row-icon">{% include "includes/logo.html" %}</span>
-    <span class="app-row-text"><span class="app-row-name">Мои упражнения</span></span>
-    <span class="app-row-count num">{{ exercises_count }}</span>
-    {% include "includes/chevron.html" %}
-  </a>
-  <a class="app-row" href="{% url 'my_sports' %}">
-    <span class="app-row-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/>
-      </svg>
-    </span>
-    <span class="app-row-text"><span class="app-row-name">Мои виды спорта</span></span>
-    <span class="app-row-count num">{{ sports_count }}</span>
-    {% include "includes/chevron.html" %}
-  </a>
-</div>
+    <div class="app-rows">
+      <a class="app-row" href="{% url 'exercise_list' %}?mine=1">
+        <span class="app-row-icon">{% include "includes/logo.html" %}</span>
+        <span class="app-row-text"><span class="app-row-name">Мои упражнения</span></span>
+        <span class="app-row-count num">{{ exercises_count }}</span>
+        {% include "includes/chevron.html" %}
+      </a>
+      <a class="app-row" href="{% url 'my_sports' %}">
+        <span class="app-row-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/>
+          </svg>
+        </span>
+        <span class="app-row-text"><span class="app-row-name">Мои виды спорта</span></span>
+        <span class="app-row-count num">{{ sports_count }}</span>
+        {% include "includes/chevron.html" %}
+      </a>
+    </div>
+  </section>
 
-<h2 class="app-section-title">Приложение</h2>
+  <section class="app-profile-section">
+    <h2 class="app-section-title">Приложение</h2>
 
-<div class="app-rows">
-  <a class="app-row" href="{% url 'changelog' %}">
-    <span class="app-row-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M12 4l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8z"/>
-      </svg>
-    </span>
-    <span class="app-row-text"><span class="app-row-name">Что нового</span></span>
-    {% if changelog_unread %}
-      <span class="app-sport-dot" style="--dot: var(--app-accent-text)"></span>
-      <span class="visually-hidden">есть новые записи</span>
-    {% endif %}
-    {% include "includes/chevron.html" %}
-  </a>
-</div>
+    <div class="app-rows">
+      <a class="app-row" href="{% url 'changelog' %}">
+        <span class="app-row-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 4l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8z"/>
+          </svg>
+        </span>
+        <span class="app-row-text"><span class="app-row-name">Что нового</span></span>
+        {% if changelog_unread %}
+          <span class="app-sport-dot" style="--dot: var(--app-accent-text)"></span>
+          <span class="visually-hidden">есть новые записи</span>
+        {% endif %}
+        {% include "includes/chevron.html" %}
+      </a>
+    </div>
+  </section>
 
-<h2 class="app-section-title">Аккаунт</h2>
+  <section class="app-profile-section">
+    <h2 class="app-section-title">Аккаунт</h2>
 
-<div class="app-rows">
-  <a class="app-row" href="{% url 'account_change_password' %}">
-    <span class="app-row-icon">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>
-      </svg>
-    </span>
-    <span class="app-row-text"><span class="app-row-name">Сменить пароль</span></span>
-    {% include "includes/chevron.html" %}
-  </a>
-  {% comment %}Выход только POST'ом: GET-выход выключен настройкой allauth.{% endcomment %}
-  <form method="post" action="{% url 'account_logout' %}">
-    {% csrf_token %}
-    <button type="submit" class="app-row is-danger">
-      <span class="app-row-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M10 5H6a2 2 0 00-2 2v10a2 2 0 002 2h4M15 8l4 4-4 4M19 12H9"/>
-        </svg>
-      </span>
-      <span class="app-row-text"><span class="app-row-name">Выйти</span></span>
-    </button>
-  </form>
+    <div class="app-rows">
+      <a class="app-row" href="{% url 'account_change_password' %}">
+        <span class="app-row-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>
+          </svg>
+        </span>
+        <span class="app-row-text"><span class="app-row-name">Сменить пароль</span></span>
+        {% include "includes/chevron.html" %}
+      </a>
+      {% comment %}Выход только POST'ом: GET-выход выключен настройкой allauth.{% endcomment %}
+      <form method="post" action="{% url 'account_logout' %}">
+        {% csrf_token %}
+        <button type="submit" class="app-row is-danger">
+          <span class="app-row-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M10 5H6a2 2 0 00-2 2v10a2 2 0 002 2h4M15 8l4 4-4 4M19 12H9"/>
+            </svg>
+          </span>
+          <span class="app-row-text"><span class="app-row-name">Выйти</span></span>
+        </button>
+      </form>
+    </div>
+  </section>
 </div>
 
 <p class="app-profile-version text-muted-app">
