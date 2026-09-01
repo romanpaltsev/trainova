@@ -1,9 +1,11 @@
 """Каталог упражнений, личные виды спорта и удаление записей справочников."""
 
 import re
+from datetime import timedelta
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from workouts.models import Exercise, Sport
 from workouts.tests.factories import (
@@ -14,6 +16,10 @@ from workouts.tests.factories import (
 )
 
 pytestmark = pytest.mark.django_db
+
+
+def days_ago(days):
+    return timezone.now() - timedelta(days=days)
 
 
 # ---------- Каталог упражнений ----------
@@ -412,3 +418,138 @@ def test_dense_rows_are_scoped_to_the_catalog(client, user):
     assert "app-rows-dense" in catalog
     assert "app-rows-dense" not in profile
     assert "app-rows-dense" not in sports
+
+
+# ---------- Блок «Я тренирую» ----------
+#
+# Каталог делится на два блока: сверху упражнения, которые пользователь
+# действительно делал, ниже — полный справочник по группам мышц. Признак деления —
+# записанная тренировка, а не наличие рекорда: у подтягиваний с собственным весом
+# и у упражнения со сменённой единицей рекорда нет, а тренировок двадцать.
+
+
+def trained_names(response):
+    return [exercise.name for exercise in response.context["trained"]]
+
+
+def test_trained_block_shows_only_recorded_exercises(client, user):
+    done = ExerciseFactory(name="Жим лёжа")
+    never = ExerciseFactory(name="Планка")
+    drafted = ExerciseFactory(name="Скручивания")
+    StrengthSetFactory(workout__user=user, exercise=done, set_number=1, weight_kg=80, reps=8)
+    # Черновик тренировкой ещё не стал: duration_min пуст.
+    StrengthSetFactory(
+        workout__user=user,
+        workout__duration_min=None,
+        exercise=drafted,
+        set_number=1,
+        done=False,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_list"))
+
+    assert trained_names(response) == ["Жим лёжа"]
+    assert never.name not in trained_names(response)
+    assert drafted.name not in trained_names(response)
+
+
+def test_trained_block_is_ordered_by_last_workout(client, user):
+    """Свежее сверху; внутри одной тренировки — по числу тренировок, потом по имени."""
+    older = ExerciseFactory(name="Становая тяга")
+    recent_a = ExerciseFactory(name="Бжим")
+    recent_b = ExerciseFactory(name="Ажим")
+    old_workout = WorkoutFactory(user=user, started_at=days_ago(10))
+    StrengthSetFactory(workout=old_workout, exercise=older, set_number=1, weight_kg=100, reps=5)
+    # Оба в одной тренировке: last_workout_at совпадает, решает тайбрейк.
+    fresh = WorkoutFactory(user=user, started_at=days_ago(1))
+    StrengthSetFactory(workout=fresh, exercise=recent_a, set_number=1, weight_kg=70, reps=8)
+    StrengthSetFactory(workout=fresh, exercise=recent_b, set_number=2, weight_kg=70, reps=8)
+    # У «Бжим» вторая тренировка — по числу он выше «Ажим», хотя по алфавиту ниже.
+    second = WorkoutFactory(user=user, started_at=days_ago(1))
+    StrengthSetFactory(workout=second, exercise=recent_a, set_number=1, weight_kg=70, reps=8)
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_list"))
+
+    assert trained_names(response) == ["Бжим", "Ажим", "Становая тяга"]
+
+
+def test_other_users_workouts_do_not_make_exercise_mine(client, user, other_user):
+    """Изоляция: чужая тренировка на глобальном упражнении не делает его моим."""
+    shared = ExerciseFactory(name="Жим лёжа", owner=None)
+    StrengthSetFactory(workout__user=other_user, exercise=shared, set_number=1, weight_kg=200)
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_list"))
+
+    assert trained_names(response) == []
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"q": "жим"}, {"mine": "1"}, {"group": "Грудь"}],
+    ids=["search", "mine", "group"],
+)
+def test_filters_hide_the_trained_block(client, user, params):
+    """При поиске нужен один список результатов, а не два места, по которым они разбросаны."""
+    bench = ExerciseFactory(name="Жим лёжа", muscle_group="Грудь", owner=user)
+    StrengthSetFactory(workout__user=user, exercise=bench, set_number=1, weight_kg=80, reps=8)
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_list"), params)
+
+    assert response.context["trained"] == []
+    assert response.context["shows_blocks"] is False
+    assert "Я тренирую" not in response.content.decode()
+    # Само упражнение при этом на экране есть — оно в списке.
+    assert bench.name in response.content.decode()
+
+
+def test_trained_exercise_stays_in_the_reference_list(client, user):
+    """Справочник остаётся полным: в «Груди» должно быть всё про грудь."""
+    bench = ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+    StrengthSetFactory(workout__user=user, exercise=bench, set_number=1, weight_kg=80, reps=8)
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_list"))
+
+    assert trained_names(response) == ["Жим лёжа"]
+    in_groups = [item.name for group in response.context["groups"] for item in group["items"]]
+    assert "Жим лёжа" in in_groups
+
+
+def test_trained_exercise_without_record_stays_in_the_block(client, user):
+    """Подтягивания с собственным весом: тренировки есть, рекорда нет."""
+    pullups = ExerciseFactory(name="Подтягивания")
+    StrengthSetFactory(workout__user=user, exercise=pullups, set_number=1, weight_kg=0, reps=12)
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_list"))
+
+    assert trained_names(response) == ["Подтягивания"]
+    assert response.context["trained"][0].record_display is None
+
+
+def test_user_without_workouts_sees_only_the_reference_list(client, user):
+    ExerciseFactory(name="Жим лёжа")
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_list"))
+
+    assert response.context["trained"] == []
+    assert response.context["shows_blocks"] is False
+    assert "Жим лёжа" in response.content.decode()
+
+
+def test_group_titles_show_when_no_group_chip_is_active(client, user):
+    """Единственная группа без фильтра остаётся безымянной, если не назвать её."""
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+
+    client.force_login(user)
+    without_filter = client.get(reverse("exercise_list"))
+    with_filter = client.get(reverse("exercise_list"), {"group": "Грудь"})
+
+    assert without_filter.context["shows_group_titles"] is True
+    # При активном чипе название группы уже стоит в нём.
+    assert with_filter.context["shows_group_titles"] is False

@@ -10,7 +10,7 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1095,6 +1095,27 @@ def group_by_muscle(exercises):
     return [{"title": title or NO_MUSCLE_GROUP_TITLE, "items": buckets[title]} for title in titles]
 
 
+def trained_first(exercises):
+    """Упражнения, которые пользователь действительно делал, — свежие сверху.
+
+    Признак — записанная тренировка (`workouts_count`), а не наличие рекорда:
+    метрика весовых упражнений — вес, поэтому у подтягиваний с нулевым весом и у
+    упражнения со сменённой единицей рекорда нет, а тренировок двадцать.
+
+    Порядок — «что делал последним»: блок отвечает на вопрос «открыть то, что я
+    делаю», а рейтинг по числу тренировок замерзает и перестаёт следить за
+    текущей программой.
+    """
+    trained = [exercise for exercise in exercises if exercise.workouts_count]
+    # Два прохода стабильной сортировкой: у ключей разные направления, и дату не
+    # приходится выворачивать в отрицательное число. Тайбрейк обязателен —
+    # last_workout_at это время начала ТРЕНИРОВКИ, поэтому у всех упражнений одной
+    # сессии он совпадает побитово, и без второго ключа порядок был бы случайным.
+    trained.sort(key=lambda exercise: (-exercise.workouts_count, exercise.name))
+    trained.sort(key=lambda exercise: exercise.last_workout_at, reverse=True)
+    return trained
+
+
 def visible_exercise_with_step(user, pk):
     """Видимое упражнение вместе с шагом веса этого пользователя — одним запросом."""
     queryset = with_weight_step(Exercise.objects.visible_to(user), user.pk, exercise_ref="pk")
@@ -1196,18 +1217,22 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         group = self.chosen_group()
         if group:
             queryset = queryset.filter(muscle_group__iexact=group)
-        # Счётчик использований нужен только для своих записей — их и удаляем.
-        # Подпись говорит «в N тренировках», поэтому считаем записанные: плановые
-        # подходы черновика тренировками ещё не стали.
+        # Счётчик использований нужен и подписи строки, и делению на «я тренирую»
+        # / «остальное». Подпись говорит «в N тренировках», поэтому считаем
+        # записанные: плановые подходы черновика тренировками ещё не стали.
+        # Условие одно на оба агрегата: две скопированные руками копии со временем
+        # разъедутся, а дата обязана совпадать с тем, что посчитал счётчик.
+        mine = Q(
+            sets__workout__user=self.request.user,
+            sets__workout__duration_min__isnull=False,
+        )
+        # Оба агрегата идут по одному пути sets__workout, поэтому джойн один и тот
+        # же, условия уезжают в FILTER (WHERE ...), строки не размножаются и
+        # DISTINCT внутри COUNT не задет — запрос по-прежнему один. Бюджет каталога
+        # упёрт в потолок, и лишний запрос здесь сломал бы тест.
         return queryset.annotate(
-            workouts_count=Count(
-                "sets__workout",
-                distinct=True,
-                filter=Q(
-                    sets__workout__user=self.request.user,
-                    sets__workout__duration_min__isnull=False,
-                ),
-            )
+            workouts_count=Count("sets__workout", distinct=True, filter=mine),
+            last_workout_at=Max("sets__workout__started_at", filter=mine),
         ).order_by("name")
 
     def get_context_data(self, **kwargs):
@@ -1225,15 +1250,27 @@ class ExerciseListView(LoginRequiredMixin, ListView):
                 if exercise.measurement == Exercise.Measurement.WEIGHT_REPS
                 else exercise.get_measurement_display().lower()
             )
+        # Справочник ниже остаётся полным: выполненное упражнение показывается и
+        # плиткой, и строкой в своей группе — иначе в «Груди» не оказалось бы жима
+        # лёжа, и искать его глазами по группе стало бы бесполезно.
         groups = group_by_muscle(context["exercises"])
         context["query"] = self.request.GET.get("q", "").strip()
         context["mine_only"] = bool(self.request.GET.get("mine"))
         context["groups"] = groups
         context["muscle_groups"] = self.known_groups()
         context["group_filter"] = self.chosen_group()
-        # Заголовок группы не нужен, когда на экране осталась одна: её название уже
-        # стоит в активном чипе.
-        context["shows_group_titles"] = len(groups) > 1
+        filtered = bool(context["query"] or context["mine_only"] or context["group_filter"])
+        # Плитки — только на «чистом» экране. При поиске нужен один список
+        # результатов, а не два места, по которым они раскиданы.
+        context["trained"] = [] if filtered else trained_first(context["exercises"])
+        context["trained_count"] = len(context["trained"])
+        # Заголовки блоков печатаются только когда блоков действительно два:
+        # одинокое «Весь справочник» над единственным списком — шум.
+        context["shows_blocks"] = bool(context["trained"])
+        # Заголовок группы избыточен только когда группа одна И её название уже
+        # стоит в активном чипе: без фильтра одна группа могла остаться и сама по
+        # себе, и тогда назвать её больше нечем.
+        context["shows_group_titles"] = len(groups) > 1 or not context["group_filter"]
         return context
 
     def known_groups(self):

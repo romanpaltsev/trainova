@@ -44,16 +44,59 @@
          placeholder="Найти упражнение" autocomplete="off" aria-label="Найти упражнение">
 </form>
 
-{% comment %}Обёртка нужна десктопной прокрутке: заголовки групп внутри неё.{% endcomment %}
-<div class="app-catalog-scroll">
+{% if trained %}
+  {% comment %}
+    «Я тренирую» — упражнения, которые пользователь действительно делал: шесть из
+    двадцати четырёх. Остальные несут одно название, и плотная строка для них
+    честнее плитки. Блок скрывается при активном поиске или фильтре: тогда нужен
+    один список результатов, а не два места, по которым они раскиданы.
+  {% endcomment %}
+  <h2 class="app-section-title app-catalog-title">Я тренирую</h2>
+  <div class="app-trained-list">
+    {% for exercise in trained %}
+      {% comment %}
+        data-атрибуты, а не классы: классы здесь стилевые и меняются вместе с
+        вёрсткой, а мастер-деталь должна одинаково видеть и плитку, и строку.
+        У плитки хук стоит на самой ссылке — она и есть элемент.
+      {% endcomment %}
+      <a class="app-trained-item" data-exercise-item data-exercise-link
+         href="{% url 'exercise_detail' exercise.pk %}">
+        <span class="app-trained-name">{{ exercise.name }}</span>
+        {% if exercise.record_display %}
+          <span class="app-trained-value num">{{ exercise.record_display }}</span>
+        {% else %}
+          {% comment %}
+            Тренировки есть, а рекорда нет: подходы записаны с нулевой метрикой
+            (собственный вес) или единицу упражнения меняли — старые подходы в
+            рекорд уже не идут.
+          {% endcomment %}
+          <span class="app-trained-value is-empty" aria-hidden="true">—</span>
+          <span class="visually-hidden">рекорда пока нет</span>
+        {% endif %}
+        <span class="app-trained-meta">
+          {% comment %}usage_label дословно: на его текст есть тест.{% endcomment %}
+          <span>{{ exercise.usage_label }}</span>
+          {% if exercise.last_workout_at %}
+            <span class="app-trained-date">{{ exercise.last_workout_at|date:"j b" }}</span>
+          {% endif %}
+        </span>
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+{% if shows_blocks %}<h2 class="app-section-title app-catalog-title">Весь справочник</h2>{% endif %}
+{% comment %}Обёртка задаёт область заголовкам групп и крючок на будущее.{% endcomment %}
+<div class="app-catalog-all">
 {% for group in groups %}
   {% if shows_group_titles %}
-    <h2 class="app-section-title app-group-title">{{ group.title }}</h2>
+    <h3 class="app-group-title">{{ group.title }}</h3>
   {% endif %}
   <div class="app-rows app-rows-dense">
     {% for exercise in group.items %}
-      <div class="app-row">
-        <a class="app-row-text app-row-link" href="{% url 'exercise_detail' exercise.pk %}">
+      <div class="app-row" data-exercise-item>
+        <a class="app-row-text app-row-link" data-exercise-link
+           href="{% url 'exercise_detail' exercise.pk %}">
           <span class="app-row-name">{{ exercise.name }}</span>
           {% comment %}
             Группа мышц в подпись не идёт: она уже в заголовке группы. Остаётся то,

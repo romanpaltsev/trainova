@@ -1087,6 +1087,92 @@ body {
    на мобильном упражнение открывается отдельной страницей, как и раньше. */
 .app-catalog-detail { display: none; }
 
+/* Заголовок блока экрана («Я тренирую» / «Весь справочник»). Единственная дельта
+   к .app-section-title — основной цвет текста: под ним стоят заголовки групп, и
+   различать два уровня одним размером в узкой колонке не выходит. */
+.app-catalog-title { color: var(--app-text); }
+
+/* «Я тренирую» — упражнения, которые пользователь действительно делал. Шесть из
+   двадцати четырёх: остальные восемнадцать несут одно название, и плотная строка
+   для них честнее плитки.
+
+   Почему не .app-records-item: на ≥1200px он намеренно превращается в строку
+   карточки рекордов — в каталоге это дало бы ровно то, от чего уходим, и
+   отменять пришлось бы шесть свойств. Почему не .app-stat: это плитка сводки,
+   никогда не ссылка, и её значение в 2rem перекричало бы название, а название
+   здесь главное. */
+.app-trained-list {
+  display: grid;
+  /* Две колонки на всех ширинах: на 375px внутри плитки остаётся 141px, при мере
+     34rem — 242px, в колонке 30rem — 210px. Третья колонка потребовала бы сузить
+     плитку до 149px, а самая длинная строка рекорда («120 повторов») просит 132px. */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--app-space-3);
+  margin-bottom: var(--app-space-6);
+}
+
+.app-trained-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+  /* 12px, а не 20px как у плиток дашборда: плитка живёт в узкой колонке, и каждый
+     лишний пиксель отступа отбирает его у названия. */
+  padding: var(--app-space-3);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-card);
+  background-color: var(--app-card);
+  box-shadow: var(--app-shadow-card);
+  color: var(--app-text);
+  text-decoration: none;
+}
+
+/* Типографика — та же, что у .app-row-name: два блока экрана читаются как один
+   список, а не как две разные страницы. Высота зарезервирована под две строки,
+   поэтому плитки в ряду стоят ровно. Клэмп не даёт вырасти третьей строке (на
+   мобильном её разрешаем: там строка вмещает 14 букв, и обрезать имя, которое
+   сегодня спокойно переносится, было бы ухудшением). overflow-wrap — на случай
+   одного неразрывного слова: названия придумывают пользователи. */
+.app-trained-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  line-height: 1.25;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+/* Размер — как у .app-row-value: одно и то же число не должно менять вес при
+   переезде из строки в плитку. nowrap потому, что самая длинная строка рекорда
+   укладывается в 141px мобильной плитки только целиком. */
+.app-trained-value {
+  font-size: 1.125rem;
+  white-space: nowrap;
+}
+
+/* Тренировки есть, а рекорда нет: подходы записаны с нулевой метрикой либо
+   единицу упражнения меняли. Прочерк — принятая в проекте форма «значения нет». */
+.app-trained-value.is-empty { color: var(--app-text-muted); }
+
+/* Подвал: «сколько» слева, «когда» справа. Разделителя-точки нет намеренно — на
+   375px строка «в 21 тренировке · 28 авг» не влезает, а перенос оставил бы
+   висящую точку. flex-wrap — предохранитель для «в 100 тренировках». */
+.app-trained-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  column-gap: var(--app-space-2);
+  /* Подпись прижата к низу: плитки в ряду одной высоты (грид растягивает), и без
+     этого у короткого названия внутри зияла бы пустая строка. Резервировать под
+     название две строки было хуже — дыра появлялась у всех, кроме самых длинных. */
+  margin-top: auto;
+  font-size: 0.75rem;
+  color: var(--app-text-secondary);
+}
+
+.app-trained-date { color: var(--app-text-muted); }
+
 /* ---------- Дашборд ---------- */
 
 .app-dash-head {
@@ -1516,9 +1602,18 @@ body {
    гантелями») переезжали на две строки ради выравнивания двух чисел из
    двадцати пяти. Название важнее — колонка рекорда остаётся по строке. */
 
+/* Заголовок группы мышц стал третьим уровнем: над ним теперь стоит «Весь
+   справочник». Микро-подпись — та же типографика, что у .app-stepper-label и
+   .app-rest-label, поэтому нового типографического стиля не появляется, а
+   справочник звучит тише блока с плитками. */
 .app-group-title {
   margin-top: var(--app-space-4);
   margin-bottom: var(--app-space-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
 }
 
 .app-group-title:first-of-type { margin-top: 0; }
@@ -1614,6 +1709,7 @@ body {
 .app-queue-row,
 .app-pick-row,
 .app-live-add-tile,
+.app-trained-item,
 .app-stepper-btn,
 .app-note-btn,
 .app-live-link,
@@ -1632,7 +1728,8 @@ body {
   a.app-records-item:hover,
   .app-spotlight:hover,
   .app-queue-row:hover,
-  .app-live-add-tile:hover {
+  .app-live-add-tile:hover,
+  .app-trained-item:hover {
     border-color: var(--app-text-muted);
     transform: translateY(var(--app-lift));
     box-shadow: var(--app-shadow-hover);
@@ -1645,7 +1742,8 @@ body {
   a.app-records-item:active,
   .app-spotlight:active,
   .app-queue-row:active,
-  .app-live-add-tile:active {
+  .app-live-add-tile:active,
+  .app-trained-item:active {
     transform: translateY(0);
     box-shadow: var(--app-shadow-card);
   }
@@ -1732,6 +1830,22 @@ body {
     margin-inline: auto;
     padding: var(--app-space-12) var(--app-space-8);
   }
+
+  /* Подсказка живёт внутри колонки списка, а не в центре страницы: пустое
+     состояние всей страницы (мера 34rem, отступ 3rem) заняло бы здесь первый
+     экран. Порядок важен — .app-empty выше имеет ту же специфичность, и на этой
+     ловушке уже споткнулся .app-empty-slim. */
+  .app-catalog-hint {
+    max-width: none;
+    padding: var(--app-space-3) var(--app-space-4);
+    text-align: start;
+  }
+
+  /* Двух строк хватает любому названию справочника при ширине плитки от 210px:
+     самое длинное — «Подъём гантелей через стороны». На 375px строка вмещает 14
+     букв, и там клэмп остаётся тремя — обрезать имя, которое сегодня спокойно
+     переносится, было бы ухудшением мобильного вида. */
+  .app-trained-name { -webkit-line-clamp: 2; }
   /* На широком экране карточка входа стоит по центру, а не прижата к верху */
   .app-auth { justify-content: center; padding-bottom: 4rem; }
   .app-auth-brand { margin-top: 0; }
@@ -1841,40 +1955,60 @@ body {
 
   .app-catalog {
     display: grid;
-    grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+    /* 30rem, а не 22rem: в 22rem не влезали две плитки, а название в строке с
+       рекордом получало 185px при нужных 194px и ломалось на две строки. При
+       30rem у названия в строке 414px, у названия в плитке — 210px. */
+    grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
     gap: var(--app-space-6);
     align-items: start;
   }
 
-  /* Список остаётся на месте при прокрутке детали, а сам прокручивается внутри:
-     иначе двести упражнений утаскивали бы панель вниз. */
-  .app-catalog-list {
-    position: sticky;
-    top: calc(var(--app-header-height) + var(--app-space-4));
-    display: flex;
-    flex-direction: column;
-    max-height: calc(100dvh - var(--app-header-height) - var(--app-space-8));
+  /* Колонка списка — обычный блок. Своя полоса прокрутки давала 2,4 экрана
+     внутреннего скролла и торчала посреди страницы рядом с пустой панелью;
+     теперь прокручивается страница целиком. Липкой колонку сделать нельзя:
+     залипший элемент выше вьюпорта перестаёт двигаться, и всё ниже кромки
+     экрана становится недостижимым — у списка это две трети упражнений. */
+
+  .app-catalog-detail {
+    display: block;
+    /* Клик по строке в низу списка свапает панель в верх правой колонки, то есть
+       выше кромки экрана. exercise.js подтягивает её в вид, а этот отступ не даёт
+       заехать под липкую шапку сайта. */
+    scroll-margin-top: calc(var(--app-header-height) + var(--app-space-4));
   }
 
-  /* Прокручивается обёртка со всеми группами, а не каждая карточка по
-     отдельности: иначе заголовки групп остались бы вне прокрутки. */
-  .app-catalog-list .app-catalog-scroll {
-    overflow-y: auto;
-    min-height: 0;
-  }
+  /* Выбранное упражнение. Раньше здесь менялся border-color, но у плотной строки
+     рамки нет по построению (border: 0), и от выделения оставался один чуть более
+     светлый фон.
 
-  .app-catalog-list .app-rows-dense { flex: 0 0 auto; }
-
-  /* Без запрета сжатия строки схлопывались до min-height, и двухстрочное
-     название вылезало за границу, накрывая соседей. */
-  .app-catalog-list .app-row { flex: 0 0 auto; }
-
-  .app-catalog-detail { display: block; }
-
-  /* Выбранная строка списка */
-  .app-row.is-active {
-    border-color: var(--app-accent);
+     Один URL соответствует двум элементам — плитке и строке того же упражнения:
+     справочник намеренно остался полным, поэтому подсвечиваются оба. Это
+     следствие решения, а не дефект. */
+  .app-catalog-list [data-exercise-item].is-active {
     background-color: var(--app-raised);
+  }
+
+  /* Строка: акцентная рейка слева. Псевдоэлемент, а не box-shadow — тень строки
+     перебивается наведением, и выделение мигало бы под курсором. Рейку аккуратно
+     срезает overflow: hidden плотной карточки, а раскладку она не двигает. */
+  .app-rows-dense .app-row.is-active { position: relative; }
+
+  .app-rows-dense .app-row.is-active::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 0;
+    width: 3px;
+    background-color: var(--app-accent);
+  }
+
+  /* Плитка: рамка у неё своя, поэтому подсветка — акцентная рамка, удвоенная
+     inset-линией (один пиксель акцента на светлой карточке почти не виден — тот
+     же довод, что у чипов выбора вида спорта). Рейка не подошла бы: радиус 16px
+     срезал бы её в короткую полоску посередине края. */
+  .app-trained-item.is-active {
+    border-color: var(--app-accent);
+    box-shadow: inset 0 0 0 1px var(--app-accent);
   }
 
   /* Настройки упражнения — одной карточкой, сетка 2×2 по содержимому.
@@ -1918,7 +2052,22 @@ body {
     width: 9rem;
   }
 
-  .app-exercise-head { margin-bottom: var(--app-space-4); }
+  /* Липкой становится шапка панели, а не панель целиком: у упражнения с двумя
+     десятками тренировок история подходов уходит на три экрана, а залипший
+     элемент выше вьюпорта перестаёт двигаться — всё ниже кромки стало бы
+     недостижимым. Шапка же всегда ниже вьюпорта и отвечает на единственный
+     вопрос, который теряется при прокрутке: «что я сейчас читаю».
+     Рендерится только в панели ({% if in_panel %}), поэтому мобильную страницу
+     правило задеть не может. Фон обязателен — иначе под название проезжает
+     график; z-index 1 хватает: у шапки сайта 1030, и панель уходит под неё. */
+  .app-exercise-head {
+    position: sticky;
+    top: calc(var(--app-header-height) + var(--app-space-4));
+    z-index: 1;
+    padding-block: var(--app-space-2);
+    margin-bottom: var(--app-space-2);
+    background-color: var(--app-bg);
+  }
 
   /* График — сразу под заголовком: он и есть причина открыть упражнение, а блок
      настроек с чипами шага веса занимает почти весь первый экран. На мобильном

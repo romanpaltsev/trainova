@@ -25,11 +25,21 @@
     chart = appCharts.buildLine(canvas, JSON.parse(dataEl.textContent));
   }
 
+  // Список общается с JS через data-атрибуты, а не через классы: классы — стилевые
+  // хуки и меняются вместе с вёрсткой, а плитка и строка должны одинаково попадать
+  // в мастер-деталь. Контейнер в селекторе не участвует намеренно: раскладка левой
+  // колонки меняется, а поведение от неё зависеть не должно.
+  const ITEM = "[data-exercise-item]";
+  const LINK = "[data-exercise-link]";
+
   function markActive(url) {
-    document.querySelectorAll(".app-catalog-list .app-row").forEach(function (row) {
-      const link = row.querySelector(".app-row-link");
+    document.querySelectorAll(ITEM).forEach(function (item) {
+      // У плитки хук стоит на самой ссылке, у строки — на обёртке рядом с кнопкой
+      // удаления. Одно упражнение может быть на экране дважды (плиткой и строкой),
+      // и подсвечиваются оба: справочник намеренно остался полным.
+      const link = item.matches(LINK) ? item : item.querySelector(LINK);
       const active = Boolean(link) && Boolean(url) && link.getAttribute("href") === url;
-      row.classList.toggle("is-active", active);
+      item.classList.toggle("is-active", active);
       if (active) {
         link.setAttribute("aria-current", "true");
       } else if (link) {
@@ -44,6 +54,10 @@
       .then(function () {
         renderChart();
         markActive(url);
+        // Страница прокручивается целиком, поэтому клик по строке в низу списка
+        // свапнул бы панель выше кромки экрана. scroll-margin-top не даёт ей
+        // заехать под липкую шапку сайта.
+        if (panel.getBoundingClientRect().top < 0) panel.scrollIntoView();
         const holder = panel.querySelector(".app-exercise");
         if (holder && holder.dataset.title) document.title = holder.dataset.title;
       });
@@ -70,7 +84,7 @@
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
       }
-      const link = event.target.closest(".app-catalog-list .app-row-link");
+      const link = event.target.closest(LINK);
       if (!link) return;
       const url = link.getAttribute("href");
       if (!url) return;
