@@ -439,6 +439,13 @@ body {
 
 .app-empty-text { margin-bottom: 0; }
 
+/* Компактный вариант: заглушка графика в панели упражнения не должна занимать
+   пол-экрана — она сообщает о нехватке данных, а не приглашает к действию. */
+.app-empty-slim {
+  padding: var(--app-space-3) var(--app-space-4);
+  text-align: start;
+}
+
 .app-empty-actions { margin-top: 1rem; }
 
 /* ---------- Модалка ---------- */
@@ -1446,6 +1453,56 @@ body {
   text-align: center;
 }
 
+/* ---------- Плотный список: одна карточка, строки внутри ----------
+
+   Вариант скоупнут контейнером: сам .app-row живёт ещё в профиле, «Моих видах
+   спорта» и base.html, и трогать его нельзя — там строки как раз должны быть
+   отдельными карточками.
+
+   Строка — сетка, а не flex: тогда рекорды выстраиваются в общую колонку и
+   правый край перестаёт выглядеть рваным на списке, где рекорд есть у пары
+   упражнений из двадцати пяти. */
+.app-rows-dense {
+  gap: 0;
+  margin-bottom: var(--app-space-4);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-card);
+  background-color: var(--app-card);
+  box-shadow: var(--app-shadow-card);
+  overflow: hidden;
+}
+
+.app-rows-dense .app-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--app-space-3);
+  /* Тап-таргет остаётся 44px по правилу CLAUDE.md, но карточной обвязки нет. */
+  min-height: 44px;
+  padding: var(--app-space-2) var(--app-space-4);
+  border: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+/* Разделитель между строками, а не рамка вокруг каждой */
+.app-rows-dense .app-row + .app-row {
+  border-top: 1px solid var(--app-line);
+}
+
+/* Subgrid здесь пробовали и отказались: общая колонка рекорда резервирует
+   ширину во всех строках, и на 375px длинные названия («Разведение рук с
+   гантелями») переезжали на две строки ради выравнивания двух чисел из
+   двадцати пяти. Название важнее — колонка рекорда остаётся по строке. */
+
+.app-group-title {
+  margin-top: var(--app-space-4);
+  margin-bottom: var(--app-space-2);
+}
+
+.app-group-title:first-of-type { margin-top: 0; }
+
 .app-search { margin-bottom: 1rem; }
 
 .app-profile-version {
@@ -1779,14 +1836,17 @@ body {
     max-height: calc(100dvh - var(--app-header-height) - var(--app-space-8));
   }
 
-  .app-catalog-list .app-rows {
+  /* Прокручивается обёртка со всеми группами, а не каждая карточка по
+     отдельности: иначе заголовки групп остались бы вне прокрутки. */
+  .app-catalog-list .app-catalog-scroll {
     overflow-y: auto;
     min-height: 0;
   }
 
-  /* Список прокручивается внутри колонки ограниченной высоты, а .app-rows —
-     колонка flex. Без запрета сжатия строки схлопывались до min-height 56px, и
-     двухстрочное название вылезало за границу строки, накрывая соседей. */
+  .app-catalog-list .app-rows-dense { flex: 0 0 auto; }
+
+  /* Без запрета сжатия строки схлопывались до min-height, и двухстрочное
+     название вылезало за границу, накрывая соседей. */
   .app-catalog-list .app-row { flex: 0 0 auto; }
 
   .app-catalog-detail { display: block; }
@@ -1797,14 +1857,45 @@ body {
     background-color: var(--app-raised);
   }
 
-  /* Настройки упражнения — в ряд. auto-fit, а не repeat(3): блок «Шаг веса»
-     рендерится не у каждого упражнения, и жёсткая сетка оставила бы дыру. */
+  /* Настройки упражнения — одной карточкой, сетка 2×2 по содержимому.
+     Три растянутых колонки (1fr) разъезжались по всей ширине панели с пустотами
+     между блоками, а чипы шага веса всё равно переносились.
+
+     Колонки — max-content, а не auto-fit: auto-fit при ширине «по содержимому»
+     схлопывается в одну колонку, а max-content заодно гарантирует, что пять
+     чипов шага веса встанут в одну строку. Три колонки в одном ряду, а не
+     сетка 2×2: во втором ряду «Группа мышц» отделялась от верхнего блока
+     дырой в высоту чипов, потому что высоту ряда задавал «Шаг веса».
+     Пропущенный блок (у планки шага веса нет) пустую колонку не оставляет:
+     max-content пустого трека — ноль.
+
+     Карточка по содержимому: .app-exercise — flex-колонка, поэтому достаточно
+     align-self, и правило «не возвращать max-width компонентам» не нарушено. */
   .app-settings-row {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    gap: var(--app-space-4);
+    grid-template-columns: repeat(3, minmax(0, max-content));
+    align-self: start;
+    gap: var(--app-space-4) var(--app-space-6);
     align-items: start;
     margin-bottom: var(--app-space-4);
+    padding: var(--app-space-3);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    background-color: var(--app-card);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  /* Пять чипов шага веса требовали 297px при колонке в 280px и переносили «5»
+     на вторую строку. Здесь курсор, а не палец, поэтому сжимаем по горизонтали:
+     высота тап-таргета (44px) не меняется. */
+  .app-settings-row .app-chip {
+    padding-inline: var(--app-space-3);
+  }
+
+  /* Поле «свой»/«своя» тянется на всю ширину блока, и при колонках по содержимому
+     именно оно задавало ширину карточки — 486px вместо нужных чипам 257px. */
+  .app-settings-row .app-group-input {
+    width: 9rem;
   }
 
   .app-exercise-head { margin-bottom: var(--app-space-4); }

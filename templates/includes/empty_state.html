@@ -1,8 +1,9 @@
 {% comment %}
   Пустое состояние экрана. Параметры: title (необязателен), text,
-  cta_label + cta_url (ссылка) или cta_hx_get (модалка).
+  cta_label + cta_url (ссылка) или cta_hx_get (модалка),
+  extra_class (например app-empty-slim — компактный вариант).
 {% endcomment %}
-<div class="app-card app-empty">
+<div class="app-card app-empty {{ extra_class }}">
   {% if title %}<p class="app-empty-title">{{ title }}</p>{% endif %}
   <p class="app-empty-text text-secondary-app">{{ text }}</p>
   {% if cta_label %}

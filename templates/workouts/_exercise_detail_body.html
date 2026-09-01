@@ -41,7 +41,7 @@
   </div>
 
   {% if chart.values|length == 1 %}
-    {% include "includes/empty_state.html" with text="График появится со второй тренировки с этим упражнением." %}
+    {% include "includes/empty_state.html" with text="График появится со второй тренировки с этим упражнением." extra_class="app-empty-slim" %}
   {% endif %}
   {% if chart.values|length > 1 %}
     <section class="app-card app-chart-card app-exercise-chart">
@@ -90,7 +90,7 @@
       </div>
     </section>
   {% empty %}
-    {% include "includes/empty_state.html" with text="Этого упражнения ещё не было в тренировках. Добавьте его в живом режиме силовой тренировки." %}
+    {% include "includes/empty_state.html" with text="Этого упражнения ещё не было в тренировках. Добавьте его в живом режиме силовой тренировки." extra_class="app-empty-slim" %}
   {% endfor %}
   </div>
 
