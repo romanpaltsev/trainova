@@ -1077,6 +1077,24 @@ def usage_label(count):
     return f"в {count} {word}"
 
 
+NO_MUSCLE_GROUP_TITLE = "Без группы"
+
+
+def group_by_muscle(exercises):
+    """Упражнения по группам мышц: [{"title", "items"}], «Без группы» последней.
+
+    Группировка в Python по уже загруженному списку: отдельных запросов это не
+    стоит, а порядок внутри группы остаётся тем, что задал queryset.
+    """
+    buckets = {}
+    for exercise in exercises:
+        buckets.setdefault(exercise.muscle_group or "", []).append(exercise)
+    titles = sorted(title for title in buckets if title)
+    if "" in buckets:
+        titles.append("")
+    return [{"title": title or NO_MUSCLE_GROUP_TITLE, "items": buckets[title]} for title in titles]
+
+
 def visible_exercise_with_step(user, pk):
     """Видимое упражнение вместе с шагом веса этого пользователя — одним запросом."""
     queryset = with_weight_step(Exercise.objects.visible_to(user), user.pk, exercise_ref="pk")
@@ -1175,6 +1193,9 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         query = self.request.GET.get("q", "").strip()
         if query:
             queryset = queryset.filter(name__icontains=query)
+        group = self.chosen_group()
+        if group:
+            queryset = queryset.filter(muscle_group__iexact=group)
         # Счётчик использований нужен только для своих записей — их и удаляем.
         # Подпись говорит «в N тренировках», поэтому считаем записанные: плановые
         # подходы черновика тренировками ещё не стали.
@@ -1204,9 +1225,33 @@ class ExerciseListView(LoginRequiredMixin, ListView):
                 if exercise.measurement == Exercise.Measurement.WEIGHT_REPS
                 else exercise.get_measurement_display().lower()
             )
+        groups = group_by_muscle(context["exercises"])
         context["query"] = self.request.GET.get("q", "").strip()
         context["mine_only"] = bool(self.request.GET.get("mine"))
+        context["groups"] = groups
+        context["muscle_groups"] = self.known_groups()
+        context["group_filter"] = self.chosen_group()
+        # Заголовок группы не нужен, когда на экране осталась одна: её название уже
+        # стоит в активном чипе.
+        context["shows_group_titles"] = len(groups) > 1
         return context
+
+    def known_groups(self):
+        """Группы мышц из данных. Кешируем: их спрашивают и фильтр, и чипы."""
+        if not hasattr(self, "_known_groups"):
+            self._known_groups = muscle_groups_for(self.request.user)
+        return self._known_groups
+
+    def chosen_group(self):
+        """Выбранная группа мышц — ровно в том написании, что лежит в данных.
+
+        Сравнение регистронезависимое, а неизвестная группа просто игнорируется:
+        чипы приходят из данных, и в открытой вкладке они могли устареть.
+        """
+        wanted = self.request.GET.get("group", "").strip().lower()
+        if not wanted:
+            return ""
+        return next((group for group in self.known_groups() if group.lower() == wanted), "")
 
 
 class MySportsView(LoginRequiredMixin, ListView):
