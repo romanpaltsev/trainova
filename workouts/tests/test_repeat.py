@@ -27,7 +27,8 @@ def test_repeat_creates_active_workout_with_source_exercises_in_order(client, us
     bench = ExerciseFactory(name="Жим лёжа")
     squat = ExerciseFactory(name="Присед")
     source = WorkoutFactory(user=user, started_at=days_ago(7))
-    # Присед добавлен первым: порядок повторения — порядок добавления, не алфавит.
+    # У тренировки без меток выполнения порядок повторения — порядок добавления,
+    # не алфавит. Присед добавлен первым.
     StrengthSetFactory(workout=source, exercise=squat, set_number=1, weight_kg=100, reps=5)
     StrengthSetFactory(workout=source, exercise=bench, set_number=1, weight_kg=70, reps=10)
 
@@ -110,3 +111,34 @@ def test_repeat_button_starts_same_sport(client, user):
     workout = Workout.objects.get(user=user, duration_min__isnull=True)
     assert workout.sport == sport
     assert workout.rest_seconds is None
+
+
+def test_repeat_copies_execution_order(client, user):
+    """Повторяется тот порядок, в котором упражнения делали, а не в котором добавили."""
+    client.force_login(user)
+    bench = ExerciseFactory(name="Жим лёжа")
+    squat = ExerciseFactory(name="Присед")
+    source = WorkoutFactory(user=user, started_at=days_ago(7))
+    # Жим добавлен первым, но присед выполнен раньше.
+    StrengthSetFactory(
+        workout=source,
+        exercise=bench,
+        set_number=1,
+        weight_kg=70,
+        reps=10,
+        done_at=days_ago(7) + timedelta(minutes=30),
+    )
+    StrengthSetFactory(
+        workout=source,
+        exercise=squat,
+        set_number=1,
+        weight_kg=100,
+        reps=5,
+        done_at=days_ago(7) + timedelta(minutes=5),
+    )
+
+    client.post(reverse("workout_repeat", args=[source.pk]))
+
+    workout = Workout.objects.get(user=user, duration_min__isnull=True)
+    groups = services.exercise_groups(workout)
+    assert [g["exercise"] for g in groups] == [squat, bench]

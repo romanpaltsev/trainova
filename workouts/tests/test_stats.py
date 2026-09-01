@@ -486,3 +486,72 @@ def test_exercise_spotlight_is_none_without_strength_records(user):
     CardioDetailsFactory(workout__user=user)
 
     assert stats.exercise_spotlight(user) is None
+
+
+def test_exercise_progress_gives_position_in_workout(user):
+    """Страница упражнения показывает, каким по счёту оно было в той тренировке."""
+    workout = WorkoutFactory(user=user, started_at=timezone.now(), duration_min=60)
+    first = ExerciseFactory(name="Присед")
+    ours = ExerciseFactory(name="Жим лёжа")
+    third = ExerciseFactory(name="Планка")
+    marks = timezone.now()
+    for number, (exercise, offset) in enumerate(((first, 0), (ours, 10), (third, 20)), start=1):
+        StrengthSetFactory(
+            workout=workout,
+            exercise=exercise,
+            set_number=number,
+            weight_kg=70,
+            reps=8,
+            done_at=marks + timedelta(minutes=offset),
+        )
+
+    progress = stats.exercise_progress(user, ours)
+
+    assert [group["position"] for group in progress] == [2]
+
+
+def test_exercise_page_position_matches_summary(user):
+    """Два вычислителя номера не должны разъезжаться: правило у них одно."""
+    workout = WorkoutFactory(user=user, started_at=timezone.now(), duration_min=60)
+    ours = ExerciseFactory(name="Жим лёжа")
+    other = ExerciseFactory(name="Присед")
+    marks = timezone.now()
+    # Наше выполнено вторым, хотя добавлено первым.
+    StrengthSetFactory(
+        workout=workout,
+        exercise=ours,
+        set_number=1,
+        weight_kg=70,
+        reps=8,
+        done_at=marks + timedelta(minutes=15),
+    )
+    StrengthSetFactory(
+        workout=workout,
+        exercise=other,
+        set_number=2,
+        weight_kg=100,
+        reps=5,
+        done_at=marks,
+    )
+
+    from workouts import services
+
+    on_summary = {
+        group["exercise"].pk: group["position"] for group in services.exercise_groups(workout)
+    }
+    on_page = stats.exercise_progress(user, ours)[0]["position"]
+
+    assert on_page == on_summary[ours.pk] == 2
+
+
+def test_exercise_positions_ignore_other_users_workouts(user, other_user):
+    """Изоляция: чужая тренировка с тем же упражнением в номера не попадает."""
+    exercise = ExerciseFactory(name="Жим лёжа", owner=None)
+    mine = WorkoutFactory(user=user, started_at=timezone.now(), duration_min=60)
+    StrengthSetFactory(workout=mine, exercise=exercise, set_number=1, weight_kg=80, reps=8)
+    alien = WorkoutFactory(user=other_user, started_at=timezone.now(), duration_min=60)
+    StrengthSetFactory(workout=alien, exercise=exercise, set_number=1, weight_kg=200, reps=1)
+
+    positions = stats.exercise_positions(user, [mine.pk, alien.pk], exercise)
+
+    assert positions == {mine.pk: 1}

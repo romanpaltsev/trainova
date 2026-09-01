@@ -66,9 +66,15 @@
   {% for group in history %}
     <section class="app-card app-live-exercise app-exercise-workout">
       <div class="app-live-exercise-head">
-        <a class="app-link" href="{% url 'workout_summary' group.workout.pk %}">
-          {{ group.workout.started_at|date:"D, j b"|lower }}
-        </a>
+        <div class="app-live-exercise-title">
+          {% comment %}Номер — каким по счёту упражнение было в ТОЙ тренировке.{% endcomment %}
+          <span class="app-exercise-num" aria-hidden="true"
+                title="Каким по счёту делал в той тренировке">{{ group.position }}</span>
+          <a class="app-link" href="{% url 'workout_summary' group.workout.pk %}">
+            <span class="visually-hidden">упражнение {{ group.position }} в тренировке </span>
+            {{ group.workout.started_at|date:"D, j b"|lower }}
+          </a>
+        </div>
         <span class="app-live-exercise-meta">до {{ group.max_value_display }}</span>
       </div>
       {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}

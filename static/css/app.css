@@ -275,6 +275,35 @@ body {
 
 .app-filters .app-chip { flex: 0 0 auto; }
 
+/* Номер упражнения в тренировке — кружок слева от названия. Живёт на четырёх
+   экранах (итог, живой режим «сейчас»/«дальше»/«выполнено», история подходов),
+   поэтому стоит здесь, рядом с точкой-маркером спорта, а не в секции живого режима.
+
+   Это не кнопка: 1.75rem, а не --app-tap-target — по номеру не тапают, и 44px
+   рядом с названием читались бы как круглая кнопка действия. От номера подхода
+   (.app-live-set-num) отличается сразу тремя признаками: у того нет фигуры, он
+   стоит внутри залитой строки и приглушён сильнее.
+
+   min-width вместо width: упражнений бывает 10+, и двузначный номер должен
+   растягивать кружок, а не сплющивать цифры. Гарнитура — Manrope, а не .num:
+   Unbounded шире, и на двух цифрах кружок перестал бы быть кругом. */
+.app-exercise-num {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  height: 1.75rem;
+  padding-inline: var(--app-space-1);
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-pill);
+  background-color: var(--app-raised);
+  color: var(--app-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Точка-маркер вида спорта */
 .app-sport-dot {
   display: inline-block;
@@ -698,6 +727,22 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+}
+
+/* Номер и название — одна группа: у шапки justify-content: space-between, и
+   третий прямой ребёнок развёл бы номер с названием на всю ширину. Обёртка
+   оставляет у шапки ровно двух детей, поэтому сама .app-live-exercise-head не
+   меняется ни на одном из четырёх экранов, где она уже работает.
+
+   min-width: 0 обязателен: без него группа как флекс-элемент имеет ширину по
+   содержимому и выдавила бы мету за край карточки на 375px. overflow-wrap —
+   про имена, которые придумывают пользователи: «Французскийжимлёжа» реален. */
+.app-live-exercise-title {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .app-live-exercise-name {
@@ -1670,7 +1715,8 @@ body {
     align-items: start;
   }
 
-  /* Общий примитив: карточки в две колонки (итог тренировки, история подходов). */
+  /* Карточки в две колонки. Итог тренировки сюда намеренно НЕ входит: там список
+     упражнений — последовательность, и сетка по строкам её ломает. */
   .app-cards-2 {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

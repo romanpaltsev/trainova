@@ -7,7 +7,7 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
-from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, Max, Q, Sum
+from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, Max, Min, Q, Sum
 from django.db.models.functions import Coalesce
 from django.utils import formats, timezone
 
@@ -21,6 +21,7 @@ from workouts.models import (
     StrengthSet,
     Workout,
     decimal_display,
+    exercise_order_key,
     metric_display,
     ru_plural,
 )
@@ -358,6 +359,44 @@ def cardio_records(user):
     return records
 
 
+def exercise_positions(user, workout_ids, exercise):
+    """Каким по счёту было упражнение в каждой из тренировок: {workout_id: номер}.
+
+    Один запрос на всю историю, а не на тренировку: у каждой пары «тренировка +
+    упражнение» берём те же два ключа, по которым сортирует
+    `services.exercise_groups`, — самую раннюю метку выполнения и минимальный id
+    подходов, — и считаем позицию нашего упражнения. Агрегат, а не выборка
+    подходов: тянуть все подходы всех соседних упражнений было бы дороже самой
+    страницы.
+
+    Правило сортировки общее (`exercise_order_key`) именно поэтому: номер здесь
+    обязан совпасть с номером той же тренировки на её итоге.
+    """
+    rows = (
+        # Фильтр по user избыточен (id пришли из своей выборки), но правило
+        # «каждый queryset пользовательских данных фильтруется по user» дороже
+        # экономии одного условия.
+        StrengthSet.objects.filter(workout_id__in=workout_ids, workout__user=user)
+        .values("workout_id", "exercise_id")
+        .annotate(first_done_at=Min("done_at"), first_set_id=Min("id"))
+    )
+    by_workout = {}
+    for row in rows:
+        by_workout.setdefault(row["workout_id"], []).append(row)
+    positions = {}
+    for workout_id, items in by_workout.items():
+        items.sort(key=lambda item: exercise_order_key(item["first_done_at"], item["first_set_id"]))
+        positions[workout_id] = next(
+            (
+                number
+                for number, item in enumerate(items, start=1)
+                if item["exercise_id"] == exercise.pk
+            ),
+            None,
+        )
+    return positions
+
+
 def exercise_progress(user, exercise):
     """Прогресс упражнения по завершённым тренировкам пользователя.
 
@@ -398,11 +437,15 @@ def exercise_progress(user, exercise):
         if progress
         else {}
     )
+    # Номера — тем же приёмом, что заметки: один запрос на всю историю.
+    positions = exercise_positions(user, list(seen), exercise) if progress else {}
     for group in progress:
         # Метрика берётся у упражнения, а не у подхода: если упражнение перевели
         # в другую единицу, график должен говорить на одном языке.
         group["max_value_display"] = metric_display(exercise.measurement, group["max_value"])
         group["note"] = notes.get(group["workout"].pk, "")
+        # Каким по счёту это упражнение было в той тренировке.
+        group["position"] = positions.get(group["workout"].pk)
     return progress
 
 

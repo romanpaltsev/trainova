@@ -13,6 +13,7 @@ from workouts.models import (
     ExerciseNote,
     StrengthSet,
     decimal_display,
+    exercise_order_key,
     metric_display,
     rest_display,
     ru_plural,
@@ -91,10 +92,15 @@ def set_values(measurement, source):
 
 
 def exercise_groups(workout):
-    """Упражнения тренировки в порядке добавления, каждое со своими подходами.
+    """Упражнения тренировки в порядке фактического выполнения, со своими подходами.
 
-    Порядок добавления восстанавливается по id подходов: отдельного поля порядка нет,
-    а плановые строки создаются в момент добавления упражнения.
+    Порядок — по самой ранней метке выполнения (`StrengthSet.done_at`); упражнения,
+    которых ещё не делали, идут после всех выполненных в порядке добавления
+    (он восстанавливается по id подходов — плановые строки создаются в момент
+    добавления упражнения). Правило одно на все экраны: `exercise_order_key`.
+
+    Сортировка идёт в Python по уже загруженным строкам: их в тренировке десятки,
+    а оконная функция в SQL удорожила бы горячий запрос живого экрана.
     """
     # Шаг веса подмешивается той же выборкой: отдельный запрос на упражнение
     # сделал бы экран зависимым от их числа.
@@ -106,17 +112,37 @@ def exercise_groups(workout):
     for row in rows:
         if row.exercise_id not in index:
             index[row.exercise_id] = len(groups)
-            groups.append({"exercise": row.exercise, "sets": []})
+            # first_set_id — id первого встреченного подхода: строки уже
+            # отсортированы по id, значит это минимум без отдельного прохода.
+            groups.append(
+                {
+                    "exercise": row.exercise,
+                    "sets": [],
+                    "first_set_id": row.pk,
+                    "first_done_at": None,
+                }
+            )
         groups[index[row.exercise_id]]["sets"].append(row)
+    for group in groups:
+        # min по всем подходам, а не метка подхода с наименьшим номером: после
+        # отмены и повторного выполнения метка первого подхода может стать позже.
+        group["first_done_at"] = min(
+            (row.done_at for row in group["sets"] if row.done_at is not None), default=None
+        )
+    groups.sort(key=lambda g: exercise_order_key(g["first_done_at"], g["first_set_id"]))
     # Заметки одним запросом на всю тренировку: в цикле по группам это был бы
     # запрос на упражнение, и бюджет экрана рос бы вместе с их числом.
     notes = notes_by_exercise(workout) if groups else {}
-    for group in groups:
+    for position, group in enumerate(groups, start=1):
+        # Номер упражнения на экране. Считается здесь, а не в шаблоне: живой экран
+        # разрезает этот список на «сейчас / дальше / выполнено», и forloop.counter
+        # дал бы в каждом разделе свою единицу вместо сквозной нумерации.
+        group["position"] = position
         group["sets"].sort(key=lambda item: item.set_number)
         group["note"] = notes.get(group["exercise"].pk, "")
-        # Номер на экране — позиция в списке: в set_number могут остаться пропуски.
-        for position, row in enumerate(group["sets"], start=1):
-            row.display_number = position
+        # Номер подхода на экране — позиция в списке: в set_number бывают пропуски.
+        for set_position, row in enumerate(group["sets"], start=1):
+            row.display_number = set_position
     return groups
 
 
@@ -162,6 +188,9 @@ def live_groups(workout):
         if workout.current_exercise_id in pending_ids:
             current_id = workout.current_exercise_id
         else:
+            # Первое в порядке exercise_order_key, то есть «раньше начатое
+            # незакрытое, а если начатых нет — первое по плану»: возвращает
+            # к тому, что не доделал, а не к первому добавленному.
             current_id = pending_ids[0]
 
     for group in groups:

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.conf import settings
@@ -577,6 +578,13 @@ class StrengthSet(models.Model):
     )
     # False = плановый подход живого режима; при завершении тренировки такие удаляются.
     done = models.BooleanField("выполнен", default=False)
+    # Когда подход засчитали кнопкой «Подход выполнен». По самой ранней метке
+    # упражнения считается фактический порядок упражнений в тренировке — см.
+    # exercise_order_key. Пишут её ровно два места: SetDoneView ставит,
+    # SetUndoView очищает. NULL = либо подход ещё плановый, либо он записан до
+    # появления поля: бэкфилл невозможен, времени выполнения в старых данных
+    # не существует ни в каком виде.
+    done_at = models.DateTimeField("выполнен в", null=True, blank=True)
 
     class Meta:
         verbose_name = "подход"
@@ -604,6 +612,18 @@ class StrengthSet(models.Model):
                 ),
                 name="set_fields_match_measurement",
                 violation_error_message="Значения подхода не совпадают с единицей упражнения.",
+            ),
+            # Метка времени бывает только у выполненного подхода. Это она и делает
+            # min(done_at) осмысленным: «когда упражнение действительно делали», а
+            # не «когда его когда-то трогали». Заодно благодаря ней удаление
+            # невыполненных подходов при завершении не может сдвинуть порядок —
+            # у удаляемых строк метки нет по определению.
+            # Обратное направление разрешено: done=True без метки — так записаны
+            # тренировки до появления поля.
+            models.CheckConstraint(
+                condition=Q(done=True) | Q(done_at__isnull=True),
+                name="set_done_at_only_when_done",
+                violation_error_message="Время выполнения бывает только у выполненного подхода.",
             ),
         ]
 
@@ -731,6 +751,28 @@ class ExerciseNote(models.Model):
 
     def __str__(self):
         return f"{self.exercise} · {self.text[:40]}"
+
+
+# Псевдо-бесконечность для упражнения, которого ещё не делали: такое уходит в
+# конец списка, а между собой такие остаются в порядке добавления. В базу
+# значение не попадает никогда, оно нужно только для сравнения.
+NEVER_DONE = datetime.max.replace(tzinfo=UTC)
+
+
+def exercise_order_key(first_done_at, first_set_id):
+    """Ключ порядка упражнений внутри тренировки: сначала факт, потом план.
+
+    `first_done_at` — самая ранняя метка выполненного подхода упражнения (None,
+    если ни одного ещё нет), `first_set_id` — минимальный id его подходов, то есть
+    момент добавления. Одно правило на все экраны: выполненные идут в том порядке,
+    в котором их делали, остальные — в порядке плана, а тренировка без меток
+    целиком ложится на порядок добавления, то есть ведёт себя как раньше.
+
+    Считается в двух местах — services.exercise_groups (по загруженным строкам) и
+    stats.exercise_positions (агрегатом в SQL), — поэтому правило и вынесено сюда:
+    разъехавшись, они дали бы разные номера одному упражнению на разных экранах.
+    """
+    return (first_done_at or NEVER_DONE, first_set_id)
 
 
 def with_weight_step(queryset, user, *, exercise_ref="exercise"):

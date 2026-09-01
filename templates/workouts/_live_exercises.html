@@ -1,5 +1,8 @@
 {% comment %}
   Регион упражнений живого режима: текущее упражнение, очередь «Дальше», выполненные.
+  Номер упражнения (group.position) приходит из services.exercise_groups и сквозной
+  по всему экрану: forloop.counter дал бы в каждом разделе свою единицу, а очередь
+  начинается не с первого упражнения.
   Все действия свапают регион целиком (hx-target="#exercises"); карточку отдыха
   обновляет только OOB-ответ «Подход выполнен».
 {% endcomment %}
@@ -12,7 +15,12 @@
   {% if current_group %}
     <section class="app-card app-live-exercise">
       <div class="app-live-exercise-head">
-        <h2 class="app-live-exercise-name">{{ current_group.exercise.name }}</h2>
+        <div class="app-live-exercise-title">
+          <span class="app-exercise-num" aria-hidden="true">{{ current_group.position }}</span>
+          <h2 class="app-live-exercise-name">
+            <span class="visually-hidden">упражнение {{ current_group.position }}: </span>{{ current_group.exercise.name }}
+          </h2>
+        </div>
         <span class="app-sport-dot" style="--dot: var(--app-sport-strength)"></span>
       </div>
       <p class="app-live-last">{{ current_group.hint }}</p>
@@ -71,8 +79,11 @@
               hx-post="{% url 'live_exercise_select' workout.pk %}"
               hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
               hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+        <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
         <span class="app-queue-text">
-          <span class="app-queue-name">{{ group.exercise.name }}</span>
+          <span class="app-queue-name">
+            <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
+          </span>
           <span class="app-queue-hint">{{ group.hint }}</span>
           {% comment %}Только текст: сама строка очереди — button, вложенная кнопка невалидна.{% endcomment %}
           {% if group.note %}
@@ -102,7 +113,12 @@
     {% for group in done_groups %}
       <section class="app-card app-live-exercise">
         <div class="app-live-exercise-head">
-          <h2 class="app-live-exercise-name">{{ group.exercise.name }}</h2>
+          <div class="app-live-exercise-title">
+            <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
+            <h2 class="app-live-exercise-name">
+              <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
+            </h2>
+          </div>
           <span class="app-live-exercise-meta">{{ group.hint }}</span>
         </div>
         {% include "workouts/_live_note.html" with group=group %}

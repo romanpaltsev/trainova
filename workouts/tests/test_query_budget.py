@@ -56,8 +56,20 @@ def test_exercise_page_query_budget(client, user, django_assert_max_num_queries)
 
     client.force_login(user)
     # Седьмой запрос — заметки упражнения (один на всю историю), восьмой — список
-    # групп мышц для чипов. Оба не зависят от объёма истории.
-    with django_assert_max_num_queries(8):
+    # групп мышц для чипов, девятый — позиции упражнения в тренировках («каким
+    # по счёту делал»). Ни один не зависит от объёма истории.
+    with django_assert_max_num_queries(9):
+        client.get(reverse("exercise_detail", args=[bench.pk]))
+
+
+def test_exercise_page_queries_do_not_scale_with_history(
+    client, user, django_assert_max_num_queries
+):
+    """Позиции считаются одним агрегатом на всю историю, а не по тренировке."""
+    bench = fill_history(user, weeks=12)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(9):
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
@@ -66,7 +78,7 @@ def test_exercise_panel_query_budget(client, user, django_assert_max_num_queries
     bench = fill_history(user)
 
     client.force_login(user)
-    with django_assert_max_num_queries(8):
+    with django_assert_max_num_queries(9):
         client.get(reverse("exercise_detail", args=[bench.pk]), headers={"HX-Request": "true"})
 
 
@@ -142,3 +154,21 @@ def test_profile_query_budget(client, user, django_assert_max_num_queries):
     client.force_login(user)
     with django_assert_max_num_queries(9):
         client.get(reverse("profile"))
+
+
+@pytest.mark.parametrize("exercises", [1, 6], ids=["one-exercise", "six-exercises"])
+def test_workout_summary_query_budget(client, user, django_assert_max_num_queries, exercises):
+    """Итог тренировки не должен зависеть от числа упражнений в ней.
+
+    Экран показывает номер, объём и подходы каждого упражнения — то есть ровно тот
+    сорт данных, куда легко въезжает запрос на упражнение. Ценность теста не в
+    самом числе, а в том, что оно одинаково при одном упражнении и при шести.
+    """
+    workout = WorkoutFactory(user=user, duration_min=60)
+    for number in range(exercises):
+        exercise = ExerciseFactory(name=f"Упражнение {number}")
+        StrengthSetFactory(workout=workout, exercise=exercise, set_number=1, weight_kg=70, reps=8)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(7):
+        client.get(reverse("workout_summary", args=[workout.pk]))

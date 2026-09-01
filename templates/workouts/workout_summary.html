@@ -2,7 +2,7 @@
 
 {% block title %}Тренировка · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-dual{% endblock %}
+{% block main_class %}app-main-read{% endblock %}
 
 {% block content %}
 <div class="app-screen-head">
@@ -36,18 +36,27 @@
 </section>
 
 {% comment %}
-  app-cards-2 — общий примитив «карточки в две колонки» на десктопе. Тот же
-  используется историей подходов на странице упражнения.
+  Одна колонка сознательно: список упражнений — это последовательность, а
+  двухколоночная сетка заполняется по строкам, и глаз, идущий по левому столбцу,
+  читает 1, 3, 5. Порядок здесь важнее плотности.
 {% endcomment %}
-<div class="app-cards-2">
 {% for group in groups %}
   <section class="app-card app-live-exercise">
     <div class="app-live-exercise-head">
-      <h2 class="app-live-exercise-name">
-        <a class="app-exercise-link" href="{% url 'exercise_detail' group.exercise.pk %}">
-          {{ group.exercise.name }}
-        </a>
-      </h2>
+      <div class="app-live-exercise-title">
+        {% comment %}
+          Номер приходит из данных (services.exercise_groups), а не из
+          forloop.counter: он же нужен живому экрану, где список разрезан на
+          «сейчас / дальше / выполнено».
+        {% endcomment %}
+        <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
+        <h2 class="app-live-exercise-name">
+          <span class="visually-hidden">упражнение {{ group.position }}: </span>
+          <a class="app-exercise-link" href="{% url 'exercise_detail' group.exercise.pk %}">
+            {{ group.exercise.name }}
+          </a>
+        </h2>
+      </div>
       <span class="app-live-exercise-meta">{{ group.total }}</span>
     </div>
     {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}
@@ -65,7 +74,6 @@
 {% empty %}
   {% include "includes/empty_state.html" with text="В этой тренировке нет записанных подходов." %}
 {% endfor %}
-</div>
 
 <div class="app-form-actions">
   <form method="post" action="{% url 'workout_repeat' workout.pk %}">

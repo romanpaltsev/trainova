@@ -709,7 +709,13 @@ class SetDoneView(LoginRequiredMixin, View):
         if getattr(row, field) < 1:
             return live_region_response(request, row.workout, error=message)
         row.done = True
-        row.save(update_fields=["done"])
+        # Метка ставится ровно здесь: по ней считается фактический порядок
+        # упражнений в тренировке. Часы приложения, а не БД: под ATOMIC_REQUESTS
+        # NOW() в Postgres дал бы время начала транзакции, а не отметки.
+        # Даблтап метку не перезапишет — строка взята select_for_update, и второй
+        # запрос выходит выше на охраннике row.done.
+        row.done_at = timezone.now()
+        row.save(update_fields=["done", "done_at"])
         return live_region_response(request, row.workout, restart_timer=True)
 
 
@@ -720,7 +726,12 @@ class SetUndoView(LoginRequiredMixin, View):
         row = live_set_or_404(request, pk, for_update=True)
         if row.done:
             row.done = False
-            row.save(update_fields=["done"])
+            # Метку чистим, а не храним «когда выполнили в первый раз»: она значит
+            # «этот подход выполнен вот тогда». Если у упражнения не осталось
+            # выполненных подходов, оно честно возвращается в план и получит новое
+            # место, когда его действительно сделают.
+            row.done_at = None
+            row.save(update_fields=["done", "done_at"])
             row.workout.current_exercise = row.exercise
             row.workout.save(update_fields=["current_exercise"])
         return live_region_response(request, row.workout)

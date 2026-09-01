@@ -255,3 +255,25 @@ def test_effective_rest_falls_back_to_profile_default(user):
     # 0 — валидное «без отдыха», а не «возьми дефолт».
     workout.rest_seconds = 0
     assert workout.effective_rest_seconds == 0
+
+
+def test_set_done_writes_mark_and_undo_clears_it(client, user):
+    """Сторож против забытого update_fields: метка — единственный носитель порядка."""
+    active = WorkoutFactory(user=user, duration_min=None)
+    row = StrengthSetFactory(workout=active, set_number=1, weight_kg=70, reps=8, done=False)
+
+    client.force_login(user)
+    client.post(reverse("set_done", args=[row.pk]))
+
+    row.refresh_from_db()
+    assert row.done_at is not None
+    first_mark = row.done_at
+
+    # Даблтап метку не переписывает: второй запрос выходит на охраннике row.done.
+    client.post(reverse("set_done", args=[row.pk]))
+    row.refresh_from_db()
+    assert row.done_at == first_mark
+
+    client.post(reverse("set_undo", args=[row.pk]))
+    row.refresh_from_db()
+    assert row.done_at is None
