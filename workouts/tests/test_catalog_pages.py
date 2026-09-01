@@ -1,5 +1,7 @@
 """Каталог упражнений, личные виды спорта и удаление записей справочников."""
 
+import re
+
 import pytest
 from django.urls import reverse
 
@@ -278,3 +280,135 @@ def test_anonymous_cannot_delete_exercise(client, user):
 
     assert response.status_code == 302
     assert Exercise.objects.filter(pk=mine.pk).exists()
+
+
+# ---------- Группы мышц: чипы, фильтр, заголовки ----------
+
+
+def chip_links(html):
+    """Адреса чипов-фильтров в порядке разметки: «Все», «Мои», затем группы."""
+    block = html[html.index("app-chips app-filters") :]
+    return [link.replace("&amp;", "&") for link in re.findall(r'href="([^"]*)"', block)]
+
+
+def test_catalog_groups_exercises_by_muscle_group(client, user):
+    """Без фильтра список разбит заголовками групп — иначе двадцать пять строк
+    приходится читать вторыми строками, чтобы понять, что есть на спину."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+    ExerciseFactory(name="Подтягивания", muscle_group="Спина")
+    ExerciseFactory(name="Становая тяга", muscle_group="Спина")
+
+    response = client.get(reverse("exercise_list"))
+
+    groups = [
+        (group["title"], [e.name for e in group["items"]]) for group in response.context["groups"]
+    ]
+    assert groups == [("Грудь", ["Жим лёжа"]), ("Спина", ["Подтягивания", "Становая тяга"])]
+    assert response.context["shows_group_titles"] is True
+
+
+def test_exercises_without_group_go_last(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+    ExerciseFactory(name="Загадочное упражнение", muscle_group="")
+
+    titles = [group["title"] for group in client.get(reverse("exercise_list")).context["groups"]]
+
+    assert titles == ["Грудь", "Без группы"]
+
+
+def test_group_chips_come_from_data_and_hide_other_users(client, user, other_user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+    ExerciseFactory(name="Каяк", muscle_group="Гребля", owner=other_user)
+
+    chips = client.get(reverse("exercise_list")).context["muscle_groups"]
+
+    assert chips == ["Грудь"]
+
+
+def test_group_filter_narrows_the_list(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+    ExerciseFactory(name="Подтягивания", muscle_group="Спина")
+
+    response = client.get(reverse("exercise_list"), {"group": "Спина"})
+
+    assert [e.name for e in response.context["exercises"]] == ["Подтягивания"]
+    assert response.context["group_filter"] == "Спина"
+    # Заголовок группы не нужен: её название уже стоит в активном чипе.
+    assert response.context["shows_group_titles"] is False
+
+
+def test_group_filter_is_case_insensitive_but_keeps_stored_spelling(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Подтягивания", muscle_group="Спина")
+
+    response = client.get(reverse("exercise_list"), {"group": "спина"})
+
+    assert response.context["group_filter"] == "Спина"
+    assert len(response.context["exercises"]) == 1
+
+
+def test_unknown_group_is_ignored_not_404(client, user):
+    """Чипы приходят из данных и в открытой вкладке могли устареть."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+
+    response = client.get(reverse("exercise_list"), {"group": "Хвост"})
+
+    assert response.status_code == 200
+    assert response.context["group_filter"] == ""
+    assert len(response.context["exercises"]) == 1
+
+
+def test_group_filter_combines_with_mine_and_search(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Присед с гантелями", muscle_group="Ноги", owner=user)
+    ExerciseFactory(name="Присед со штангой", muscle_group="Ноги")
+    ExerciseFactory(name="Жим ногами", muscle_group="Ноги", owner=user)
+
+    response = client.get(reverse("exercise_list"), {"group": "Ноги", "mine": "1", "q": "присед"})
+
+    assert [e.name for e in response.context["exercises"]] == ["Присед с гантелями"]
+
+
+def test_group_chip_keeps_search_and_owner(client, user):
+    """Чип группы не должен сбрасывать поиск, а адрес обязан быть абсолютным: на
+    десктопе после выбора упражнения адрес страницы — /exercises/5/, и
+    относительный «?group=…» увёл бы на деталь."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+
+    html = client.get(reverse("exercise_list"), {"mine": "1", "q": "жим"}).content.decode()
+
+    chip = chip_links(html)[2]  # 0 — «Все», 1 — «Мои», дальше группы
+    assert chip.startswith(reverse("exercise_list"))
+    assert "mine=1" in chip and "q=%D0%B6%D0%B8%D0%BC" in chip
+    assert "group=%D0%93%D1%80%D1%83%D0%B4%D1%8C" in chip
+
+
+def test_active_group_chip_removes_the_filter(client, user):
+    """Повторный тап по активному чипу снимает фильтр — иначе из группы не выйти."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+
+    html = client.get(reverse("exercise_list"), {"group": "Грудь"}).content.decode()
+
+    assert "group=" not in chip_links(html)[2]
+
+
+def test_dense_rows_are_scoped_to_the_catalog(client, user):
+    """Плотные строки — вариант каталога. В профиле и «Моих видах спорта» строки
+    остаются отдельными карточками, и общий .app-row трогать нельзя."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+
+    catalog = client.get(reverse("exercise_list")).content.decode()
+    profile = client.get(reverse("profile")).content.decode()
+    sports = client.get(reverse("my_sports")).content.decode()
+
+    assert "app-rows-dense" in catalog
+    assert "app-rows-dense" not in profile
+    assert "app-rows-dense" not in sports
