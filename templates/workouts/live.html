@@ -19,6 +19,17 @@
   колонки делает CSS.
 {% endcomment %}
 <div class="app-live-screen">
+{% comment %}
+  Полоса «связи нет». Пока её нет, неудачный запрос на этом экране проходит
+  молча: тап по «Подход выполнен» ничего не делает, и понять, что дело в связи,
+  а не в приложении, невозможно. Текст пишет JS, потому что причина известна
+  только ему (таймаут, обрыв или код ответа).
+{% endcomment %}
+<div class="app-live-offline" id="live-offline" role="status" aria-live="polite" hidden>
+  <span id="live-offline-text"></span>
+  <button type="button" class="btn btn-quiet app-live-offline-btn"
+          onclick="location.reload()">Обновить</button>
+</div>
 <div class="app-live-head">
   <div>
     <h1 class="app-page-title mb-0">{{ workout.sport.name }}</h1>

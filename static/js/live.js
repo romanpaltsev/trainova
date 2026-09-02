@@ -318,3 +318,73 @@ function restTimer() {
     },
   };
 }
+
+// ---------- Связь и возврат к экрану ----------
+//
+// Две беды живого экрана в зале, обе выглядят как «приложение не реагирует».
+//
+// 1. Неудачный запрос проходил молча. У степперов есть своя пометка, а у
+//    «Подход выполнен», «+ Упражнение» и строк очереди — нет: тап просто
+//    ничего не делал. Теперь любая осечка поднимает полосу с причиной.
+// 2. iOS усыпляет страницу, пока телефон лежит в кармане между подходами. На
+//    возврате таймеры стоят, запрос в полёте умирает без событий, а кнопка с
+//    hx-disabled-elt остаётся выключенной — помогает только переход на другую
+//    страницу и назад. Делаем это сами: после долгой паузы перезагружаем экран.
+
+const RESUME_RELOAD_AFTER_MS = 60000;
+
+function offlineBar() {
+  return document.getElementById("live-offline");
+}
+
+function showOffline(text) {
+  const bar = offlineBar();
+  if (!bar) return;
+  const label = document.getElementById("live-offline-text");
+  if (label) label.textContent = text;
+  bar.hidden = false;
+}
+
+function hideOffline() {
+  const bar = offlineBar();
+  if (bar) bar.hidden = true;
+}
+
+document.addEventListener("htmx:responseError", function (event) {
+  const status = event.detail.xhr ? event.detail.xhr.status : 0;
+  showOffline(`Ошибка сервера ${status} — изменение не сохранено.`);
+});
+
+["htmx:timeout", "htmx:sendError"].forEach(function (name) {
+  document.addEventListener(name, function () {
+    showOffline("Нет связи — изменение не сохранено.");
+  });
+});
+
+// Полосу снимает любой удавшийся запрос: связь вернулась.
+document.addEventListener("htmx:afterRequest", function (event) {
+  if (event.detail.successful) hideOffline();
+});
+
+let hiddenAt = null;
+
+document.addEventListener("visibilitychange", function () {
+  if (document.hidden) {
+    hiddenAt = Date.now();
+    return;
+  }
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = null;
+  if (away < RESUME_RELOAD_AFTER_MS) return;
+  // Оффлайн перезагружать нельзя: вместо экрана будет ошибка браузера.
+  if (navigator.onLine === false) {
+    showOffline("Нет сети — экран мог устареть.");
+    return;
+  }
+  window.location.reload();
+});
+
+// Возврат из кэша «назад/вперёд»: состояние страницы там заведомо устаревшее.
+window.addEventListener("pageshow", function (event) {
+  if (event.persisted) window.location.reload();
+});

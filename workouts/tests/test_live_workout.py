@@ -196,3 +196,22 @@ def test_anonymous_is_redirected_to_login(client):
 
     assert response.status_code == 302
     assert reverse("account_login") in response.url
+
+
+def test_live_screen_has_connection_notice(client, user):
+    """Полоса «связи нет» должна быть в разметке живого экрана.
+
+    Поведение полосы — на JS (его тестов в проекте нет), но её отсутствие в
+    разметке ломает всю защиту: неудачный запрос снова станет молчаливым.
+    """
+    client.force_login(user)
+    workout = WorkoutFactory(user=user, duration_min=None)
+
+    html = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+
+    assert 'id="live-offline"' in html
+    assert 'id="live-offline-text"' in html
+    assert "hidden" in html.split('id="live-offline"')[1][:120], (
+        "полоса должна быть скрыта до осечки"
+    )
+    assert "js/live.js" in html, "без live.js полоса никогда не покажется"

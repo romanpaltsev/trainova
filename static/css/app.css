@@ -643,6 +643,26 @@ body {
 
 /* ---------- Живой режим ---------- */
 
+/* Полоса «связи нет» на живом экране: сообщает, что изменения не доехали. */
+.app-live-offline {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  padding: var(--app-space-3) var(--app-space-4);
+  margin-bottom: var(--app-space-3);
+  border: 1px solid var(--app-danger);
+  border-radius: var(--app-radius-field);
+  background-color: var(--app-card);
+  color: var(--app-text);
+  font-size: 0.9375rem;
+}
+
+.app-live-offline-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: var(--app-space-2) var(--app-space-3);
+}
+
 .app-live-head {
   display: flex;
   align-items: flex-start;
@@ -1933,7 +1953,7 @@ body {
     align-items: start;
   }
 
-  .app-live-head { grid-column: 1 / -1; }
+.app-live-head { grid-column: 1 / -1; }
 
   /* Таймер отдыха остаётся на виду: без липкости он уезжал вверх, пока
      прокручиваешь к нужному упражнению. z-index — потому что карточка текущего
