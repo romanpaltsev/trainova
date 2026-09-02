@@ -406,7 +406,9 @@ def exercise_progress(user, exercise):
         StrengthSet.objects.filter(
             exercise=exercise, workout__user=user, workout__duration_min__isnull=False
         )
-        .select_related("workout")
+        # workout__location — для разреза по местам: один LEFT JOIN в тот же
+        # запрос, поэтому сравнение по залам не стоит ни одного нового.
+        .select_related("workout", "workout__location")
         .order_by("workout__started_at", "workout_id", "set_number")
     )
     progress = []
@@ -447,6 +449,44 @@ def exercise_progress(user, exercise):
         # Каким по счёту это упражнение было в той тренировке.
         group["position"] = positions.get(group["workout"].pk)
     return progress
+
+
+def progress_by_location(exercise, progress):
+    """Разрез прогресса по местам: рекорд и число тренировок в каждом.
+
+    Считается в Python по уже загруженным группам — тот же приём, что у
+    group_by_muscle и services.exercise_groups: отдельных запросов это не стоит,
+    место пришло вместе с тренировкой в select_related.
+
+    Порядок — по рекорду, а без метрики (собственный вес) по числу тренировок:
+    иначе подтягивания встали бы в конец по алфавиту случайного места.
+    """
+    buckets = {}
+    for group in progress:
+        location = group["workout"].location
+        key = location.pk if location is not None else None
+        bucket = buckets.setdefault(
+            key,
+            # «Место не указано» — такой же разрез, как остальные: у истории до
+            # появления справочника места нет, и прятать её было бы враньём.
+            {
+                "name": location.name if location else "Место не указано",
+                "max_value": 0.0,
+                "count": 0,
+            },
+        )
+        bucket["count"] += 1
+        bucket["max_value"] = max(bucket["max_value"], group["max_value"])
+    rows = sorted(buckets.values(), key=lambda row: (-row["max_value"], -row["count"], row["name"]))
+    for row in rows:
+        row["max_display"] = (
+            metric_display(exercise.measurement, row["max_value"]) if row["max_value"] else ""
+        )
+        row["count_label"] = (
+            f"{row['count']} {ru_plural(row['count'], 'тренировка', 'тренировки', 'тренировок')}"
+        )
+    # Один разрез — это не сравнение, а повтор строки статистики выше.
+    return rows if len(rows) > 1 else []
 
 
 def exercise_spotlight(user, records=None):

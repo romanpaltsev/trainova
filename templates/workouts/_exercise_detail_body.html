@@ -61,6 +61,36 @@
     </section>
   {% endif %}
 
+  {% comment %}
+    Разрез по местам. Показывается только когда мест два и больше: с одним
+    залом это повтор строки статистики выше, а не сравнение. Строка без
+    рекорда законна — у подтягиваний с собственным весом метрика нулевая.
+  {% endcomment %}
+  {% if by_location %}
+    {% comment %}
+      Заголовок и строки — одной секцией: на 1200px .app-exercise это
+      флекс-колонка с явным order, и разложенные по отдельности заголовок и
+      список разъехались бы по разным местам экрана.
+    {% endcomment %}
+    <section class="app-by-location">
+    <h2 class="app-section-title">По местам</h2>
+    <div class="app-rows">
+      {% for row in by_location %}
+        <div class="app-row">
+          <span class="app-row-icon">{% include "includes/pin.html" with size=20 only %}</span>
+          <span class="app-row-text">
+            <span class="app-row-name">{{ row.name }}</span>
+            <span class="app-row-meta">{{ row.count_label }}</span>
+          </span>
+          {% if row.max_display %}
+            <span class="app-row-value num">до {{ row.max_display }}</span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+    </section>
+  {% endif %}
+
   <h2 class="app-section-title">История подходов</h2>
   <div class="app-cards-2">
   {% for group in history %}

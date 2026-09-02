@@ -2211,8 +2211,12 @@ body {
   .app-exercise > .app-chart-card,
   .app-exercise > .app-empty { order: 1; }
   .app-exercise > .app-settings-row { order: 2; }
-  .app-exercise > .app-section-title { order: 3; }
-  .app-exercise > .app-cards-2 { order: 4; }
+  /* Сводка по местам — над длинной историей подходов. Своей секцией, а не
+     заголовком и списком по отдельности: без order они уехали бы к шапке, а
+     заголовок остался бы рядом с «Историей подходов». */
+  .app-exercise > .app-by-location { order: 3; }
+  .app-exercise > .app-section-title { order: 4; }
+  .app-exercise > .app-cards-2 { order: 5; }
 
   /* График в панели крупнее: он и есть причина открыть упражнение */
   .app-exercise .app-chart-body { height: 360px; }

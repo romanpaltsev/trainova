@@ -6,6 +6,7 @@ from django.urls import reverse
 from workouts.models import Location, Sport, Workout
 from workouts.tests.factories import (
     CardioDetailsFactory,
+    ExerciseFactory,
     LocationFactory,
     SportFactory,
     StrengthSetFactory,
@@ -407,3 +408,131 @@ def test_summary_shows_the_location_control(client, user, strength):
     # Места нет — кнопка всё равно есть: это точка входа в фичу.
     assert 'id="workout-location"' in content
     assert "Указать место" in content
+
+
+# ---------- Сравнение по местам на странице упражнения ----------
+
+
+def test_exercise_page_compares_locations(client, user, strength):
+    """Разрез по местам: рекорд и число тренировок в каждом."""
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    home = LocationFactory(owner=user, name="Дома")
+    bench = ExerciseFactory(name="Жим лёжа")
+    StrengthSetFactory(
+        workout=WorkoutFactory(user=user, sport=strength, location=gym),
+        exercise=bench,
+        set_number=1,
+        weight_kg=100,
+    )
+    StrengthSetFactory(
+        workout=WorkoutFactory(user=user, sport=strength, location=home),
+        exercise=bench,
+        set_number=1,
+        weight_kg=60,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_detail", args=[bench.pk]))
+
+    rows = response.context["by_location"]
+    # Сортировка по рекорду: зал с большим весом первым.
+    assert [row["name"] for row in rows] == ["СпортЛайф", "Дома"]
+    assert rows[0]["max_display"] == "100 кг"
+    assert rows[0]["count_label"] == "1 тренировка"
+    assert "По местам" in response.content.decode()
+
+
+def test_exercise_page_hides_comparison_with_one_location(client, user, strength):
+    """С одним залом это повтор строки статистики, а не сравнение."""
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    bench = ExerciseFactory(name="Жим лёжа")
+    for number in range(2):
+        StrengthSetFactory(
+            workout=WorkoutFactory(user=user, sport=strength, location=gym),
+            exercise=bench,
+            set_number=number + 1,
+        )
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_detail", args=[bench.pk]))
+
+    assert response.context["by_location"] == []
+    assert "По местам" not in response.content.decode()
+
+
+def test_exercise_comparison_counts_workouts_without_location(client, user, strength):
+    """История до появления справочника — такой же разрез, прятать её было бы враньём."""
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    bench = ExerciseFactory(name="Жим лёжа")
+    StrengthSetFactory(
+        workout=WorkoutFactory(user=user, sport=strength, location=gym),
+        exercise=bench,
+        set_number=1,
+        weight_kg=100,
+    )
+    StrengthSetFactory(
+        workout=WorkoutFactory(user=user, sport=strength),
+        exercise=bench,
+        set_number=1,
+        weight_kg=90,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_detail", args=[bench.pk]))
+
+    names = [row["name"] for row in response.context["by_location"]]
+    assert names == ["СпортЛайф", "Место не указано"]
+
+
+def test_exercise_comparison_ignores_other_users(client, user, other_user, strength):
+    """Изоляция: чужие тренировки в мой разрез не попадают."""
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    theirs = LocationFactory(owner=other_user, name="Чужой зал")
+    bench = ExerciseFactory(name="Жим лёжа")
+    StrengthSetFactory(
+        workout=WorkoutFactory(user=user, sport=strength, location=gym),
+        exercise=bench,
+        set_number=1,
+    )
+    StrengthSetFactory(
+        workout=WorkoutFactory(user=other_user, sport=strength, location=theirs),
+        exercise=bench,
+        set_number=1,
+    )
+
+    client.force_login(user)
+    response = client.get(reverse("exercise_detail", args=[bench.pk]))
+
+    assert response.context["by_location"] == []
+
+
+def test_exercise_comparison_without_record_falls_back_to_count(client, user, strength):
+    """Подтягивания с собственным весом: метрика нулевая, рекорда нет вовсе.
+
+    Порядок тогда решает число тренировок — иначе такое упражнение встало бы
+    в конец по алфавиту случайного места.
+    """
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    home = LocationFactory(owner=user, name="Дома")
+    pullups = ExerciseFactory(name="Подтягивания")
+    for number in range(2):
+        StrengthSetFactory(
+            workout=WorkoutFactory(user=user, sport=strength, location=home),
+            exercise=pullups,
+            set_number=number + 1,
+            weight_kg=0,
+            reps=12,
+        )
+    StrengthSetFactory(
+        workout=WorkoutFactory(user=user, sport=strength, location=gym),
+        exercise=pullups,
+        set_number=1,
+        weight_kg=0,
+        reps=10,
+    )
+
+    client.force_login(user)
+    rows = client.get(reverse("exercise_detail", args=[pullups.pk])).context["by_location"]
+
+    assert [row["name"] for row in rows] == ["Дома", "СпортЛайф"]
+    assert rows[0]["max_display"] == ""

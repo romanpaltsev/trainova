@@ -1132,6 +1132,9 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 "muscle_groups": muscle_groups_for(request.user),
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "stats_line": stats_line,
+                # Разрез по местам считается в Python по уже загруженным
+                # группам — ни одного нового запроса, бюджет страницы цел.
+                "by_location": stats.progress_by_location(exercise, progress),
                 "in_panel": in_panel,
                 "nav_active": "exercises",
             },
