@@ -28,7 +28,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('workouts', '0020_announce_trained_exercises'),
+        ('workouts', '0021_announce_trained_exercises'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

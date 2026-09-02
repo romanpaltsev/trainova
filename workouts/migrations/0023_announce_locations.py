@@ -40,7 +40,7 @@ def remove_entry(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("workouts", "0021_locations"),
+        ("workouts", "0022_locations"),
     ]
 
     operations = [migrations.RunPython(add_entry, remove_entry)]
