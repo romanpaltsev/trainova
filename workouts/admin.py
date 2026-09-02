@@ -6,6 +6,7 @@ from workouts.models import (
     Exercise,
     ExerciseNote,
     ExerciseSettings,
+    Location,
     Sport,
     StrengthSet,
     Workout,
@@ -37,6 +38,24 @@ class SportAdmin(CatalogAdmin):
 class ExerciseAdmin(CatalogAdmin):
     list_display = ("name", "muscle_group", "measurement", "owner_display")
     list_filter = ("measurement", "muscle_group", "owner")
+
+
+@admin.register(Location)
+class LocationAdmin(admin.ModelAdmin):
+    """Места пользователей — на случай разбора «почему тренировка не там».
+
+    Не CatalogAdmin: глобальных мест не бывает, и «— глобальное —» в колонке
+    владельца было бы неправдой. search_fields обязателен: без него не работает
+    autocomplete_fields = ("location",) в WorkoutAdmin.
+    """
+
+    list_display = ("name", "owner", "is_default")
+    list_filter = ("owner",)
+    search_fields = ("name", "owner__email")
+    autocomplete_fields = ("owner",)
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("owner")
 
 
 @admin.register(ExerciseSettings)
@@ -79,7 +98,9 @@ class WorkoutAdmin(admin.ModelAdmin):
     # Черновики (started_at пуст) в срезы по датам не попадают — их там и нет.
     date_hierarchy = "started_at"
     search_fields = ("user__email", "note")
-    autocomplete_fields = ("user", "sport")
+    # location в list_filter не идёт: у каждого пользователя свои места,
+    # и фильтр разбух бы объединением всех справочников.
+    autocomplete_fields = ("user", "sport", "location")
     inlines = (StrengthSetInline, ExerciseNoteInline, CardioDetailsInline)
 
     @admin.display(description="состояние")

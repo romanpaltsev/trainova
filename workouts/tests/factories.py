@@ -10,6 +10,7 @@ from workouts.models import (
     Exercise,
     ExerciseNote,
     ExerciseSettings,
+    Location,
     Sport,
     StrengthSet,
     Workout,
@@ -43,6 +44,21 @@ class ExerciseSettingsFactory(factory.django.DjangoModelFactory):
     user = factory.SubFactory(UserFactory)
     exercise = factory.SubFactory(ExerciseFactory)
     weight_step = Decimal("2.5")
+
+
+class LocationFactory(factory.django.DjangoModelFactory):
+    """Место тренировки. owner обязателен: глобальных мест не бывает.
+
+    is_default по умолчанию False: частичный уникальный индекс не разрешил бы
+    двум местам одного пользователя быть дефолтными, и фабрика с is_default=True
+    падала бы на втором вызове.
+    """
+
+    class Meta:
+        model = Location
+
+    owner = factory.SubFactory(UserFactory)
+    name = factory.Sequence(lambda n: f"Место {n}")
 
 
 class WorkoutFactory(factory.django.DjangoModelFactory):

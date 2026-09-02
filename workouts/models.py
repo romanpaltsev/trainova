@@ -211,9 +211,18 @@ def muscle_groups_for(user):
     )
 
 
+def collapse_spaces(text):
+    """Убрать лишние пробелы: «  Спорт   лайф » → «Спорт лайф».
+
+    Одно правило на группы мышц и на названия мест: без него «СпортЛайф » и
+    «СпортЛайф» стали бы разными записями, а поиск по iexact их не свёл бы.
+    """
+    return " ".join(text.split())
+
+
 def normalize_muscle_group(text, known):
     """Привести написание к уже существующему: иначе появятся «Грудь» и «грудь»."""
-    text = " ".join(text.split())
+    text = collapse_spaces(text)
     lowered = text.lower()
     for name in known:
         if name.lower() == lowered:
@@ -383,6 +392,87 @@ def metric_display(measurement, value):
     return f"{decimal_display(Decimal(str(value)))} кг"
 
 
+# Длина названия места: как у упражнения, а не как у вида спорта, — «World Class
+# на Житной» в 60 символов не всегда влезает. Константа нужна и шаблонам (maxlength).
+LOCATION_NAME_MAX_LENGTH = 80
+
+
+class LocationQuerySet(models.QuerySet):
+    """Места пользователя. visible_to здесь нет: глобальных мест не бывает."""
+
+    def default_for(self, user):
+        """Место по умолчанию или None. Оно одно — держит частичный индекс.
+
+        Одна точка правды на три вызова: старт силовой, «Повторить» и
+        подстановка в форму кардио.
+        """
+        return self.filter(owner=user, is_default=True).first()
+
+
+class Location(models.Model):
+    """Место тренировки: зал, дом, маршрут — одна сущность на всё.
+
+    Не наследник CatalogItem: глобальных мест не бывает (чужой «СпортЛайф» — не
+    мой), поэтому owner обязателен, а второе ограничение «на глобальные имена»
+    и свойство is_global были бы мёртвым кодом.
+
+    Поля-типа нет намеренно: различие «зал или заезд» выражается поведением
+    (силовая берёт место молча, кардио спрашивает), а обязательный выбор типа
+    противоречил бы правилу «место создаётся вводом названия на ходу».
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="владелец",
+        on_delete=models.CASCADE,
+        related_name="locations",
+    )
+    name = models.CharField(
+        "название",
+        max_length=LOCATION_NAME_MAX_LENGTH,
+        help_text="Зал, дом или маршрут: «СпортЛайф», «Дома», «Парк у реки».",
+    )
+    # Место по умолчанию живёт здесь, а не в FK User.default_location: у
+    # accounts.User нет ни одного FK, и ссылка на workouts.Location завела бы
+    # обратную зависимость приложений. Частичный уникальный индекс — приём,
+    # уже принятый в проекте (ср. unique_live_workout_per_user).
+    is_default = models.BooleanField(
+        "по умолчанию",
+        default=False,
+        help_text="Такое место одно: его молча получает новая силовая тренировка.",
+    )
+
+    objects = models.Manager.from_queryset(LocationQuerySet)()
+
+    class Meta:
+        verbose_name = "место"
+        verbose_name_plural = "места"
+        # Дефолт первым, дальше по алфавиту: он главный и в чипах, и в списке,
+        # иначе порядок пришлось бы задавать явно в трёх местах.
+        ordering = ["-is_default", "name"]
+        constraints = [
+            # Одного ограничения хватает: owner NOT NULL, поэтому дубля «для
+            # глобальных имён», как у Sport и Exercise, здесь не нужно.
+            models.UniqueConstraint(
+                Lower("name"),
+                "owner",
+                name="unique_location_name_per_owner",
+                violation_error_message="Место с таким названием у вас уже есть.",
+            ),
+            # Дефолтов не больше одного на пользователя. Индекс частичный,
+            # поэтому обычные места в него не попадают и друг другу не мешают.
+            models.UniqueConstraint(
+                fields=["owner"],
+                condition=Q(is_default=True),
+                name="unique_default_location_per_owner",
+                violation_error_message="Место по умолчанию может быть только одно.",
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class WorkoutQuerySet(models.QuerySet):
     """Три состояния тренировки собираются из двух колонок — см. Workout."""
 
@@ -419,6 +509,19 @@ class Workout(models.Model):
         verbose_name="вид спорта",
         on_delete=models.PROTECT,
         related_name="workouts",
+    )
+    # NULL = место не указано. Так записана вся история до появления справочника
+    # (бэкфилл невозможен: данных «где тренировался» не существует) и так
+    # остаётся кардио, где место не спросили. PROTECT — как у sport: тогда
+    # удаление использованного места объясняется готовым CatalogDeleteView.
+    location = models.ForeignKey(
+        Location,
+        verbose_name="место",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="workouts",
+        help_text="Пусто — место не указано.",
     )
     # NULL = тренировка подготовлена заранее, но не начата (черновик): времени
     # начала у неё честно нет, поэтому и отсчёт длительности невозможен.
