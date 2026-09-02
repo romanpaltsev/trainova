@@ -136,10 +136,27 @@ jobs:
         run: |
           ssh -o BatchMode=yes "$USER_NAME@$HOST" bash -euo pipefail <<REMOTE
           cd "$DEPLOY_PATH"
-          git fetch --prune origin
+
+          # Сеть сервера периодически теряет пакеты на новых соединениях (см.
+          # «Диагностика медленных ответов» в docs/deploy.md), и одиночный обрыв
+          # git fetch ронял весь деплой из-за set -e. Три попытки с паузами.
+          retry() {
+            attempt=1
+            until "\$@"; do
+              if [ "\$attempt" -ge 3 ]; then
+                echo "не удалось после 3 попыток: \$*" >&2
+                return 1
+              fi
+              attempt=\$((attempt + 1))
+              sleep \$((attempt * 5))
+            done
+          }
+
+          retry git fetch --prune origin
           git reset --hard origin/main
           # Миграции и collectstatic выполняет entrypoint при старте контейнера.
-          ./scripts/prod.sh up -d --build
+          # --build тянет базовые образы, поэтому тоже под retry.
+          retry ./scripts/prod.sh up -d --build
           # Старые слои на маленьком VDS съедают диск за десяток деплоев.
           docker image prune -f
 
