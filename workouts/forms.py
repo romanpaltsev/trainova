@@ -6,12 +6,16 @@ from django import forms
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
+from workouts import services
 from workouts.models import (
+    LOCATION_NAME_MAX_LENGTH,
     CardioDetails,
     Exercise,
+    Location,
     Sport,
     Workout,
     chosen_muscle_group,
+    collapse_spaces,
     muscle_groups_for,
 )
 
@@ -34,6 +38,23 @@ class CardioWorkoutForm(forms.Form):
         empty_label=None,
         widget=forms.RadioSelect,
         error_messages={"required": "Выберите вид спорта."},
+    )
+    # Место необязательно: NULL в модели значит «не указано», и так записана вся
+    # история до появления справочника.
+    location = forms.ModelChoiceField(
+        label="Место",
+        queryset=Location.objects.none(),
+        required=False,
+        widget=forms.RadioSelect,
+        error_messages={"invalid_choice": "Такого места у вас нет."},
+    )
+    # Своё поле перебивает чип — то же правило, что у muscle_group_own. Ввод
+    # нового названия и есть создание места.
+    location_own = forms.CharField(
+        label="Новое место",
+        required=False,
+        max_length=LOCATION_NAME_MAX_LENGTH,
+        widget=forms.TextInput(attrs={"class": "form-control"}),
     )
     date = forms.DateField(
         label="Дата",
@@ -100,10 +121,20 @@ class CardioWorkoutForm(forms.Form):
         self.fields["sport"].queryset = Sport.objects.visible_to(user).filter(
             category=Sport.Category.CARDIO
         )
+        # Глобальных мест не бывает, поэтому только свои — и чужое по id даст
+        # ошибку валидации, а не тихую запись.
+        self.fields["location"].queryset = Location.objects.filter(owner=user)
         if instance is not None:
             self.initial = {**self._initial_from_instance(instance), **self.initial}
         else:
             self.initial.setdefault("date", timezone.localdate())
+            # Дефолт подставляем только новой и только несвязанной форме: у
+            # связанной значение уже пришло, и запрос был бы лишним. На правке
+            # подстановка запрещена — она подменила бы место записанной тренировки.
+            if not self.is_bound:
+                default = Location.objects.default_for(user)
+                if default is not None:
+                    self.initial.setdefault("location", default.pk)
 
     @staticmethod
     def _initial_from_instance(workout):
@@ -112,6 +143,9 @@ class CardioWorkoutForm(forms.Form):
         cardio = getattr(workout, "cardio", None)
         return {
             "sport": workout.sport_id,
+            # location_id, а не объект: get_instance тянет только sport, и
+            # обращение к workout.location стоило бы отдельного запроса.
+            "location": workout.location_id,
             "date": started_at.date(),
             "duration_hours": hours or None,
             "duration_minutes": minutes or None,
@@ -139,6 +173,17 @@ class CardioWorkoutForm(forms.Form):
         cleaned["duration_min"] = duration
         return cleaned
 
+    def chosen_location(self):
+        """Место тренировки: новое название перебивает выбранный чип.
+
+        Ввод названия и есть создание места, поэтому запись появляется только
+        здесь — на сохранении тренировки, а не при открытии формы.
+        """
+        name = collapse_spaces(self.cleaned_data["location_own"])
+        if name:
+            return services.location_for_name(self.user, name)
+        return self.cleaned_data["location"]
+
     def started_at(self):
         """Дата + время: для сегодняшней тренировки — текущее, иначе полдень."""
         date = self.cleaned_data["date"]
@@ -149,6 +194,7 @@ class CardioWorkoutForm(forms.Form):
     def save(self):
         workout = self.instance or Workout(user=self.user)
         workout.sport = self.cleaned_data["sport"]
+        workout.location = self.chosen_location()
         workout.started_at = self.started_at()
         workout.duration_min = self.cleaned_data["duration_min"]
         workout.note = self.cleaned_data["note"]

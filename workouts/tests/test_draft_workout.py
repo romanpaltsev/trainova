@@ -330,6 +330,8 @@ def test_draft_delete_removes_planned_sets(client, user):
         pytest.param("live_set_add", "post", id="add-set"),
         pytest.param("live_note", "get", id="note-modal"),
         pytest.param("live_note", "post", id="note"),
+        pytest.param("workout_location", "get", id="location-modal"),
+        pytest.param("workout_location", "post", id="location"),
     ],
 )
 def test_foreign_draft_is_untouchable(client, user, other_user, url_name, method):

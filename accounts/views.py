@@ -3,6 +3,7 @@
 from allauth.account.utils import has_verified_email
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.db.models import Count, Max, Q
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import render
 from django.template.loader import render_to_string
@@ -12,6 +13,7 @@ from workouts.models import (
     REST_DELTAS,
     ChangelogEntry,
     Exercise,
+    Location,
     Sport,
     clamp_rest_seconds,
     rest_display,
@@ -32,9 +34,18 @@ class ProfileView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         user = self.request.user
         context = super().get_context_data(**kwargs) | rest_context(user)
+        # Счётчик мест и название дефолта — одним агрегатом: бюджет профиля
+        # тесный, а дефолт ровно один (частичный уникальный индекс), поэтому
+        # Max по имени с фильтром и есть его название.
+        locations = Location.objects.filter(owner=user).aggregate(
+            total=Count("pk"),
+            default_name=Max("name", filter=Q(is_default=True)),
+        )
         context.update(
             {
                 "nav_active": "profile",
+                "locations_count": locations["total"],
+                "default_location": locations["default_name"],
                 "app_version": settings.APP_VERSION,
                 # Ветка «не подтверждён» почти недостижима (проверка почты
                 # обязательна), но админ может создать пользователя без адреса.

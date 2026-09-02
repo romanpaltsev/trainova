@@ -41,8 +41,20 @@
     {% endif %}
   </dl>
 
-  {% if workout.note %}
-    <p class="app-workout-note text-secondary-app">{{ workout.note }}</p>
+  {% comment %}
+    Место и заметка делят одну ячейку: на 1200px это шестая колонка subgrid, и
+    своей колонки месту не нужно — max-content зарезервировал бы её ширину во
+    всех строках, а у тренировок, записанных до этой фичи, места нет вовсе.
+    Обёртка на телефоне не образует бокса (display: contents), поэтому карточка
+    без места рендерится ровно как раньше.
+  {% endcomment %}
+  {% if workout.location or workout.note %}
+    <div class="app-workout-meta">
+      {% if workout.location %}{% include "workouts/_place.html" %}{% endif %}
+      {% if workout.note %}
+        <p class="app-workout-note text-secondary-app">{{ workout.note }}</p>
+      {% endif %}
+    </div>
   {% endif %}
 {% if workout.sport.is_strength %}
   <div class="app-workout-actions">

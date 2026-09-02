@@ -85,6 +85,22 @@
         <span class="app-row-count num">{{ sports_count }}</span>
         {% include "includes/chevron.html" %}
       </a>
+      {% comment %}
+        Место по умолчанию видно здесь в подписи, а отдельной строки в
+        «Настройках» нет: два входа в одну настройку — два места, где она
+        разойдётся. Выбирается оно там же, где переименование и удаление.
+      {% endcomment %}
+      <a class="app-row" href="{% url 'my_locations' %}">
+        <span class="app-row-icon">{% include "includes/pin.html" with size=20 only %}</span>
+        <span class="app-row-text">
+          <span class="app-row-name">Мои места</span>
+          {% if default_location %}
+            <span class="app-row-meta">по умолчанию: {{ default_location }}</span>
+          {% endif %}
+        </span>
+        <span class="app-row-count num">{{ locations_count }}</span>
+        {% include "includes/chevron.html" %}
+      </a>
     </div>
   </section>
 

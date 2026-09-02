@@ -12,6 +12,7 @@ from workouts.models import Sport
 from workouts.tests.factories import (
     CardioDetailsFactory,
     ExerciseFactory,
+    LocationFactory,
     SportFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -188,3 +189,154 @@ def test_strength_card_shows_exercises_and_tonnage(client, user):
     assert "упражнений" in content
     assert "тоннаж" in content
     assert "1780 кг" in content  # 80*8 + 80*8 + 100*5
+
+
+# ---------- Фильтр по месту ----------
+
+
+def test_filter_by_location(client, user):
+    client.force_login(user)
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    park = LocationFactory(owner=user, name="Парк у реки")
+    in_gym = WorkoutFactory(user=user, location=gym)
+    WorkoutFactory(user=user, location=park)
+    WorkoutFactory(user=user)  # без места
+
+    response = client.get(reverse("workout_history"), {"location": gym.pk})
+
+    assert list(response.context["workouts"]) == [in_gym]
+
+
+def test_filters_combine_sport_and_location(client, user):
+    client.force_login(user)
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH)
+    bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    wanted = WorkoutFactory(user=user, sport=strength, location=gym)
+    WorkoutFactory(user=user, sport=bike, location=gym)
+    WorkoutFactory(user=user, sport=strength)
+
+    response = client.get(reverse("workout_history"), {"sport": strength.pk, "location": gym.pk})
+
+    assert list(response.context["workouts"]) == [wanted]
+
+
+def test_location_chips_show_only_used_locations(client, user):
+    """Чипы строятся по записанным тренировкам: неиспользованное место лишнее."""
+    client.force_login(user)
+    used = LocationFactory(owner=user, name="СпортЛайф")
+    LocationFactory(owner=user, name="Никогда не был")
+    draft_only = LocationFactory(owner=user, name="Только в черновике")
+    WorkoutFactory(user=user, location=used)
+    WorkoutFactory(user=user, location=draft_only, started_at=None, duration_min=None)
+
+    response = client.get(reverse("workout_history"))
+
+    assert list(response.context["locations_used"]) == [used]
+
+
+def test_location_chips_ignore_other_users_workouts(client, user, other_user):
+    """Изоляция: чужая тренировка не приводит место в мои чипы."""
+    client.force_login(user)
+    place = LocationFactory(owner=user, name="СпортЛайф")
+    WorkoutFactory(user=other_user, location=place)
+
+    response = client.get(reverse("workout_history"))
+
+    assert list(response.context["locations_used"]) == []
+
+
+def test_foreign_location_filter_gives_empty_feed(client, user, other_user):
+    client.force_login(user)
+    theirs = LocationFactory(owner=other_user, name="Чужой зал")
+    WorkoutFactory(user=other_user, location=theirs)
+    WorkoutFactory(user=user)
+
+    response = client.get(reverse("workout_history"), {"location": theirs.pk})
+
+    assert list(response.context["workouts"]) == []
+    assert "По этому месту тренировок пока нет." in response.content.decode()
+
+
+@pytest.mark.parametrize("raw", ["abc", "", "-1"])
+def test_unknown_location_filter_is_ignored(client, user, raw):
+    client.force_login(user)
+    workout = WorkoutFactory(user=user)
+
+    response = client.get(reverse("workout_history"), {"location": raw})
+
+    assert list(response.context["workouts"]) == [workout]
+
+
+def test_chips_keep_the_other_filter_and_reset_pagination(client, user):
+    """Одна ось не стирает другую, а страница сбрасывается на первую."""
+    client.force_login(user)
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH)
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    WorkoutFactory(user=user, sport=strength, location=gym)
+
+    content = client.get(
+        reverse("workout_history"), {"sport": strength.pk, "page": 1}
+    ).content.decode()
+    # Смотрим только на блок чипов: «page=» законно есть у кнопки «Показать ещё».
+    start = content.index("app-filter-axes")
+    chips = content[start : content.index('id="feed"', start)]
+
+    assert f"location={gym.pk}" in chips
+    assert f"sport={strength.pk}" in chips
+    assert "page=" not in chips
+
+
+def test_load_more_keeps_both_filters(client, user):
+    """Ручная склейка URL теряла второй фильтр — тег querystring сохраняет оба."""
+    client.force_login(user)
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH)
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    for hour in range(12):
+        WorkoutFactory(
+            user=user,
+            sport=strength,
+            location=gym,
+            started_at=timezone.now() - timedelta(hours=hour),
+        )
+
+    content = client.get(
+        reverse("workout_history"), {"sport": strength.pk, "location": gym.pk}
+    ).content.decode()
+    button = content[content.index('id="load-more"') :]
+
+    assert f"sport={strength.pk}" in button
+    assert f"location={gym.pk}" in button
+    assert "page=2" in button
+
+
+def test_card_shows_the_location(client, user):
+    client.force_login(user)
+    place = LocationFactory(owner=user, name="СпортЛайф")
+    WorkoutFactory(user=user, location=place)
+
+    content = client.get(reverse("workout_history")).content.decode()
+
+    assert "СпортЛайф" in content
+    assert "app-workout-meta" in content
+
+
+def test_card_without_location_has_no_meta_wrapper(client, user):
+    """Карточка без места и заметки обязана рендериться как до появления фичи."""
+    client.force_login(user)
+    WorkoutFactory(user=user, note="")
+
+    content = client.get(reverse("workout_history")).content.decode()
+
+    assert "app-workout-meta" not in content
+
+
+def test_location_axis_is_absent_without_places(client, user):
+    """У старого пользователя история не меняется до первой отметки места."""
+    client.force_login(user)
+    WorkoutFactory(user=user)
+
+    content = client.get(reverse("workout_history")).content.decode()
+
+    assert "app-filter-axes" in content  # ось видов спорта осталась
+    assert "Везде" not in content

@@ -1,0 +1,59 @@
+{% comment %}
+  Блок строк «Мои места». Свапает сам себя: выбор места по умолчанию снимает
+  подпись у старого и ставит новому, и перерисовать список целиком проще, чем
+  вести учёт, какая строка была дефолтной. Поэтому здесь id, а не в родителе.
+
+  Переименование приходит из модалки и отдаёт этот блок out-of-band: тогда в
+  #modal попадает пустой остаток ответа и модалка закрывается сама (приём
+  SportCreateView). Звезда бьёт в блок напрямую, ей oob не нужен.
+{% endcomment %}
+<div id="location-rows" class="app-rows"{% if oob %} hx-swap-oob="true"{% endif %}>
+  {% for location in locations %}
+    <div class="app-row">
+      <span class="app-row-icon">{% include "includes/pin.html" with size=20 only %}</span>
+      {% comment %}
+        Переименование открывает само название, а карандаш стоит внутри него
+        встроенной подсказкой — приём .app-note-btn. Третья кнопка 44px в строке
+        не помещалась: на 375px «Фитнес-клуб Империя Спорта на Ленинском
+        проспекте» ломался на четыре строки.
+      {% endcomment %}
+      <button type="button" class="app-row-text app-location-edit"
+              hx-get="{% url 'location_rename' location.pk %}"
+              hx-target="#modal" hx-swap="innerHTML"
+              aria-label="Переименовать {{ location.name }}">
+        <span class="app-row-name">
+          {{ location.name }}{% include "includes/pencil.html" %}
+        </span>
+        {% comment %}usage_label дословно: на его текст есть тест.{% endcomment %}
+        <span class="app-row-meta">
+          {% if location.is_default %}по умолчанию · {% endif %}{{ location.usage_label }}
+        </span>
+      </button>
+      {% comment %}
+        Тап по звезде ставит место по умолчанию, повторный — снимает. Заголовок
+        у активной кнопки объясняет, что произойдёт дальше, а не что есть сейчас.
+      {% endcomment %}
+      <button type="button" class="app-icon-btn app-star{% if location.is_default %} is-active{% endif %}"
+              hx-post="{% url 'location_default' location.pk %}"
+              hx-target="#location-rows" hx-swap="outerHTML"
+              aria-pressed="{{ location.is_default|yesno:'true,false' }}"
+              aria-label="{% if location.is_default %}Не использовать {{ location.name }} по умолчанию{% else %}Использовать {{ location.name }} по умолчанию{% endif %}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="{% if location.is_default %}currentColor{% else %}none{% endif %}"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+             aria-hidden="true">
+          <path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.7-5.2-2.7-5.2 2.7 1-5.7L3.5 9.7l5.9-.9z"/>
+        </svg>
+      </button>
+      <a class="app-icon-btn app-row-delete" href="{% url 'location_delete' location.pk %}"
+         aria-label="Удалить {{ location.name }}">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>
+        </svg>
+      </a>
+    </div>
+  {% empty %}
+    {% url 'cardio_create' as cardio_url %}
+    {% include "includes/empty_state.html" with title="Мест пока нет" text="Добавьте зал, в который ходите: он будет молча подставляться в силовые тренировки. Место заезда удобнее вписывать прямо в форме кардио." cta_label="Записать кардио" cta_url=cardio_url %}
+  {% endfor %}
+</div>

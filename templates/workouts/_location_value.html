@@ -1,0 +1,21 @@
+{% comment %}
+  Место тренировки: значение и кнопка правки в одном. Один партиал на экран
+  тренировки и на итог — поэтому имя не _live_*.
+
+  id и hx-swap-oob здесь: модалка выбора отвечает пустым телом (закрывается) и
+  обновляет это место out-of-band — приём SportCreateView и ExerciseNoteView.
+
+  Кнопка рендерится всегда, даже когда места нет: это единственная точка входа
+  в фичу для человека, у которого ещё ничего не отмечено. Поэтому и точка-
+  разделитель перед ней никогда не висит одна.
+{% endcomment %}
+<button type="button" id="workout-location"{% if oob %} hx-swap-oob="true"{% endif %}
+        class="app-place app-place-btn{% if not workout.location %} is-empty{% endif %}"
+        aria-label="{% if workout.location %}Изменить место{% else %}Указать место{% endif %}"
+        hx-get="{% url 'workout_location' workout.pk %}"
+        hx-target="#modal" hx-swap="innerHTML">
+  {% include "includes/pin.html" %}
+  <span class="app-place-name">
+    {% if workout.location %}{{ workout.location.name }}{% else %}Указать место{% endif %}
+  </span>
+</button>

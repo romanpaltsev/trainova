@@ -33,14 +33,22 @@
 <div class="app-live-head">
   <div>
     <h1 class="app-page-title mb-0">{{ workout.sport.name }}</h1>
-    <div class="app-live-status">
-      {% if workout.is_planned %}
-        черновик · время не идёт
-      {% else %}
-        тренировка идёт ·
-        <span class="num" x-data="liveClock()" data-started="{{ workout.started_at|date:'c' }}"
-              x-text="text">0:00</span>
-      {% endif %}
+    {% comment %}
+      Статус и место — одна переносящаяся строка. На 375px место уходит на
+      вторую строку, с 768px стоит рядом со статусом: в макете справа от
+      статуса до кнопки «Завершить» пусто.
+    {% endcomment %}
+    <div class="app-live-meta">
+      <div class="app-live-status">
+        {% if workout.is_planned %}
+          черновик · время не идёт
+        {% else %}
+          тренировка идёт ·
+          <span class="num" x-data="liveClock()" data-started="{{ workout.started_at|date:'c' }}"
+                x-text="text">0:00</span>
+        {% endif %}
+      </div>
+      {% include "workouts/_location_value.html" %}
     </div>
   </div>
   {% if workout.is_planned %}

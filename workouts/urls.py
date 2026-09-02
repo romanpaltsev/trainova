@@ -25,6 +25,22 @@ urlpatterns = [
     ),
     path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
     path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
+    path("profile/locations/", views.MyLocationsView.as_view(), name="my_locations"),
+    path(
+        "profile/locations/<int:pk>/default/",
+        views.LocationDefaultView.as_view(),
+        name="location_default",
+    ),
+    path(
+        "profile/locations/<int:pk>/rename/",
+        views.LocationRenameView.as_view(),
+        name="location_rename",
+    ),
+    path(
+        "profile/locations/<int:pk>/delete/",
+        views.LocationDeleteView.as_view(),
+        name="location_delete",
+    ),
     path("changelog/", views.ChangelogView.as_view(), name="changelog"),
     path("history/", views.WorkoutHistoryView.as_view(), name="workout_history"),
     path("workouts/cardio/new/", views.CardioWorkoutFormView.as_view(), name="cardio_create"),
@@ -62,6 +78,13 @@ urlpatterns = [
     # маршрут добавляется в общие таблицы тестов изоляции с одним args=[pk].
     path("workouts/<int:pk>/live/note/", views.ExerciseNoteView.as_view(), name="live_note"),
     path("workouts/<int:pk>/live/rest/", views.LiveRestView.as_view(), name="live_rest"),
+    # Не под live/: место правится и у записанной тренировки — экрана правки
+    # силовой нет, и иначе забытое место осталось бы неисправимым.
+    path(
+        "workouts/<int:pk>/location/",
+        views.WorkoutLocationView.as_view(),
+        name="workout_location",
+    ),
     path("workouts/<int:pk>/finish/", views.WorkoutFinishView.as_view(), name="workout_finish"),
     path("workouts/<int:pk>/summary/", views.WorkoutSummaryView.as_view(), name="workout_summary"),
     path("workouts/<int:pk>/repeat/", views.WorkoutRepeatView.as_view(), name="workout_repeat"),

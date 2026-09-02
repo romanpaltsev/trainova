@@ -414,10 +414,12 @@ def test_dense_rows_are_scoped_to_the_catalog(client, user):
     catalog = client.get(reverse("exercise_list")).content.decode()
     profile = client.get(reverse("profile")).content.decode()
     sports = client.get(reverse("my_sports")).content.decode()
+    locations = client.get(reverse("my_locations")).content.decode()
 
     assert "app-rows-dense" in catalog
     assert "app-rows-dense" not in profile
     assert "app-rows-dense" not in sports
+    assert "app-rows-dense" not in locations
 
 
 # ---------- Блок «Я тренирую» ----------

@@ -7,16 +7,45 @@
 {% block content %}
 <h1 class="app-page-title">История</h1>
 
-{% if sports_used %}
-  <div class="app-chips app-filters">
-    <a class="app-chip {% if not sport_filter %}is-active{% endif %}" href="{% url 'workout_history' %}">Все</a>
-    {% for sport in sports_used %}
-      <a class="app-chip {% if sport_filter == sport.pk|stringformat:'s' %}is-active{% endif %}"
-         href="?sport={{ sport.pk }}">
-        <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
-        {{ sport.name }}
-      </a>
-    {% endfor %}
+{% if sports_used or locations_used %}
+  {% comment %}
+    Две оси фильтров, каждая своим ряд­ом. В один ряд их не свести: у каждой оси
+    свой сброс, и два одинаковых чипа «Все» рядом были бы двусмысленны, а чипы
+    видов спорта несут цветные точки — смешанный ряд читался бы как один список
+    разнородных штук.
+
+    {% querystring %} правит один параметр и сохраняет второй, поэтому оси
+    комбинируются. page и prev_week обязательно сбрасывать: иначе тап по чипу
+    открыл бы третью страницу нового фильтра, и лента выглядела бы пустой.
+  {% endcomment %}
+  <div class="app-filter-axes">
+    {% if sports_used %}
+      <div class="app-chips app-filters">
+        <a class="app-chip {% if not sport_filter %}is-active{% endif %}"
+           href="{% url 'workout_history' %}{% querystring sport=None page=None prev_week=None %}">Все</a>
+        {% for sport in sports_used %}
+          <a class="app-chip {% if sport_filter == sport.pk|stringformat:'s' %}is-active{% endif %}"
+             href="{% url 'workout_history' %}{% querystring sport=sport.pk page=None prev_week=None %}">
+            <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
+            {{ sport.name }}
+          </a>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% comment %}
+      Ряда мест нет вовсе, пока ни одна записанная тренировка их не отметила:
+      у старого пользователя экран остаётся прежним до первой отметки.
+    {% endcomment %}
+    {% if locations_used %}
+      <div class="app-chips app-filters">
+        <a class="app-chip {% if not location_filter %}is-active{% endif %}"
+           href="{% url 'workout_history' %}{% querystring location=None page=None prev_week=None %}">Везде</a>
+        {% for place in locations_used %}
+          <a class="app-chip {% if location_filter == place.pk|stringformat:'s' %}is-active{% endif %}"
+             href="{% url 'workout_history' %}{% querystring location=place.pk page=None prev_week=None %}">{{ place.name }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
   </div>
 {% endif %}
 
@@ -31,7 +60,9 @@
     {% include "workouts/_history_page.html" %}
   {% else %}
     {% url 'workout_start' as start_url %}
-    {% if sport_filter %}
+    {% if location_filter %}
+      {% include "includes/empty_state.html" with text="По этому месту тренировок пока нет." cta_label="Записать тренировку" cta_hx_get=start_url %}
+    {% elif sport_filter %}
       {% include "includes/empty_state.html" with text="По этому виду спорта тренировок пока нет." cta_label="Записать тренировку" cta_hx_get=start_url %}
     {% else %}
       {% include "includes/empty_state.html" with title="Тренировок пока нет" text="Запишите первую — она появится здесь и на дашборде." cta_label="Записать тренировку" cta_hx_get=start_url %}

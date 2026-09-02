@@ -1,0 +1,33 @@
+{% comment %}
+  Переименование места. Ответ на успешный POST — блок строк, который свапает
+  сам себя (hx-target="#location-rows"), поэтому в #modal попадает пустой
+  остаток и модалка закрывается сама. Тот же приём у _muscle_group_choice.html.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="location-rename-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="location-rename-title">Переименовать место</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <p class="text-secondary-app">Новое название встанет во все тренировки этого места.</p>
+
+    <form hx-post="{% url 'location_rename' location.pk %}"
+          hx-target="#modal" hx-swap="innerHTML">
+      {% csrf_token %}
+      <label class="form-label" for="location-new-name">Название</label>
+      <input type="text" name="name" id="location-new-name" class="form-control"
+             maxlength="{{ location_max_length }}" value="{{ location.name }}"
+             autocomplete="off" autofocus>
+      {% if error %}<div class="invalid-feedback d-block">{{ error }}</div>{% endif %}
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>

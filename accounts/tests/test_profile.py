@@ -7,6 +7,7 @@ from workouts.models import Workout
 from workouts.tests.factories import (
     ChangelogEntryFactory,
     ExerciseFactory,
+    LocationFactory,
     SportFactory,
     WorkoutFactory,
 )
@@ -79,6 +80,47 @@ def test_profile_counts_ignore_global_and_other_users_records(client, user, othe
 
     assert response.context["exercises_count"] == 0
     assert response.context["sports_count"] == 0
+
+
+def test_profile_shows_locations_count_and_default_name(client, user):
+    LocationFactory(owner=user, name="СпортЛайф", is_default=True)
+    LocationFactory(owner=user, name="Дома")
+
+    client.force_login(user)
+    response = client.get(reverse("profile"))
+
+    assert response.context["locations_count"] == 2
+    assert response.context["default_location"] == "СпортЛайф"
+    assert "по умолчанию: СпортЛайф" in response.content.decode()
+
+
+def test_profile_shows_no_default_location_when_there_is_none(client, user):
+    """Подписи нет вовсе: «по умолчанию:» без названия было бы висящим двоеточием."""
+    LocationFactory(owner=user, name="Дома")
+
+    client.force_login(user)
+    response = client.get(reverse("profile"))
+
+    assert response.context["default_location"] is None
+    assert "по умолчанию:" not in response.content.decode()
+
+
+def test_profile_location_count_ignores_other_users(client, user, other_user):
+    LocationFactory(owner=other_user, name="Чужой зал", is_default=True)
+
+    client.force_login(user)
+    response = client.get(reverse("profile"))
+
+    assert response.context["locations_count"] == 0
+    assert response.context["default_location"] is None
+
+
+def test_profile_links_to_my_locations(client, user):
+    client.force_login(user)
+
+    content = client.get(reverse("profile")).content.decode()
+
+    assert reverse("my_locations") in content
 
 
 def test_profile_links_to_password_change_and_logout(client, user):

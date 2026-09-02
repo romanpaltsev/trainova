@@ -73,6 +73,21 @@
     <strong class="num" x-text="metric"></strong>
   </div>
 
+  {% comment %}
+    Место стоит перед «Заметкой», а не сразу под чипами вида спорта: те чипы уже
+    переносятся на две строки, и второй блок чипов под ними сдвинул бы вниз
+    обязательные «Дата» и «Дистанция» — то есть испортил первый экран телефона.
+    Под заметкой до кнопки пусто, поэтому вставка не двигает ничего выше себя.
+  {% endcomment %}
+  <div class="mb-3">
+    <span class="form-label d-block">
+      Место <span class="text-muted-app">· необязательно</span>
+    </span>
+    {% include "workouts/_location_chips.html" %}
+    {% for error in form.location.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    {% for error in form.location_own.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+  </div>
+
   <div class="mb-3">
     <label class="form-label" for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
     {{ form.note }}

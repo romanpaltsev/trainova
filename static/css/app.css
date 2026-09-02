@@ -275,6 +275,14 @@ body {
 
 .app-filters .app-chip { flex: 0 0 auto; }
 
+/* Две оси фильтров истории: виды спорта и места. Обёртка держит отступ до
+   ленты, между рядами — space-2: два ряда по 1rem развели бы заголовок и первую
+   карточку на пол-экрана телефона. При одном ряде результат равен прежнему.
+   overflow здесь ставить нельзя — срежет горизонтальную прокрутку чипов. */
+.app-filter-axes { margin-bottom: var(--app-space-4); }
+.app-filter-axes .app-filters { margin-bottom: var(--app-space-2); }
+.app-filter-axes .app-filters:last-child { margin-bottom: 0; }
+
 /* Номер упражнения в тренировке — кружок слева от названия. Живёт на четырёх
    экранах (итог, живой режим «сейчас»/«дальше»/«выполнено», история подходов),
    поэтому стоит здесь, рядом с точкой-маркером спорта, а не в секции живого режима.
@@ -423,6 +431,17 @@ body {
 .app-workout-note {
   margin: 0.625rem 0 0;
   font-size: 0.9375rem;
+}
+
+/* Место и заметка карточки истории. На телефоне обёртка не образует бокса,
+   поэтому существующие карточки рендерятся ровно как до появления места;
+   колонкой subgrid она становится только на 1200px. */
+.app-workout-meta { display: contents; }
+
+.app-workout-meta > .app-place {
+  display: flex;
+  /* Тот же оптический отступ, что у .app-workout-note выше. */
+  margin: 0.625rem 0 0;
 }
 
 .app-empty {
@@ -1553,6 +1572,34 @@ body {
   color: var(--app-text-muted);
 }
 
+/* Название места открывает переименование. Кнопка носит .app-row-text, как
+   ссылка плотной строки каталога, поэтому здесь остаётся только снять обвязку
+   кнопки. Карандаш внутри названия — встроенная подсказка (приём .app-note-btn),
+   а не третья кнопка 44px: в строку на 375px она не помещалась. */
+.app-location-edit {
+  min-height: var(--app-tap-target);
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: var(--app-text);
+  text-align: left;
+}
+
+/* Карандаш идёт за названием и не должен приклеиваться к последней букве. */
+.app-location-edit .app-note-icon { margin-left: 0.375rem; }
+
+/* Звезда «место по умолчанию»: приглушённая у обычного места, акцентная у
+   выбранного. Заливку переключает атрибут fill в разметке — иначе пустой и
+   залитый контур пришлось бы держать двумя SVG. */
+.app-star {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+/* --app-accent-text, а не --app-accent: сам лайм на белой карточке нечитаем,
+   и токен для «акцент как цвет на фоне» в проекте уже есть. */
+.app-star.is-active { color: var(--app-accent-text); }
+
 .app-rest-value {
   flex: 1 1 auto;
   min-width: 0;
@@ -1680,6 +1727,76 @@ body {
   color: var(--app-text-secondary);
 }
 
+/* ---------- Место тренировки ----------
+
+   Одна строка «булавка + название» на четырёх экранах: карточка истории, итог,
+   голова живого режима, строка профиля. font-weight: inherit — вес решает
+   контейнер: в карточке истории это 400, в .app-row — 700, и класс не спорит
+   ни с одним из них. */
+.app-place {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  /* Без этого имя не даёт ужаться флекс-родителю, и голова живого режима
+     разъезжалась бы на длинном названии зала. */
+  min-width: 0;
+  color: var(--app-text-secondary);
+  font-size: 0.9375rem;
+  font-weight: inherit;
+}
+
+.app-place svg {
+  flex: 0 0 auto;
+  color: var(--app-text-muted);
+}
+
+/* Обрезка живёт на тексте, а не на контейнере: у inline-flex ellipsis не
+   работает. white-space здесь НЕ задаётся — на телефоне длинное название должно
+   переноситься; nowrap включают те места, где строка обязана быть одной. */
+.app-place-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* «Места нет» — приглушённый и жирный: это приглашение действовать, а не
+   значение. Дословно приём .app-note-btn.is-empty. */
+.app-place.is-empty {
+  color: var(--app-text-muted);
+  font-weight: 700;
+}
+
+/* Кнопка правки места: тихая текстовая кнопка без обвязки, как .app-note-btn.
+   Тап-таргет нужен в зале; на 768px он снимается — там курсор. */
+.app-place-btn {
+  min-height: var(--app-tap-target);
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  font-weight: 700;
+  text-align: left;
+  white-space: nowrap;
+}
+
+/* Голова живого режима и подзаголовок итога: статус (или дата) и место — одна
+   переносящаяся строка. На 375px место уезжает на вторую строку, с 768px
+   помещается рядом. */
+.app-live-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--app-space-3);
+}
+
+/* Текущий выбор в списке модалки. Галочка, а не рамка: у .app-pick-row рамки
+   нет по построению. Цвет — --app-accent-text: лайм на карточке нечитаем
+   в светлой теме. */
+.app-pick-check {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--app-accent-text);
+}
+
 /* ---------- Десктоп ---------- */
 
 /* ---------- Отделка: наведение, фокус, переходы ----------
@@ -1702,6 +1819,9 @@ body {
 .app-link,
 .app-row,
 .app-row-delete,
+.app-star,
+.app-location-edit,
+.app-place-btn,
 .app-workout,
 .app-latest-row,
 .app-records-item,
@@ -1758,6 +1878,7 @@ body {
 
   /* Тихие текстовые кнопки: усиление контраста */
   .app-note-btn:hover,
+  .app-place-btn:hover,
   .app-live-link:hover,
   .app-rest-skip:hover,
   .app-nav a:hover {
@@ -1778,6 +1899,10 @@ body {
   .app-link-accent:hover { color: var(--app-accent-text); }
   .app-exercise-link:hover { text-decoration: underline; }
   .app-row-delete:hover { color: var(--app-danger); }
+  /* Перебивает .app-icon-btn:hover выше: у звезды меняется цвет, а не фон. */
+  .app-star:hover { color: var(--app-accent-text); }
+  /* Карандаш зажигается вместе с названием — подсказка, что строка правится. */
+  .app-location-edit:hover .app-note-icon { color: var(--app-accent-text); }
 
   .btn-danger-quiet:hover {
     border-color: var(--app-danger);
@@ -1815,6 +1940,10 @@ body {
   .app-stat.is-desktop { display: flex; flex-direction: column; }
   .app-chart-body { height: 320px; }
   .app-modal-backdrop { align-items: center; }
+  /* Здесь курсор, а не палец: 44px в голове экрана только раздували бы её, а
+     место — не степпер веса. Тот же довод, что у .app-settings-row .app-chip.
+     Благодаря этому десктопная голова живого режима и итога не двигается. */
+  .app-place-btn { min-height: 0; }
   /* На телефоне «Повторить» занимает всю ширину — там это верно. На десктопе
      растянутая на пол-карточки кнопка рядом с компактной «Открыть» выглядит
      случайной. */
@@ -2269,14 +2398,40 @@ body {
       color: var(--app-text-muted);
     }
 
-    /* Заметка и действия — с явными номерами колонок: заметка есть не у каждой
-       тренировки, и без этого кнопки уехали бы в её колонку. */
-    .app-workout-note {
+    /* Место с заметкой и действия — с явными номерами колонок: ни места, ни
+       заметки нет у каждой тренировки, и без этого кнопки уехали бы в их
+       колонку. Отдельного трека под место нет намеренно: max-content
+       зарезервировал бы его ширину во всех строках, а у истории, записанной до
+       появления справочника, места нет вовсе — колонка стояла бы пустой. Тот же
+       довод, по которому от subgrid отказался .app-rows-dense. */
+    .app-workout-meta {
       grid-column: 6;
-      margin: 0;
+      display: block;
+      min-width: 0;
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
+      font-size: 0.9375rem;
+    }
+
+    /* Одним текстовым прогоном с единственной точкой обрезки: два независимых
+       ellipsis дали бы обрезанное место рядом с обрезанной заметкой.
+
+       Классы перечислены явно, а не через `> *`: мобильное правило
+       `.app-workout-meta > .app-place` весит два класса и перебило бы селектор
+       с универсальным — место осталось бы флекс-боксом и уехало на свою строку
+       вместе с заметкой. Та же ловушка, что у .app-catalog-hint и .app-empty. */
+    .app-workout-meta > .app-place,
+    .app-workout-meta > .app-workout-note {
+      display: inline;
+      margin: 0;
+    }
+
+    /* Зазор, а не символ-разделитель: разделитель остался бы висеть, когда
+       вторая часть обрезана в ноль. Специфичность выше правила с `margin: 0`
+       выше — иначе обнуление отступа победило бы независимо от порядка. */
+    .app-workout-meta > .app-place + .app-workout-note {
+      margin-left: var(--app-space-3);
     }
 
     .app-workout-actions {

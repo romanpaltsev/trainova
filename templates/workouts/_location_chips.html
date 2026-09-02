@@ -1,0 +1,37 @@
+{% comment %}
+  Выбор места в форме кардио: чипы своих мест плюс поле для нового. Композиция
+  та же, что у блока «Группа мышц»: «своё» перебивает чип по явному правилу на
+  сервере, а не по порядку полей.
+
+  Модалки создания здесь нет намеренно: тренировки ещё не существует, и запись
+  места из формы, которая потом упадёт на «Укажите дистанцию», засорила бы
+  справочник. Место появляется вместе с сохранённой тренировкой.
+
+  Ждёт `locations`, `selected_location`, `location_own`, `location_max_length`.
+{% endcomment %}
+{% if locations %}
+  <div class="app-chips" role="group" aria-label="Место"
+       x-data="{ own: '{{ location_own|escapejs }}' }">
+    <input type="radio" name="location" id="place-none" value="" class="app-chip-input"
+           {% if not selected_location %}checked{% endif %} @change="own = ''">
+    <label class="app-chip" for="place-none">Без места</label>
+    {% for place in locations %}
+      <input type="radio" name="location" id="place-{{ place.pk }}" value="{{ place.pk }}"
+             class="app-chip-input"
+             {% if selected_location|stringformat:"s" == place.pk|stringformat:"s" %}checked{% endif %}
+             @change="own = ''">
+      <label class="app-chip" for="place-{{ place.pk }}">{{ place.name }}</label>
+    {% endfor %}
+    <input type="text" class="form-control app-group-input" name="location_own"
+           maxlength="{{ location_max_length }}" placeholder="новое"
+           aria-label="Новое место" x-model="own">
+  </div>
+{% else %}
+  {% comment %}
+    Мест ещё нет: чип «Без места» нечего сбрасывать, остаётся одно поле. Первое
+    введённое место сразу станет и местом по умолчанию для силовых.
+  {% endcomment %}
+  <input type="text" class="form-control" name="location_own"
+         maxlength="{{ location_max_length }}" value="{{ location_own }}"
+         placeholder="напр. СпортЛайф или Парк у реки" aria-label="Место">
+{% endif %}

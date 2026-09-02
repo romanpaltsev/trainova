@@ -6,11 +6,14 @@
 
 from decimal import Decimal
 
+from django.db import IntegrityError, transaction
+
 from workouts.models import (
     MEASUREMENT_FIELDS,
     METRIC_FIELDS,
     Exercise,
     ExerciseNote,
+    Location,
     StrengthSet,
     decimal_display,
     exercise_order_key,
@@ -19,6 +22,42 @@ from workouts.models import (
     ru_plural,
     with_weight_step,
 )
+
+
+def location_for_name(user, name):
+    """Место пользователя с таким названием: существующее или новое.
+
+    Ввод названия и есть создание места — тот же контракт, что у
+    ExerciseQuickForm.save_for_user: совпадение имени посреди тренировки значит
+    «это оно», а не ошибку дубля. Регистр не важен (Lower-констрейнт), поэтому
+    «спортлайф» находит «СпортЛайф» и второй записи не появляется. Написание
+    при этом не канонизируется, а возвращается вместе с найденной записью — и
+    переименование чинит его сразу по всей истории.
+
+    Первое место сразу становится дефолтным: иначе человек отметил бы место у
+    кардио, пошёл на силовую — и молчаливая подстановка молчала бы, пока он не
+    заглянет в профиль.
+    """
+    existing = Location.objects.filter(owner=user, name__iexact=name).first()
+    if existing is not None:
+        return existing
+    try:
+        # Savepoint: гонка двух вкладок упирается в уникальный индекс, и
+        # правильный ответ — взять созданную запись, а не отдать 500.
+        with transaction.atomic():
+            return Location.objects.create(
+                owner=user,
+                name=name,
+                is_default=not Location.objects.filter(owner=user).exists(),
+            )
+    except IntegrityError:
+        existing = Location.objects.filter(owner=user, name__iexact=name).first()
+        if existing is not None:
+            return existing
+        # Другая гонка: «первое место» создали в двух вкладках с разными
+        # названиями, и дефолт уже занят. Тогда место просто не дефолтное.
+        with transaction.atomic():
+            return Location.objects.create(owner=user, name=name, is_default=False)
 
 
 def last_sets(user, exercise):

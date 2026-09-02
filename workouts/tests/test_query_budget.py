@@ -10,6 +10,7 @@ from workouts.tests.factories import (
     CardioDetailsFactory,
     ExerciseFactory,
     ExerciseNoteFactory,
+    LocationFactory,
     StrengthSetFactory,
     WorkoutFactory,
 )
@@ -149,11 +150,28 @@ def test_start_modal_query_budget(client, user, django_assert_max_num_queries, d
 
 
 def test_profile_query_budget(client, user, django_assert_max_num_queries):
+    """Профиль упёрт в потолок: 9 запросов из 9, и любой новый счётчик его сломает.
+
+    Девятый — агрегат мест: он отдаёт и число, и название дефолта, потому что
+    двумя запросами лимит был бы уже пробит.
+    """
     fill_history(user)
 
     client.force_login(user)
     with django_assert_max_num_queries(9):
         client.get(reverse("profile"))
+
+
+@pytest.mark.parametrize("places", [1, 5], ids=["one-place", "five-places"])
+def test_my_locations_query_budget(client, user, django_assert_max_num_queries, places):
+    """Число запросов не растёт вместе с числом мест: подписи идут одной аннотацией."""
+    for number in range(places):
+        place = LocationFactory(owner=user, name=f"Зал {number}")
+        WorkoutFactory(user=user, location=place)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(6):
+        client.get(reverse("my_locations"))
 
 
 @pytest.mark.parametrize("exercises", [1, 6], ids=["one-exercise", "six-exercises"])

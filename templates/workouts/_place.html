@@ -1,0 +1,10 @@
+{% comment %}
+  Место только на чтение: в карточке истории. Именно span, а не кнопка —
+  кардио-карточка целиком <a>, и кнопку внутрь ссылки положить нельзя.
+
+  Ждёт `workout`.
+{% endcomment %}
+<span class="app-place">
+  {% include "includes/pin.html" %}
+  <span class="app-place-name">{{ workout.location.name }}</span>
+</span>

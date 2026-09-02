@@ -23,6 +23,7 @@ from workouts import services, stats
 from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
 from workouts.models import (
     DEFAULT_WEIGHT_STEP,
+    LOCATION_NAME_MAX_LENGTH,
     MAX_WEIGHT_KG,
     MEASUREMENT_FIELDS,
     METRIC_LABELS,
@@ -38,11 +39,13 @@ from workouts.models import (
     Exercise,
     ExerciseNote,
     ExerciseSettings,
+    Location,
     Sport,
     StrengthSet,
     Workout,
     chosen_muscle_group,
     clamp_rest_seconds,
+    collapse_spaces,
     decimal_display,
     metric_display,
     muscle_groups_for,
@@ -86,8 +89,9 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
             # Незавершённая (живой режим) в ленту не попадает: у неё нет длительности.
             Workout.objects.filter(user=self.request.user)
             .finished()
-            # cardio — обратная OneToOne, тянется тем же запросом
-            .select_related("sport", "cardio")
+            # cardio — обратная OneToOne, тянется тем же запросом; location —
+            # для подписи места на карточке, тоже без лишнего запроса
+            .select_related("sport", "cardio", "location")
             # Иначе каждая силовая карточка делала бы свой COUNT по подходам
             .annotate(
                 exercises_count=Count("sets__exercise", distinct=True),
@@ -100,6 +104,12 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
         sport_id = self.request.GET.get("sport")
         if sport_id and sport_id.isdecimal():
             queryset = queryset.filter(sport_id=int(sport_id))
+        location_id = self.request.GET.get("location")
+        if location_id and location_id.isdecimal():
+            # Мусор и чужой id молча дают пустую ленту: queryset уже сужен по
+            # user, поэтому утечки нет, а 404 на устаревшей вкладке был бы
+            # грубостью — то же решение, что у фильтра по видам спорта.
+            queryset = queryset.filter(location_id=int(location_id))
         return queryset
 
     def get_template_names(self):
@@ -119,6 +129,15 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
             # то есть «есть моя тренировка И есть чья-то завершённая». Чип строится
             # только по записанным: у черновика карточек в ленте нет.
             Sport.objects.filter(
+                workouts__user=self.request.user, workouts__duration_min__isnull=False
+            )
+            .distinct()
+            .order_by("name")
+        )
+        context["location_filter"] = self.request.GET.get("location", "")
+        context["locations_used"] = (
+            # Та же осторожность с одним filter, что и у sports_used выше.
+            Location.objects.filter(
                 workouts__user=self.request.user, workouts__duration_min__isnull=False
             )
             .distinct()
@@ -201,6 +220,12 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
             {
                 "form": form,
                 "workout": instance,
+                # Чипы мест берём из queryset'а самой формы: тогда «что видно» и
+                # «что можно сохранить» не могут разъехаться.
+                "locations": form.fields["location"].queryset,
+                "selected_location": form["location"].value(),
+                "location_own": form["location_own"].value() or "",
+                "location_max_length": LOCATION_NAME_MAX_LENGTH,
                 "nav_active": "history" if instance else "add",
             },
         )
@@ -262,8 +287,9 @@ def live_workout_or_404(request, pk):
     return get_object_or_404(
         Workout.objects.filter(user=request.user, sport__category=Sport.Category.STRENGTH)
         .unfinished()
-        # user — для отдыха по умолчанию и подсказок, иначе он тянется отдельным запросом
-        .select_related("sport", "user"),
+        # user — для отдыха по умолчанию и подсказок, иначе он тянется отдельным
+        # запросом; location — для строки места в шапке, тем же запросом
+        .select_related("sport", "user", "location"),
         pk=pk,
     )
 
@@ -368,11 +394,18 @@ class StrengthWorkoutStartView(LoginRequiredMixin, View):
             Sport.objects.visible_to(request.user).filter(category=Sport.Category.STRENGTH),
             pk=int(sport_id),
         )
+        # Место силовая берёт молча: в зале лишний шаг не нужен, а сменить его
+        # можно на самом экране тренировки. Один запрос на обе ветки.
+        location = Location.objects.default_for(request.user)
         if self.planned:
             # Черновиков может быть сколько угодно: уникальный индекс требует начала,
             # поэтому ловить IntegrityError здесь не нужно.
             workout = Workout.objects.create(
-                user=request.user, sport=sport, started_at=None, duration_min=None
+                user=request.user,
+                sport=sport,
+                location=location,
+                started_at=None,
+                duration_min=None,
             )
             return redirect("workout_live", pk=workout.pk)
         try:
@@ -380,7 +413,11 @@ class StrengthWorkoutStartView(LoginRequiredMixin, View):
             # а savepoint не даёт IntegrityError отравить транзакцию запроса.
             with transaction.atomic():
                 workout = Workout.objects.create(
-                    user=request.user, sport=sport, started_at=timezone.now(), duration_min=None
+                    user=request.user,
+                    sport=sport,
+                    location=location,
+                    started_at=timezone.now(),
+                    duration_min=None,
                 )
         except IntegrityError:
             workout = Workout.objects.filter(user=request.user).live().first()
@@ -426,7 +463,8 @@ class LiveWorkoutView(LoginRequiredMixin, View):
 
     def get(self, request, pk):
         workout = get_object_or_404(
-            Workout.objects.filter(user=request.user).select_related("sport", "user"), pk=pk
+            Workout.objects.filter(user=request.user).select_related("sport", "user", "location"),
+            pk=pk,
         )
         if not workout.sport.is_strength:
             raise Http404("Живой режим есть только у силовых тренировок")
@@ -752,6 +790,53 @@ class SetDeleteView(LoginRequiredMixin, View):
         return live_region_response(request, workout)
 
 
+class WorkoutLocationView(LoginRequiredMixin, View):
+    """Место тренировки: модалка на GET, сохранение на POST.
+
+    Тренировка берётся любая своя, в любом состоянии. Не live_workout_or_404:
+    экрана правки силовой в проекте нет, и без этого забытое место записанной
+    тренировки осталось бы неисправимым навсегда — а сравнение по залам
+    строилось бы на вранье. Чужая по прямому URL даёт 404 фильтром по user.
+    """
+
+    def get_workout(self):
+        return get_object_or_404(
+            Workout.objects.filter(user=self.request.user).select_related("location"),
+            pk=self.kwargs["pk"],
+        )
+
+    def get(self, request, pk):
+        workout = self.get_workout()
+        return render(
+            request,
+            "workouts/_location_modal.html",
+            {
+                "workout": workout,
+                "locations": Location.objects.filter(owner=request.user),
+                "location_max_length": LOCATION_NAME_MAX_LENGTH,
+            },
+        )
+
+    def post(self, request, pk):
+        workout = self.get_workout()
+        # Своё поле перебивает выбранную строку — правило chosen_muscle_group.
+        name = collapse_spaces(request.POST.get("location_own", ""))[:LOCATION_NAME_MAX_LENGTH]
+        raw = request.POST.get("location", "")
+        if name:
+            workout.location = services.location_for_name(request.user, name)
+        elif raw.isdecimal():
+            # Священное правило: чужое место по прямому id — 404.
+            workout.location = get_object_or_404(
+                Location.objects.filter(owner=request.user), pk=int(raw)
+            )
+        else:
+            # Строка «Без места» и пустая отправка означают «убрать место».
+            workout.location = None
+        workout.save(update_fields=["location"])
+        # Только OOB-значение: пустой остаток ответа закрывает модалку.
+        return render(request, "workouts/_location_value.html", {"workout": workout, "oob": True})
+
+
 class WorkoutFinishView(LoginRequiredMixin, View):
     """Завершение: длительность от started_at, плановые подходы удаляются."""
 
@@ -811,7 +896,7 @@ class WorkoutSummaryView(LoginRequiredMixin, View):
             # а метрика итога должна совпадать с карточкой в ленте.
             Workout.objects.filter(user=request.user)
             .annotate(**stats.WORKLOAD_ANNOTATIONS)
-            .select_related("sport"),
+            .select_related("sport", "location"),
             pk=pk,
         )
         if not workout.sport.is_strength:
@@ -850,11 +935,17 @@ class WorkoutRepeatView(LoginRequiredMixin, View):
         if active is not None:
             messages.info(request, "Сначала завершите текущую тренировку.")
             return redirect("workout_live", pk=active.pk)
+        # Место берём текущее, а не из источника: «повторить» значит «сделать то
+        # же самое сегодня», а не «скопировать запись». Повтор тренировки из
+        # командировочного зала иначе приписал бы сегодняшнюю сессию тому залу —
+        # и сравнение по залам поехало бы. Веса и отдых тоже не копируются.
+        location = Location.objects.default_for(request.user)
         try:
             with transaction.atomic():
                 workout = Workout.objects.create(
                     user=request.user,
                     sport=source.sport,
+                    location=location,
                     started_at=timezone.now(),
                     duration_min=None,
                 )
@@ -1316,6 +1407,158 @@ class MySportsView(LoginRequiredMixin, ListView):
         return context
 
 
+def my_locations(user):
+    """Места пользователя со счётчиком использований и готовой подписью.
+
+    Один запрос на весь список: usage_label по каждому месту отдельным COUNT'ом
+    дал бы N+1 на экране, который целиком про перечисление.
+    """
+    rows = list(
+        Location.objects.filter(owner=user)
+        .annotate(
+            workouts_count=Count(
+                "workouts",
+                distinct=True,
+                # Оба условия — в одном filter: два подряд дали бы два JOIN'а,
+                # то есть «есть моя тренировка И есть чья-то записанная».
+                # Свой user обязателен, хотя чужую тренировку к моему месту
+                # приложение и не привяжет: подпись говорит про мои тренировки.
+                filter=Q(workouts__user=user, workouts__duration_min__isnull=False),
+            )
+        )
+        # Сортировку задаём явно: аннотация добавляет GROUP BY, а с ним Django
+        # игнорирует Meta.ordering — и место по умолчанию не всплывало наверх
+        # после смены звезды.
+        .order_by("-is_default", "name")
+    )
+    for row in rows:
+        row.usage_label = usage_label(row.workouts_count)
+    return rows
+
+
+def locations_context(user, *, error="", name=""):
+    """Контекст экрана «Мои места». Ошибка и введённое имя переживают перерисовку."""
+    return {
+        "locations": my_locations(user),
+        "location_max_length": LOCATION_NAME_MAX_LENGTH,
+        "error": error,
+        "name": name,
+        "nav_active": "profile",
+    }
+
+
+class MyLocationsView(LoginRequiredMixin, View):
+    """Мои места: добавление, выбор места по умолчанию, переименование, удаление.
+
+    Экран холодный, поэтому добавление — обычный POST с редиректом (PRG), а не
+    HTMX: без JS он обязан работать целиком.
+    """
+
+    def get(self, request):
+        return render(request, "workouts/my_locations.html", locations_context(request.user))
+
+    def post(self, request):
+        name = collapse_spaces(request.POST.get("name", ""))[:LOCATION_NAME_MAX_LENGTH]
+        if not name:
+            return render(
+                request,
+                "workouts/my_locations.html",
+                locations_context(request.user, error="Введите название."),
+            )
+        existing = Location.objects.filter(owner=request.user, name__iexact=name).first()
+        location = services.location_for_name(request.user, name)
+        if existing is not None:
+            # Не ошибка формы: человек ввёл название места, которое у него есть,
+            # и правильный ответ — «оно уже здесь», а не красная подсветка поля.
+            messages.info(request, f"Место «{location.name}» уже есть.")
+        else:
+            messages.success(request, "Место добавлено.")
+        return redirect("my_locations")
+
+
+class LocationDefaultView(LoginRequiredMixin, View):
+    """Место по умолчанию: тап по активному снимает его.
+
+    Дефолтов не больше одного — это держит частичный уникальный индекс. Он
+    проверяется немедленно и построчно (deferrable с condition Django
+    запрещает), поэтому «снять у всех» и «поставить одному» — два отдельных
+    UPDATE'а, а не один оператор с CASE.
+    """
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            # Блокируем свои места и читаем состояние уже под блокировкой: без
+            # этого вторая вкладка не увидела бы только что назначенный дефолт
+            # (READ COMMITTED даёт ей снимок до чужого коммита) и упёрлась бы в
+            # индекс с 500-й. order_by — против взаимной блокировки вкладок.
+            mine = {
+                row.pk: row
+                for row in Location.objects.select_for_update()
+                .filter(owner=request.user)
+                .order_by("pk")
+            }
+            location = mine.get(pk)
+            if location is None:
+                raise Http404("Место не найдено")
+            wanted = not location.is_default
+            Location.objects.filter(owner=request.user, is_default=True).update(is_default=False)
+            if wanted:
+                Location.objects.filter(pk=pk).update(is_default=True)
+        # Перерисовываем блок строк целиком: у старого дефолта надо снять
+        # подпись, у нового поставить, и это проще, чем вести учёт, какая
+        # строка была дефолтной.
+        return render(request, "workouts/_location_rows.html", locations_context(request.user))
+
+
+class LocationRenameView(LoginRequiredMixin, View):
+    """Переименование места: опечатка правится один раз, история чинится вся.
+
+    Ради этого место и стало моделью, а не текстовым полем тренировки.
+    """
+
+    def get_object(self):
+        # Чужое место по прямому URL — 404.
+        return get_object_or_404(
+            Location.objects.filter(owner=self.request.user), pk=self.kwargs["pk"]
+        )
+
+    def get(self, request, pk):
+        return self.render_modal(self.get_object())
+
+    def post(self, request, pk):
+        location = self.get_object()
+        name = collapse_spaces(request.POST.get("name", ""))[:LOCATION_NAME_MAX_LENGTH]
+        if not name:
+            return self.render_modal(location, error="Введите название.")
+        taken = (
+            Location.objects.filter(owner=request.user, name__iexact=name)
+            .exclude(pk=location.pk)
+            .exists()
+        )
+        if taken:
+            return self.render_modal(location, error="Место с таким названием у вас уже есть.")
+        location.name = name
+        location.save(update_fields=["name"])
+        # Список приходит out-of-band, поэтому в #modal попадает пустой остаток
+        # ответа и модалка закрывается сама — приём SportCreateView.
+        return render(
+            request,
+            "workouts/_location_rows.html",
+            locations_context(request.user) | {"oob": True},
+        )
+
+    def render_modal(self, location, error=""):
+        return render(
+            self.request,
+            "workouts/_location_rename_modal.html",
+            {
+                "location": location,
+                "location_max_length": LOCATION_NAME_MAX_LENGTH,
+                "error": error,
+            },
+        )
+
+
 class CatalogDeleteView(LoginRequiredMixin, View):
     """Удаление своей записи справочника: подтверждение страницей, удаление POST'ом.
 
@@ -1422,6 +1665,20 @@ class SportDeleteView(CatalogDeleteView):
 
     def referencing_workouts(self, item):
         return Workout.objects.filter(sport=item)
+
+
+class LocationDeleteView(CatalogDeleteView):
+    model = Location
+    title = "Удалить место?"
+    in_use_message = "Место «{name}» есть в записанных тренировках — его нельзя удалить."
+    planned_use_message = (
+        "Место «{name}» есть в подготовленной тренировке — сначала удалите черновик."
+    )
+    deleted_message = "Место удалено."
+    success_url_name = "my_locations"
+
+    def referencing_workouts(self, item):
+        return Workout.objects.filter(location=item)
 
 
 class ChangelogView(LoginRequiredMixin, View):

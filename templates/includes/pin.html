@@ -1,0 +1,11 @@
+{% comment %}
+  Булавка места: зал или точка заезда. size — 16 в тексте (карточка истории,
+  итог, экран тренировки), 20 в строке профиля, как у остальных .app-row-icon.
+  Включать с `only`, иначе size подтянется из контекста страницы.
+{% endcomment %}
+<svg width="{{ size|default:16 }}" height="{{ size|default:16 }}" viewBox="0 0 24 24"
+     fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+     stroke-linejoin="round" aria-hidden="true">
+  <path d="M12 21c4.5-4.4 7-7.7 7-10.5a7 7 0 10-14 0c0 2.8 2.5 6.1 7 10.5z"/>
+  <circle cx="12" cy="10.5" r="2.5"/>
+</svg>

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Мои места · Дневник тренировок{% endblock %}
+
+{% block main_class %}app-main-form{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Мои места</h1>
+</div>
+
+{% include "workouts/_location_rows.html" %}
+
+{% comment %}
+  Добавление — обычный POST с редиректом, без HTMX: экран холодный и обязан
+  работать целиком без JS. Ввод существующего названия не ошибка — приходит
+  сообщение «оно уже есть», а не красное поле.
+{% endcomment %}
+<form method="post" class="mt-3">
+  {% csrf_token %}
+  <label class="form-label" for="location-name">Новое место</label>
+  <div class="d-flex gap-2">
+    {% comment %}
+      Плейсхолдер короткий: рядом кнопка, и на 375px полю остаётся ~215px —
+      «напр. СпортЛайф или Парк у реки» там обрезался. Примеры переехали в
+      подсказку, у неё вся ширина.
+    {% endcomment %}
+    <input type="text" name="name" id="location-name" class="form-control"
+           maxlength="{{ location_max_length }}" value="{{ name }}" autocomplete="off"
+           placeholder="напр. СпортЛайф">
+    <button type="submit" class="btn btn-accent">Добавить</button>
+  </div>
+  {% if error %}<div class="invalid-feedback d-block">{{ error }}</div>{% endif %}
+  <p class="app-queue-hint mt-2 mb-0">
+    Место со звездой подставляется в силовые тренировки само. Заезд тоже место —
+    «Парк у реки» подойдёт.
+  </p>
+</form>
+{% endblock %}

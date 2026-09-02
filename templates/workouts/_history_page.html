@@ -12,8 +12,14 @@
 {% endfor %}
 
 {% if page_obj.has_next %}
+  {% comment %}
+    {% querystring %}, а не ручная склейка: раньше здесь перечислялись фильтры
+    по одному, и второй фильтр молча терялся бы — тапнул место, подгрузил
+    страницу, фильтр слетел. Тег сохраняет все параметры и правит только
+    названные.
+  {% endcomment %}
   <button class="btn btn-quiet w-100 mt-2" id="load-more"
-          hx-get="?page={{ page_obj.next_page_number }}{% if sport_filter %}&sport={{ sport_filter }}{% endif %}&prev_week={{ last_week }}"
+          hx-get="{% querystring page=page_obj.next_page_number prev_week=last_week %}"
           hx-target="#load-more" hx-swap="outerHTML">
     Показать ещё
   </button>

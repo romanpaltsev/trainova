@@ -1,0 +1,55 @@
+{% comment %}
+  Выбор места тренировки. Строки списка сохраняют выбор сразу, новое название —
+  формой внизу. Ответ на POST — пустое тело плюс OOB-обновление значения, так
+  что модалка закрывается сама.
+
+  Отдельного «Без места» первой строкой достаточно вместо чипа-сброса: в списке
+  из трёх мест это понятнее радиогруппы, а тап по строке уже сохраняет.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="location-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="location-modal-title">Место тренировки</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="app-pick-list">
+      <button type="button" class="app-pick-row" hx-post="{% url 'workout_location' workout.pk %}"
+              hx-vals='{"location": ""}' hx-target="#modal" hx-swap="innerHTML"
+              hx-disabled-elt="this">
+        <span class="app-pick-name">Без места</span>
+        {% if not workout.location_id %}{% include "includes/check.html" %}{% endif %}
+      </button>
+      {% for place in locations %}
+        <button type="button" class="app-pick-row"
+                hx-post="{% url 'workout_location' workout.pk %}"
+                hx-vals='{"location": "{{ place.pk }}"}'
+                hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
+          <span class="app-pick-name">{{ place.name }}</span>
+          {% if workout.location_id == place.pk %}{% include "includes/check.html" %}{% endif %}
+        </button>
+      {% endfor %}
+    </div>
+
+    {% comment %}
+      Новое место. Ввод существующего названия выбирает существующую запись —
+      правило location_for_name, то же, что у быстрого создания упражнения.
+    {% endcomment %}
+    <form class="mt-3" hx-post="{% url 'workout_location' workout.pk %}"
+          hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="find button">
+      <label class="form-label" for="location-new">Новое место</label>
+      <input type="text" name="location_own" id="location-new" class="form-control"
+             maxlength="{{ location_max_length }}" autocomplete="off"
+             placeholder="напр. СпортЛайф">
+      <p class="app-queue-hint mt-2 mb-0">Если такое место уже есть, выберется оно.</p>
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Добавить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>
