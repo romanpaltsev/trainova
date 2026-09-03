@@ -60,10 +60,15 @@ echo
 echo "== Потери и задержки наружу =="
 for host in $TARGETS; do
   printf "  %-12s " "$host"
-  # -q даёт две итоговые строки; берём их целиком, без вырезания кусков
-  # регуляркой: на разных дистрибутивах формат чуть разный.
-  ping -c "$PINGS" -i 0.2 -W 2 -q "$host" 2>&1 | tail -2 | tr '\n' ' ' |
-    sed -E 's/.*transmitted, [0-9]+ received, ([0-9.]+)% packet loss.*rtt [^=]*= ([^ ]*).*/потери \1%, rtt мин\/сред\/макс\/разброс \2/'
+  # -q сводит вывод к двум итоговым строкам, они склеиваются в одну и из неё
+  # достаются потери и rtt. awk, а не sed: ping печатает дробные проценты
+  # (13 потерь из 30 — это 43.3333%), и лишние знаки только мешают читать.
+  ping -c "$PINGS" -i 0.2 -W 2 -q "$host" 2>&1 | tail -2 | tr '\n' ' ' | awk '{
+    loss = rtt = "?"
+    if (match($0, /[0-9.]+% packet loss/)) loss = substr($0, RSTART, RLENGTH - 13)
+    if (match($0, /= [0-9.\/]+ ms/))       rtt  = substr($0, RSTART + 2, RLENGTH - 5)
+    printf "потери %.1f%%, rtt мин/сред/макс/разброс %s мс\n", loss, rtt
+  }'
   echo
 done
 echo
