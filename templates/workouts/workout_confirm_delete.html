@@ -12,7 +12,7 @@
 <div class="app-card p-4">
   <p class="mb-1">
     <span class="app-sport-dot" style="--dot: var(--app-sport-{{ workout.sport.color_key }})"></span>
-    <strong>{{ workout.sport.name }}</strong> ·
+    <strong>{{ workout.muscle_groups|default:workout.sport.name }}</strong> ·
     {# У черновика даты нет: фильтр date отдал бы пустоту и точка повисла бы в воздухе. #}
     {% if workout.is_planned %}{{ plan_label }}{% else %}{{ workout.started_at|date:"j E Y, H:i" }}{% endif %}
   </p>

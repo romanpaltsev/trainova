@@ -120,6 +120,9 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Подпись по группам мышц — одним запросом на страницу, до разбивки по
+        # неделям: иначе каждая карточка спрашивала бы свои подходы сама.
+        context["workouts"] = stats.attach_muscle_groups(self.request.user, context["workouts"])
         context["groups"] = self._group_by_week(context["workouts"])
         context["prev_week"] = self.request.GET.get("prev_week", "")
         context["last_week"] = context["groups"][-1]["key"] if context["groups"] else ""
@@ -244,6 +247,8 @@ class WorkoutDeleteView(LoginRequiredMixin, DeleteView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        # Та же подпись, что в ленте: по ней и опознают, какую тренировку удаляют.
+        stats.attach_muscle_groups(self.request.user, [self.object])
         if self.object.is_planned:
             # У черновика нет даты, поэтому в подзаголовке — состав, а не «когда».
             count = self.object.sets.values("exercise").distinct().count()
@@ -359,6 +364,9 @@ class WorkoutStartView(LoginRequiredMixin, View):
         )
         live = next((row for row in rows if not row.is_planned), None)
         drafts = [row for row in rows if row.is_planned]
+        # Черновики плана на неделю различаются только составом, поэтому им тоже
+        # нужна подпись по группам мышц: у всех троих иначе было бы «Силовая».
+        stats.attach_muscle_groups(request.user, drafts)
         for draft in drafts:
             draft.plan_label = exercises_label(draft.exercises_count)
         return render(
@@ -903,6 +911,10 @@ class WorkoutSummaryView(LoginRequiredMixin, View):
             raise Http404("У кардио свой экран правки")
         if not workout.is_finished:
             return redirect("workout_live", pk=workout.pk)
+        # Заголовок итога — та же подпись, что в ленте. Отдельный запрос на одну
+        # тренировку: правило подписи дороже держать в одном месте, чем выводить
+        # её тут заново из уже загруженных групп.
+        stats.attach_muscle_groups(request.user, [workout])
         groups = services.exercise_groups(workout)
         for group in groups:
             group["total"] = services.exercise_total(group["sets"])
@@ -1075,7 +1087,10 @@ class DashboardWeekView(LoginRequiredMixin, View):
             "workouts/_dashboard_week.html",
             {
                 "title": week_title(start, today),
-                "rows": [stats.workout_row(workout, today) for workout in workouts],
+                "rows": [
+                    stats.workout_row(workout, today)
+                    for workout in stats.attach_muscle_groups(request.user, workouts)
+                ],
             },
         )
 

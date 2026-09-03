@@ -36,11 +36,15 @@ def fill_history(user, weeks=6):
 
 
 def test_dashboard_query_budget(client, user, django_assert_max_num_queries):
-    """Дашборд собирает сводку, график, рекорды и последние тренировки."""
+    """Дашборд собирает сводку, график, рекорды и последние тренировки.
+
+    Шестнадцатый запрос — подписи «Последних тренировок» по группам мышц: один
+    агрегат на весь блок, а не по строке.
+    """
     fill_history(user)
 
     client.force_login(user)
-    with django_assert_max_num_queries(15):
+    with django_assert_max_num_queries(16):
         client.get(reverse("dashboard"))
 
 
@@ -48,7 +52,7 @@ def test_dashboard_queries_do_not_scale_with_history(client, user, django_assert
     fill_history(user, weeks=12)
 
     client.force_login(user)
-    with django_assert_max_num_queries(15):
+    with django_assert_max_num_queries(16):
         client.get(reverse("dashboard"))
 
 
@@ -144,8 +148,9 @@ def test_start_modal_query_budget(client, user, django_assert_max_num_queries, d
         StrengthSetFactory(workout=planned, set_number=1, done=False)
 
     client.force_login(user)
-    # Идущая тренировка и черновики берутся одним запросом с аннотацией.
-    with django_assert_max_num_queries(6):
+    # Идущая тренировка и черновики берутся одним запросом с аннотацией, седьмой —
+    # подписи черновиков по группам мышц, тоже один на всех.
+    with django_assert_max_num_queries(7):
         client.get(reverse("workout_start"))
 
 
@@ -188,5 +193,23 @@ def test_workout_summary_query_budget(client, user, django_assert_max_num_querie
         StrengthSetFactory(workout=workout, exercise=exercise, set_number=1, weight_kg=70, reps=8)
 
     client.force_login(user)
-    with django_assert_max_num_queries(7):
+    # Восьмой — группы мышц для заголовка: на экране одной тренировки это один
+    # запрос, зато правило подписи остаётся одно на все экраны.
+    with django_assert_max_num_queries(8):
         client.get(reverse("workout_summary", args=[workout.pk]))
+
+
+@pytest.mark.parametrize("weeks", [2, 8], ids=["short-history", "long-history"])
+def test_history_query_budget(client, user, django_assert_max_num_queries, weeks):
+    """Лента истории не должна зависеть от числа карточек на странице.
+
+    Здесь это главное: подпись каждой силовой карточки собирается из её групп
+    мышц, и наивная реализация свойством модели дала бы запрос на карточку.
+    Ценность теста не в самом числе, а в том, что оно одинаково при двух неделях
+    истории и при восьми. Девятый запрос — подписи всей страницы одним агрегатом.
+    """
+    fill_history(user, weeks=weeks)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(9):
+        client.get(reverse("workout_history"))

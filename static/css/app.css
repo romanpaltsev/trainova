@@ -400,13 +400,28 @@ body {
   margin-bottom: 0.625rem;
 }
 
+/* Заголовок силовой — группы мышц, а не короткое «Силовая», поэтому шапка
+   должна держать дату на месте: min-width сверху донизу разрешает флекс-детям
+   сжиматься (по умолчанию у них min-width: auto, и длинный заголовок выдавил бы
+   дату), обрезка забирает остаток, а дата не сжимается вовсе. */
 .app-workout-sport {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
   font-size: 1.0625rem;
   font-weight: 800;
   letter-spacing: -0.01em;
+}
+
+.app-workout-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workout-head > .text-secondary-app {
+  flex: 0 0 auto;
 }
 
 .app-metrics {
@@ -1353,6 +1368,9 @@ body {
 }
 
 .app-latest-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 800;
   letter-spacing: -0.01em;
 }

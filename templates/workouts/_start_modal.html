@@ -29,7 +29,7 @@
         {% for draft in drafts %}
           <a class="app-pick-row" href="{% url 'workout_live' draft.pk %}">
             <span class="app-sport-dot" style="--dot: var(--app-sport-{{ draft.sport.color_key }})"></span>
-            <span class="app-pick-name">{{ draft.sport.name }}</span>
+            <span class="app-pick-name">{{ draft.muscle_groups|default:draft.sport.name }}</span>
             <span class="app-pick-meta">{{ draft.plan_label }}</span>
             {% include "includes/chevron.html" %}
           </a>

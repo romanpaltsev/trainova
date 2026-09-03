@@ -28,6 +28,10 @@ from workouts.models import (
 
 SPARKLINE_POINTS = 12
 
+# Сколько групп мышц показываем в подписи целиком, остальные сворачиваются в «+N».
+# Две — предел шапки карточки на 375px: третья группа выдавливает дату.
+MUSCLE_GROUPS_SHOWN = 2
+
 # Аннотации для `Workout.workload`: все три суммы идут по одному join'у на подходы,
 # поэтому считаются одним запросом и не размножают строки друг друга. Повторы
 # суммируются только у повторных упражнений — в весовых они уже вошли в тоннаж.
@@ -241,7 +245,10 @@ def workout_row(workout, today):
         metric = f"{workout.cardio.distance_display} км"
     return {
         "workout": workout,
-        "sport_name": workout.sport.name,
+        # Силовая подписывается группами мышц (attach_muscle_groups), иначе весь
+        # блок был бы столбцом слова «Силовая». getattr, а не прямое поле: у
+        # кардио групп не бывает, и подпись остаётся именем вида спорта.
+        "sport_name": getattr(workout, "muscle_groups", "") or workout.sport.name,
         "color_key": workout.sport.color_key,
         "meta": f"{day_label} · {workout.duration_display} · {metric}",
     }
@@ -257,7 +264,7 @@ def latest_workouts(user, today=None, limit=5):
         .annotate(**WORKLOAD_ANNOTATIONS)
         .order_by("-started_at", "-id")[:limit]
     )
-    return [workout_row(workout, today) for workout in workouts]
+    return [workout_row(workout, today) for workout in attach_muscle_groups(user, workouts)]
 
 
 def strength_records(user, limit=None):
@@ -357,6 +364,62 @@ def cardio_records(user):
         )
     records.sort(key=lambda record: record["name"])
     return records
+
+
+def muscle_groups_by_workout(user, workout_ids):
+    """Подпись силовой тренировки по группам мышц: {workout_id: "Грудь · Плечи"}.
+
+    Слово «Силовая» одинаково у всех тренировок, поэтому в истории и на дашборде
+    подпись собирается из содержимого: какие группы мышц были в этот раз. Здесь
+    только группы; фолбэк на имя вида спорта делает шаблон — так забытая точка
+    вызова даёт прежнюю подпись, а не пустоту.
+
+    Один запрос на всю страницу, а не на карточку: иначе лента истории делала бы
+    запрос на каждую тренировку. Агрегат сразу по `muscle_group`, а не выборка
+    подходов, — соседние подходы одной группы для подписи не нужны.
+
+    Порядок — общий `exercise_order_key`: сначала то, что реально делали (по
+    самой ранней метке выполнения), потом непройденное в порядке добавления.
+    Поэтому по `done` не фильтруем: у записанной тренировки невыполненных
+    подходов уже нет, а у черновика все подходы плановые, и он подписывается по
+    плану. Упражнения без группы мышц в подпись не попадают: группа
+    необязательная, и пустая строка была бы не «нет данных», а мусором.
+    """
+    rows = (
+        # Фильтр по user избыточен (id пришли из своей выборки), но правило
+        # «каждый queryset пользовательских данных фильтруется по user» дороже
+        # экономии одного условия — то же решение, что в exercise_positions.
+        StrengthSet.objects.filter(workout_id__in=workout_ids, workout__user=user)
+        .exclude(exercise__muscle_group="")
+        .values("workout_id", "exercise__muscle_group")
+        .annotate(first_done_at=Min("done_at"), first_set_id=Min("id"))
+    )
+    by_workout = {}
+    for row in rows:
+        by_workout.setdefault(row["workout_id"], []).append(row)
+    labels = {}
+    for workout_id, items in by_workout.items():
+        items.sort(key=lambda item: exercise_order_key(item["first_done_at"], item["first_set_id"]))
+        groups = [item["exercise__muscle_group"] for item in items]
+        label = " · ".join(groups[:MUSCLE_GROUPS_SHOWN])
+        hidden = len(groups) - MUSCLE_GROUPS_SHOWN
+        if hidden > 0:
+            label = f"{label} +{hidden}"
+        labels[workout_id] = label
+    return labels
+
+
+def attach_muscle_groups(user, workouts):
+    """Проставить `muscle_groups` списку тренировок — одним запросом на всех.
+
+    Отдельная функция, а не свойство модели: свойство читало бы подходы у каждой
+    тренировки и превращало ленту в N+1.
+    """
+    workouts = list(workouts)
+    labels = muscle_groups_by_workout(user, [workout.pk for workout in workouts])
+    for workout in workouts:
+        workout.muscle_groups = labels.get(workout.pk, "")
+    return workouts
 
 
 def exercise_positions(user, workout_ids, exercise):

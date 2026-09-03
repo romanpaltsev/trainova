@@ -8,7 +8,12 @@
   <div class="app-workout-head">
     <span class="app-workout-sport">
       <span class="app-sport-dot" style="--dot: var(--app-sport-{{ workout.sport.color_key }})"></span>
-      {{ workout.sport.name }}
+      {% comment %}
+        Заголовок в своём span, а не текстом рядом с точкой: обрезать многоточием
+        можно только элемент, у анонимного текстового узла flex-контейнера
+        text-overflow не работает. Группа мышц бывает и в 60 символов.
+      {% endcomment %}
+      <span class="app-workout-title">{{ workout.muscle_groups|default:workout.sport.name }}</span>
     </span>
     <span class="text-secondary-app">{{ workout.started_at|date:"D, j b"|lower }}</span>
   </div>
