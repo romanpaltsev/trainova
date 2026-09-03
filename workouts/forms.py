@@ -107,6 +107,15 @@ class CardioWorkoutForm(forms.Form):
             attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "напр. 142"}
         ),
     )
+    # День, на который тренировка подготовлена. В отличие от `date`, может быть
+    # в будущем — это и есть смысл плана, поэтому clean_date его не касается.
+    planned_for = forms.DateField(
+        label="На какой день",
+        required=False,
+        input_formats=["%Y-%m-%d"],
+        error_messages={"invalid": "Не похоже на дату."},
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}, format="%Y-%m-%d"),
+    )
     note = forms.CharField(
         label="Заметка",
         required=False,
@@ -119,13 +128,24 @@ class CardioWorkoutForm(forms.Form):
         self.planned = planned
         super().__init__(*args, **kwargs)
         if planned:
-            # План не знает ни даты, ни длительности, ни пульса: всё это появится,
-            # когда тренировка состоится. Поля именно удаляются, а не гасятся
-            # флагом required — тогда «этой формой нельзя записать тренировку»
-            # держится структурой, а не договорённостью. Заодно отключается
-            # проверка длительности в clean(): она и так стоит под `in cleaned`.
-            for name in ("date", "duration_hours", "duration_minutes", "avg_heart_rate"):
+            # Даты записи и пульса у плана не бывает: первая появится, когда
+            # тренировка состоится, второй — только после неё. Поля удаляются, а
+            # не гасятся флагом required: без `date` форма физически не может
+            # вычислить started_at, и «этой формой нельзя записать тренировку»
+            # держится структурой, а не договорённостью.
+            #
+            # А вот поля длительности остаются: у плана они значат цель по
+            # времени — тем же приёмом, каким distance_km служит и цели, и факту.
+            # Плата за это честная: clean() и save() теперь смотрят на self.planned.
+            for name in ("date", "avg_heart_rate"):
                 del self.fields[name]
+            # Обе цели необязательны: планов на неделю наготавливают пачкой, и
+            # заставлять заполнять значения было бы издевательством.
+            self.fields["distance_km"].required = False
+        else:
+            # Плановый день живёт только у черновика — у записанной тренировки
+            # день известен из даты, а хранить оба значило бы «план vs факт».
+            del self.fields["planned_for"]
         # Священное правило: только глобальные виды спорта и свои, только кардио.
         self.fields["sport"].queryset = Sport.objects.visible_to(user).filter(
             category=Sport.Category.CARDIO
@@ -151,7 +171,11 @@ class CardioWorkoutForm(forms.Form):
         # поэтому оба поля разбираются с оглядкой. Дата подставляется сегодняшняя:
         # план записывается тем днём, когда тренировка наконец состоялась.
         started_at = timezone.localtime(workout.started_at) if workout.started_at else None
-        hours, minutes = divmod(workout.duration_min, 60) if workout.duration_min else (None, None)
+        # Факт первым, иначе цель: открытый на запись план подставляет в поля
+        # длительности то, что было загадано, — как цель по дистанции подставляется
+        # в дистанцию. Правится поверх, если вышло иначе.
+        planned_minutes = workout.duration_min or workout.target_duration_min
+        hours, minutes = divmod(planned_minutes, 60) if planned_minutes else (None, None)
         cardio = getattr(workout, "cardio", None)
         return {
             "sport": workout.sport_id,
@@ -178,7 +202,9 @@ class CardioWorkoutForm(forms.Form):
         minutes = cleaned.get("duration_minutes") or 0
         duration = hours * 60 + minutes
         if "duration_hours" in cleaned and "duration_minutes" in cleaned:
-            if duration <= 0:
+            # У плана пустая длительность значит «не загадывал», а не ошибку;
+            # верхняя граница остаётся общей — цель в 30 часов тоже опечатка.
+            if duration <= 0 and not self.planned:
                 self.add_error("duration_minutes", "Укажите длительность тренировки.")
             elif duration > MAX_DURATION_HOURS * 60:
                 self.add_error("duration_hours", "Слишком долгая тренировка.")
@@ -210,23 +236,40 @@ class CardioWorkoutForm(forms.Form):
         if self.planned:
             # Черновик: время не идёт и длительности нет — ровно те же две
             # колонки, которыми состояние тренировки задаётся у силовой.
+            # Длительность из формы уезжает в цель; ноль значит «не загадывал».
             workout.started_at = None
             workout.duration_min = None
+            workout.target_duration_min = self.cleaned_data["duration_min"] or None
+            workout.planned_for = self.cleaned_data.get("planned_for")
         else:
             workout.started_at = self.started_at()
             workout.duration_min = self.cleaned_data["duration_min"]
+            # Цель заменяется фактом, плановый день — настоящей датой. То же
+            # самое происходит с целью по дистанции строкой ниже, просто ей для
+            # этого не нужно отдельное поле. planned_for обнулять обязательно:
+            # его держит констрейнт planned_for_only_when_planned.
+            workout.target_duration_min = None
+            workout.planned_for = None
         workout.note = self.cleaned_data["note"]
         workout.save()
 
-        CardioDetails.objects.update_or_create(
-            workout=workout,
-            defaults={
-                "distance_km": self.cleaned_data["distance_km"],
-                # Пульс есть только у состоявшейся тренировки: у плана поля нет,
-                # а на записи черновика оно придёт из формы как обычно.
-                "avg_heart_rate": self.cleaned_data.get("avg_heart_rate"),
-            },
-        )
+        distance = self.cleaned_data.get("distance_km")
+        if distance is None:
+            # «Цели по дистанции нет» выражается отсутствием строки — тот же
+            # приём, что у ExerciseNote. Ветка delete сегодня всегда попадает в
+            # пустоту (planned бывает только у новой тренировки), но делает
+            # ветвление полным и переживёт появление правки плана.
+            CardioDetails.objects.filter(workout=workout).delete()
+        else:
+            CardioDetails.objects.update_or_create(
+                workout=workout,
+                defaults={
+                    "distance_km": distance,
+                    # Пульс есть только у состоявшейся тренировки: у плана поля
+                    # нет, а на записи черновика оно придёт из формы как обычно.
+                    "avg_heart_rate": self.cleaned_data.get("avg_heart_rate"),
+                },
+            )
         return workout
 
 

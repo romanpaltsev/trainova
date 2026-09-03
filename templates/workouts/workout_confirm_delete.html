@@ -22,9 +22,16 @@
     {% csrf_token %}
     <div class="d-flex flex-column gap-2">
       <button type="submit" class="btn btn-danger-quiet w-100">Удалить</button>
-      {# У силовой тренировки экрана правки пока нет — возвращаемся в историю. #}
-      {% if workout.is_planned %}
+      {% comment %}
+        У силовой тренировки экрана правки пока нет — возвращаемся в историю.
+        Черновик — туда, где его правят, и это разные экраны: у силовой живой
+        режим, у кардио форма записи. Без разделения «Отмена» на кардио-плане
+        уводила в 404: LiveWorkoutView пускает только силовые.
+      {% endcomment %}
+      {% if workout.is_planned and workout.sport.is_strength %}
         <a class="btn btn-quiet w-100" href="{% url 'workout_live' workout.pk %}">Отмена</a>
+      {% elif workout.is_planned %}
+        <a class="btn btn-quiet w-100" href="{% url 'workout_edit' workout.pk %}">Отмена</a>
       {% elif workout.sport.is_strength %}
         <a class="btn btn-quiet w-100" href="{% url 'workout_history' %}">Отмена</a>
       {% else %}

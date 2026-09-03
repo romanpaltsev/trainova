@@ -1,0 +1,22 @@
+{% comment %}
+  Пара «ч / мин». Один партиал на два смысла: при записи это длительность
+  тренировки, у плана — цель по времени. Поля те же самые (duration_hours и
+  duration_minutes): цель и факт делят одно поле везде, где поле свободно, —
+  так же, как дистанция служит и цели, и факту. Разводит их уже форма, по
+  self.planned, потому что duration_min занят под состояние тренировки.
+
+  Включать с `with label="..."`; optional=True добавляет пометку.
+{% endcomment %}
+<span class="form-label d-block">
+  {{ label }}{% if optional %} <span class="text-muted-app">· необязательно</span>{% endif %}
+</span>
+<div class="app-duration">
+  <label class="visually-hidden" for="{{ form.duration_hours.id_for_label }}">Часы</label>
+  {{ form.duration_hours }}
+  <span class="app-duration-unit">ч</span>
+  <label class="visually-hidden" for="{{ form.duration_minutes.id_for_label }}">Минуты</label>
+  {{ form.duration_minutes }}
+  <span class="app-duration-unit">мин</span>
+</div>
+{% for error in form.duration_hours.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+{% for error in form.duration_minutes.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}

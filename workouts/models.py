@@ -538,6 +538,26 @@ class Workout(models.Model):
         blank=True,
         help_text="Пусто — тренировка ещё идёт.",
     )
+    # Цель и плановый день живут в отдельных колонках, а не в duration_min и
+    # started_at, хотя цель по дистанции лежит прямо в поле факта. Причина не в
+    # непоследовательности: distance_km — это только данные, а duration_min и
+    # started_at ещё и задают состояние тренировки (finished/live/planned).
+    # Запиши цель в duration_min — план мгновенно стал бы записанной тренировкой;
+    # запиши день в started_at — черновик стал бы «идущим» и второй такой упёрся
+    # бы в unique_live_workout_per_user. Оба поля стираются при записи, и это
+    # держат констрейнты ниже: отчёта «план vs факт» в v1 не предполагается.
+    target_duration_min = models.PositiveIntegerField(
+        "цель по времени, мин",
+        null=True,
+        blank=True,
+        help_text="Только у подготовленной тренировки.",
+    )
+    planned_for = models.DateField(
+        "на какой день",
+        null=True,
+        blank=True,
+        help_text="Только у черновика: день, на который тренировка подготовлена.",
+    )
     note = models.TextField("заметка", blank=True)
     rest_seconds = models.PositiveSmallIntegerField(
         "отдых между подходами, сек",
@@ -585,6 +605,22 @@ class Workout(models.Model):
                 name="finished_workout_is_started",
                 violation_error_message="Завершённая тренировка не может быть без начала.",
             ),
+            # Плановый день живёт только у черновика: у начатой тренировки день
+            # известен из started_at, а хранить оба значило бы завести «план vs
+            # факт», которого в v1 не предполагается. Стирает его WorkoutDraftStartView
+            # тем же UPDATE, которым проставляет started_at.
+            #
+            # Парного констрейнта на target_duration_min намеренно НЕТ. Он не
+            # защищал бы ни одного чтения (у записанной тренировки цель никто не
+            # читает), зато WorkoutFinishView сохраняет с update_fields=["duration_min"],
+            # и тренировка с целью, выставленной через админку, валила бы завершение.
+            # Цель обнуляется в записывающей ветке формы — там, где цель по
+            # дистанции точно так же заменяется фактом.
+            models.CheckConstraint(
+                condition=Q(started_at__isnull=True) | Q(planned_for__isnull=True),
+                name="planned_for_only_when_planned",
+                violation_error_message="Плановый день бывает только у черновика.",
+            ),
         ]
 
     def __str__(self):
@@ -608,6 +644,19 @@ class Workout(models.Model):
         if self.duration_min is None:
             return "—"
         hours, minutes = divmod(self.duration_min, 60)
+        return f"{hours}:{minutes:02d}"
+
+    @property
+    def target_duration_display(self):
+        """Цель по времени как 1:20 — тот же формат, что у duration_display.
+
+        Хелпера под «45 мин» в проекте нет, а H:MM — общая конвенция времени
+        (duration_display, stats.hours_display, rest_display), поэтому цель
+        печатается так же, как потом напечатается факт.
+        """
+        if self.target_duration_min is None:
+            return "—"
+        hours, minutes = divmod(self.target_duration_min, 60)
         return f"{hours}:{minutes:02d}"
 
     @property

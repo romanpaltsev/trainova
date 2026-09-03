@@ -49,6 +49,11 @@
         {% endif %}
       </div>
       {% include "workouts/_location_value.html" %}
+      {% comment %}
+        День — только у черновика: у идущей тренировки он уже наступил, и
+        констрейнт planned_for_only_when_planned такую строку не примет.
+      {% endcomment %}
+      {% if workout.is_planned %}{% include "workouts/_planned_for_value.html" %}{% endif %}
     </div>
   </div>
   {% if workout.is_planned %}

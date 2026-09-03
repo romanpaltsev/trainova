@@ -10,13 +10,14 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Max, Q
+from django.db.models import Count, F, Max, Q
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import formats, timezone
+from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
 from workouts import services, stats
@@ -308,21 +309,52 @@ def exercises_label(count):
     return f"{count} {word}"
 
 
+def plan_day_label(day, today):
+    """День плана коротко: «сегодня», «завтра», «сб» на ближайшую неделю, «5 сен» дальше.
+
+    Тот же приём, что у stats.workout_row для прошедших дней, только повёрнутый
+    вперёд. Коротко — не из эстетики: в строке чузера рядом стоят ещё две цели,
+    а всей ширины там 262 пикселя на 375px, и «сб, 5 сен · 30 км · 1:20» в них
+    уже не помещается (замерено). Прошедший день падает в «5 сен» — план, до
+    которого не дошли, честнее показать датой.
+    """
+    if day == today:
+        return "сегодня"
+    if day == today + timedelta(days=1):
+        return "завтра"
+    if today < day <= today + timedelta(days=6):
+        return formats.date_format(day, "D").lower()
+    return formats.date_format(day, "j b")
+
+
 def plan_label(workout, exercises_count=None):
     """Чем один черновик отличается от другого того же вида спорта.
 
-    Даты, по которой их можно было бы различить, у черновика нет: у силовой
-    остаётся состав, у кардио — цель по дистанции. Счётчик упражнений принимается
-    аргументом, потому что в чузере он приходит аннотацией на всю выборку сразу.
+    Сначала плановый день, если задан, потом содержание: у силовой это состав,
+    у кардио — цели, которых может быть две, одна или ни одной. Обе цели
+    необязательные, поэтому «пусто» — законный ответ, как у силового черновика
+    без упражнений. Счётчик упражнений принимается аргументом: в чузере он
+    приходит аннотацией на всю выборку сразу.
     """
+    parts = []
+    if workout.planned_for:
+        parts.append(plan_day_label(workout.planned_for, timezone.localdate()))
     if workout.sport.is_strength:
         if exercises_count is None:
             exercises_count = workout.sets.values("exercise").distinct().count()
-        return exercises_label(exercises_count)
+        parts.append(exercises_label(exercises_count))
+        return " · ".join(parts)
     # getattr со значением по умолчанию: у обратной OneToOne отсутствие строки —
-    # это AttributeError, и Django делает его таким намеренно.
+    # это AttributeError, и Django делает его таким намеренно. Строки нет — значит
+    # цели по дистанции не задавали.
     cardio = getattr(workout, "cardio", None)
-    return f"{cardio.distance_display} км" if cardio else "пусто"
+    targets = []
+    if cardio:
+        targets.append(f"{cardio.distance_display} км")
+    if workout.target_duration_min:
+        targets.append(workout.target_duration_display)
+    parts.extend(targets or ["пусто"])
+    return " · ".join(parts)
 
 
 def live_workout_or_404(request, pk):
@@ -403,8 +435,11 @@ class WorkoutStartView(LoginRequiredMixin, View):
             # и без select_related каждая строка спрашивала бы её отдельно.
             .select_related("sport", "cardio")
             .annotate(exercises_count=Count("sets__exercise", distinct=True))
-            # Явно: с GROUP BY Django игнорирует Meta.ordering, а у черновика нет даты.
-            .order_by("-id")
+            # Явно: с GROUP BY Django игнорирует Meta.ordering. Датированные планы
+            # идут по возрастанию дня — ближайший сверху, — недатированные после
+            # них: nulls_last, иначе Postgres в ASC поставил бы NULL в конец сам,
+            # но полагаться на это молча не стоит.
+            .order_by(F("planned_for").asc(nulls_last=True), "-id")
         )
         live = next((row for row in rows if not row.is_planned), None)
         drafts = [row for row in rows if row.is_planned]
@@ -498,8 +533,12 @@ class WorkoutDraftStartView(LoginRequiredMixin, View):
             # перепроверит started_at IS NULL уже под блокировкой строки, и время
             # начала останется от первого нажатия, а не сдвинется назад.
             with transaction.atomic():
+                # planned_for обнуляется здесь же: он бывает только у черновика
+                # (констрейнт planned_for_only_when_planned), а с этого UPDATE
+                # тренировка перестаёт им быть. Отдельным запросом нельзя —
+                # между ними строка нарушала бы констрейнт.
                 Workout.objects.filter(pk=workout.pk, started_at__isnull=True).update(
-                    started_at=timezone.now()
+                    started_at=timezone.now(), planned_for=None
                 )
         except IntegrityError:
             live = Workout.objects.filter(user=request.user).live().first()
@@ -887,6 +926,43 @@ class WorkoutLocationView(LoginRequiredMixin, View):
         workout.save(update_fields=["location"])
         # Только OOB-значение: пустой остаток ответа закрывает модалку.
         return render(request, "workouts/_location_value.html", {"workout": workout, "oob": True})
+
+
+class WorkoutPlannedForView(LoginRequiredMixin, View):
+    """День, на который подготовлен черновик: модалка на GET, сохранение на POST.
+
+    Схема ровно та же, что у WorkoutLocationView: ответ на POST — пустое тело
+    плюс OOB-обновление значения, поэтому модалка закрывается сама.
+
+    Нужна силовому черновику: у кардио день ставится в форме плана, а силовой
+    создаётся одним тапом из чузера, и другого места спросить попросту нет.
+    Тренировка берётся любая своя, но не начатая: у идущей и записанной
+    планового дня не бывает — это держит констрейнт planned_for_only_when_planned.
+    """
+
+    def get_workout(self):
+        return get_object_or_404(
+            Workout.objects.filter(user=self.request.user).planned(),
+            pk=self.kwargs["pk"],
+        )
+
+    def get(self, request, pk):
+        return render(
+            request,
+            "workouts/_planned_for_modal.html",
+            {"workout": self.get_workout(), "today": timezone.localdate()},
+        )
+
+    def post(self, request, pk):
+        workout = self.get_workout()
+        raw = "" if request.POST.get("clear") else request.POST.get("planned_for", "")
+        # Пустая строка — законный ввод: «убрать день». Мусор тоже уводит в
+        # пустоту, а не в 500: это тот же выбор, что у фильтров истории.
+        workout.planned_for = parse_date(raw) if raw else None
+        workout.save(update_fields=["planned_for"])
+        return render(
+            request, "workouts/_planned_for_value.html", {"workout": workout, "oob": True}
+        )
 
 
 class WorkoutFinishView(LoginRequiredMixin, View):

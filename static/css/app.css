@@ -1092,6 +1092,18 @@ body {
 }
 
 .app-pick-meta + .app-pick-chevron,
+/* Подпись плана не переносится, а имя при нужде обрезается: у датированного
+   плана в строке стоят день и две цели, и без этого строка вырастала бы вдвое
+   на длинном названии вида спорта. Тот же приём, что в шапке карточки истории. */
+.app-pick-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-pick-meta { white-space: nowrap; }
+
 .app-pick-name + .app-pick-chevron { margin-left: auto; }
 
 .app-pick-meta ~ .app-pick-chevron { margin-left: 0.5rem; }
@@ -1751,7 +1763,8 @@ body {
    голова живого режима, строка профиля. font-weight: inherit — вес решает
    контейнер: в карточке истории это 400, в .app-row — 700, и класс не спорит
    ни с одним из них. */
-.app-place {
+.app-place,
+.app-plan-day {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -1763,7 +1776,8 @@ body {
   font-weight: inherit;
 }
 
-.app-place svg {
+.app-place svg,
+.app-plan-day svg {
   flex: 0 0 auto;
   color: var(--app-text-muted);
 }
@@ -1771,7 +1785,8 @@ body {
 /* Обрезка живёт на тексте, а не на контейнере: у inline-flex ellipsis не
    работает. white-space здесь НЕ задаётся — на телефоне длинное название должно
    переноситься; nowrap включают те места, где строка обязана быть одной. */
-.app-place-name {
+.app-place-name,
+.app-plan-day-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1779,14 +1794,20 @@ body {
 
 /* «Места нет» — приглушённый и жирный: это приглашение действовать, а не
    значение. Дословно приём .app-note-btn.is-empty. */
-.app-place.is-empty {
+.app-place.is-empty,
+.app-plan-day.is-empty {
   color: var(--app-text-muted);
   font-weight: 700;
 }
 
 /* Кнопка правки места: тихая текстовая кнопка без обвязки, как .app-note-btn.
-   Тап-таргет нужен в зале; на 768px он снимается — там курсор. */
-.app-place-btn {
+   Тап-таргет нужен в зале; на 768px он снимается — там курсор.
+
+   .app-plan-day — плановый день черновика: та же роль «иконка плюс текст в
+   мета-строке», поэтому он идёт теми же правилами, а не своей копией. Имя всё
+   же отдельное: класс со словом «place» на дате читался бы как ошибка. */
+.app-place-btn,
+.app-plan-day-btn {
   min-height: var(--app-tap-target);
   padding: 0;
   border: 0;

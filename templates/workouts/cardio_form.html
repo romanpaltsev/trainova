@@ -15,7 +15,12 @@
   <h1 class="app-page-title mb-0">{% if planned %}План тренировки{% elif recording_plan %}Запись тренировки{% elif workout %}Правка тренировки{% else %}Новая тренировка{% endif %}</h1>
 </div>
 
-<form method="post" novalidate x-data="cardioForm()">
+{% comment %}
+  data-planned нужен cardio.js: поля длительности у плана появились, значит
+  расчёт скорости заработает и там — но по двум целям, а не по факту, поэтому
+  подпись должна говорить «Ожидаемая», а не «Средняя».
+{% endcomment %}
+<form method="post" novalidate x-data="cardioForm()"{% if planned %} data-planned="1"{% endif %}>
   {% csrf_token %}
 
   {% if form.non_field_errors %}
@@ -33,11 +38,19 @@
   </div>
 
   {% comment %}
-    У плана этого блока нет вовсе: дата и длительность появляются, когда
-    тренировка состоялась. Полей нет и в самой форме, поэтому здесь только
-    разметка — скрытых инпутов, которые можно дослать руками, не остаётся.
+    Даты записи у плана нет вовсе — поля нет и в самой форме, поэтому дослать
+    её руками нельзя, и именно на этом держится «планом нельзя записать
+    тренировку». Вместо неё у плана свой вопрос: на какой день.
   {% endcomment %}
-  {% if not planned %}
+  {% if planned %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.planned_for.id_for_label }}">
+      {{ form.planned_for.label }} <span class="text-muted-app">· необязательно</span>
+    </label>
+    {{ form.planned_for }}
+    {% for error in form.planned_for.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+  </div>
+  {% else %}
   <div class="app-field-grid">
     <div>
       <label class="form-label" for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
@@ -45,43 +58,36 @@
       {% for error in form.date.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
     <div>
-      <span class="form-label d-block">Длительность</span>
-      <div class="app-duration">
-        <label class="visually-hidden" for="{{ form.duration_hours.id_for_label }}">Часы</label>
-        {{ form.duration_hours }}
-        <span class="app-duration-unit">ч</span>
-        <label class="visually-hidden" for="{{ form.duration_minutes.id_for_label }}">Минуты</label>
-        {{ form.duration_minutes }}
-        <span class="app-duration-unit">мин</span>
-      </div>
-      {% for error in form.duration_hours.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-      {% for error in form.duration_minutes.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      {% include "workouts/_duration_fields.html" with label="Длительность" %}
     </div>
   </div>
   {% endif %}
 
   {% comment %}
-    У плана в этой паре остаётся одна дистанция: пульса до тренировки нет.
-    Поэтому там не сетка на две колонки, иначе поле заняло бы половину ширины,
-    а рядом висела бы пустая ячейка.
+    Пара в две колонки в обоих режимах: при записи «дистанция и пульс», у плана
+    «цель по километрам и цель по времени». Обе цели необязательные — планов на
+    неделю наготавливают пачкой, и заставлять заполнять было бы издевательством.
   {% endcomment %}
-  <div class="{% if planned %}mb-3{% else %}app-field-grid{% endif %}">
+  <div class="app-field-grid">
     <div>
       <label class="form-label" for="{{ form.distance_km.id_for_label }}">
-        {% if planned %}Цель, км{% else %}{{ form.distance_km.label }}{% endif %}
+        {% if planned %}Цель, км <span class="text-muted-app">· необязательно</span>
+        {% else %}{{ form.distance_km.label }}{% endif %}
       </label>
       {{ form.distance_km }}
       {% for error in form.distance_km.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
-    {% if not planned %}
     <div>
-      <label class="form-label" for="{{ form.avg_heart_rate.id_for_label }}">
-        {{ form.avg_heart_rate.label }} <span class="text-muted-app">· необязательно</span>
-      </label>
-      {{ form.avg_heart_rate }}
-      {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      {% if planned %}
+        {% include "workouts/_duration_fields.html" with label="Цель по времени" optional=True %}
+      {% else %}
+        <label class="form-label" for="{{ form.avg_heart_rate.id_for_label }}">
+          {{ form.avg_heart_rate.label }} <span class="text-muted-app">· необязательно</span>
+        </label>
+        {{ form.avg_heart_rate }}
+        {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      {% endif %}
     </div>
-    {% endif %}
   </div>
 
   <div class="app-computed" x-show="metric" x-cloak>

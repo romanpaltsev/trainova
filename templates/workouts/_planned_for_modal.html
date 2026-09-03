@@ -1,0 +1,41 @@
+{% comment %}
+  Выбор дня черновика. Одно поле даты и две кнопки: сохранить и убрать день.
+  Ответ на POST — пустое тело плюс OOB-обновление значения, поэтому модалка
+  закрывается сама; это та же схема, что у _location_modal.html.
+
+  Ограничения min/max на поле нет: план на послезавтра и план на «когда-нибудь
+  в следующем месяце» одинаково законны, а прошедший день — способ прибраться
+  в списке, а не ошибка.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="planned-for-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="planned-for-modal-title">На какой день</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    {% comment %}
+      У кнопки «Убрать день» своё имя, а не пустое planned_for: с одинаковыми
+      именами результат зависел бы от порядка полей в DOM — QueryDict.get отдаёт
+      последнее значение, и перестановка строк молча меняла бы поведение.
+    {% endcomment %}
+    <form hx-post="{% url 'workout_planned_for' workout.pk %}"
+          hx-target="#modal" hx-swap="innerHTML">
+      {% csrf_token %}
+      <label class="visually-hidden" for="planned-for-input">День тренировки</label>
+      <input type="date" class="form-control" id="planned-for-input" name="planned_for"
+             value="{{ workout.planned_for|date:'Y-m-d' }}">
+      <div class="app-form-actions mt-3">
+        <button type="submit" class="btn btn-accent w-100">Сохранить</button>
+        {% if workout.planned_for %}
+          <button type="submit" class="btn btn-quiet w-100"
+                  name="clear" value="1">Убрать день</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>

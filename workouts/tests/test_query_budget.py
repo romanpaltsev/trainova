@@ -159,6 +159,17 @@ def test_start_modal_query_budget(client, user, django_assert_max_num_queries, d
             sport__category=Sport.Category.CARDIO,
         )
         CardioDetailsFactory(workout=cardio_plan, distance_km=30)
+        # План без цели по дистанции — строки CardioDetails у него нет вовсе.
+        # select_related кеширует промах как None, поэтому getattr не делает
+        # дополнительного запроса; этот черновик здесь ровно затем, чтобы
+        # проверка не сломалась молча, если select_related когда-нибудь уберут.
+        WorkoutFactory(
+            user=user,
+            started_at=None,
+            duration_min=None,
+            sport__category=Sport.Category.CARDIO,
+            target_duration_min=45,
+        )
 
     client.force_login(user)
     # Идущая тренировка и черновики берутся одним запросом с аннотацией, седьмой —

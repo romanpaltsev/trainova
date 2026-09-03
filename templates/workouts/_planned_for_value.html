@@ -1,0 +1,20 @@
+{% comment %}
+  День, на который подготовлен черновик: значение и кнопка правки в одном —
+  дословно приём _location_value.html.
+
+  id и hx-swap-oob здесь: модалка выбора отвечает пустым телом (закрывается) и
+  обновляет это место out-of-band.
+
+  Кнопка рендерится всегда, даже когда дня нет: это единственная точка входа в
+  фичу для человека, у которого ещё ничего не отмечено.
+{% endcomment %}
+<button type="button" id="workout-planned-for"{% if oob %} hx-swap-oob="true"{% endif %}
+        class="app-plan-day app-plan-day-btn{% if not workout.planned_for %} is-empty{% endif %}"
+        aria-label="{% if workout.planned_for %}Изменить день{% else %}Назначить день{% endif %}"
+        hx-get="{% url 'workout_planned_for' workout.pk %}"
+        hx-target="#modal" hx-swap="innerHTML">
+  {% include "includes/calendar.html" %}
+  <span class="app-plan-day-name">
+    {% if workout.planned_for %}{{ workout.planned_for|date:"D, j b"|lower }}{% else %}Назначить день{% endif %}
+  </span>
+</button>

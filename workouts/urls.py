@@ -54,6 +54,13 @@ urlpatterns = [
     ),
     path("workouts/<int:pk>/edit/", views.CardioWorkoutFormView.as_view(), name="workout_edit"),
     path("workouts/<int:pk>/delete/", views.WorkoutDeleteView.as_view(), name="workout_delete"),
+    # День черновика. Отдельный эндпоинт, а не поле в форме: силовой черновик
+    # создаётся одним тапом из чузера, формы у него нет вовсе.
+    path(
+        "workouts/<int:pk>/planned-for/",
+        views.WorkoutPlannedForView.as_view(),
+        name="workout_planned_for",
+    ),
     path("sports/new/", views.SportCreateView.as_view(), name="sport_create"),
     # Живой режим силовой тренировки
     path("workouts/start/", views.WorkoutStartView.as_view(), name="workout_start"),
