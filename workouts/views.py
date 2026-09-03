@@ -162,9 +162,19 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
 
 
 class CardioWorkoutFormView(LoginRequiredMixin, View):
-    """Создание и правка кардио-тренировки одной формой."""
+    """Создание, подготовка и правка кардио-тренировки одной формой.
+
+    Три сценария, одна форма: записать состоявшуюся, подготовить план на потом
+    (planned=True — без даты, длительности и пульса) и дозаполнить готовый план
+    до записанной тренировки. Последнее отдельного кода не потребовало: черновик
+    приходит сюда обычным instance, а форма в полном режиме спрашивает как раз
+    то, чего у плана не было.
+    """
 
     template_name = "workouts/cardio_form.html"
+    # Ставится через as_view(planned=True) на маршруте подготовки — тем же
+    # приёмом, что у StrengthWorkoutStartView.
+    planned = False
 
     def get_instance(self):
         if "pk" not in self.kwargs:
@@ -180,7 +190,10 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
     def get(self, request, **kwargs):
         instance = self.get_instance()
         form = CardioWorkoutForm(
-            user=request.user, instance=instance, initial=self.preselected(request, instance)
+            user=request.user,
+            instance=instance,
+            planned=self.planned,
+            initial=self.preselected(request, instance),
         )
         return self.render_form(form, instance)
 
@@ -206,12 +219,21 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
 
     def post(self, request, **kwargs):
         instance = self.get_instance()
-        form = CardioWorkoutForm(request.POST, user=request.user, instance=instance)
+        # Запоминаем до сохранения: после него черновик уже перестал им быть.
+        was_planned = instance is not None and instance.is_planned
+        form = CardioWorkoutForm(
+            request.POST, user=request.user, instance=instance, planned=self.planned
+        )
         if form.is_valid():
             workout = form.save()
+            if self.planned:
+                # В историю плану нельзя: он туда не попадает, пока не записан.
+                # Возвращаем на дашборд — там же чузер, где план и появится.
+                messages.success(request, "Тренировка подготовлена.")
+                return redirect("dashboard")
             messages.success(
                 request,
-                "Тренировка обновлена." if instance else "Тренировка записана.",
+                "Тренировка обновлена." if instance and not was_planned else "Тренировка записана.",
             )
             return redirect(reverse("workout_history") + f"#workout-{workout.pk}")
         return self.render_form(form, instance)
@@ -229,7 +251,11 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
                 "selected_location": form["location"].value(),
                 "location_own": form["location_own"].value() or "",
                 "location_max_length": LOCATION_NAME_MAX_LENGTH,
-                "nav_active": "history" if instance else "add",
+                "planned": self.planned,
+                # Черновик открыт на запись: заголовок и кнопка должны говорить
+                # «записать», а не «сохранить изменения» — тренировки ещё не было.
+                "recording_plan": instance is not None and instance.is_planned,
+                "nav_active": "history" if instance and not instance.is_planned else "add",
             },
         )
 
@@ -250,9 +276,8 @@ class WorkoutDeleteView(LoginRequiredMixin, DeleteView):
         # Та же подпись, что в ленте: по ней и опознают, какую тренировку удаляют.
         stats.attach_muscle_groups(self.request.user, [self.object])
         if self.object.is_planned:
-            # У черновика нет даты, поэтому в подзаголовке — состав, а не «когда».
-            count = self.object.sets.values("exercise").distinct().count()
-            context["plan_label"] = exercises_label(count)
+            # У черновика нет даты, поэтому в подзаголовке — состав или цель.
+            context["plan_label"] = plan_label(self.object)
         return context
 
     def get_success_url(self):
@@ -281,6 +306,23 @@ def exercises_label(count):
         return "пусто"
     word = ru_plural(count, "упражнение", "упражнения", "упражнений")
     return f"{count} {word}"
+
+
+def plan_label(workout, exercises_count=None):
+    """Чем один черновик отличается от другого того же вида спорта.
+
+    Даты, по которой их можно было бы различить, у черновика нет: у силовой
+    остаётся состав, у кардио — цель по дистанции. Счётчик упражнений принимается
+    аргументом, потому что в чузере он приходит аннотацией на всю выборку сразу.
+    """
+    if workout.sport.is_strength:
+        if exercises_count is None:
+            exercises_count = workout.sets.values("exercise").distinct().count()
+        return exercises_label(exercises_count)
+    # getattr со значением по умолчанию: у обратной OneToOne отсутствие строки —
+    # это AttributeError, и Django делает его таким намеренно.
+    cardio = getattr(workout, "cardio", None)
+    return f"{cardio.distance_display} км" if cardio else "пусто"
 
 
 def live_workout_or_404(request, pk):
@@ -357,7 +399,9 @@ class WorkoutStartView(LoginRequiredMixin, View):
         rows = list(
             Workout.objects.filter(user=request.user)
             .unfinished()
-            .select_related("sport")
+            # cardio — обратная OneToOne: ярлык кардио-черновика это его цель,
+            # и без select_related каждая строка спрашивала бы её отдельно.
+            .select_related("sport", "cardio")
             .annotate(exercises_count=Count("sets__exercise", distinct=True))
             # Явно: с GROUP BY Django игнорирует Meta.ordering, а у черновика нет даты.
             .order_by("-id")
@@ -368,7 +412,7 @@ class WorkoutStartView(LoginRequiredMixin, View):
         # нужна подпись по группам мышц: у всех троих иначе было бы «Силовая».
         stats.attach_muscle_groups(request.user, drafts)
         for draft in drafts:
-            draft.plan_label = exercises_label(draft.exercises_count)
+            draft.plan_label = plan_label(draft, draft.exercises_count)
         return render(
             request,
             "workouts/_start_modal.html",

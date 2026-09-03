@@ -44,6 +44,14 @@ urlpatterns = [
     path("changelog/", views.ChangelogView.as_view(), name="changelog"),
     path("history/", views.WorkoutHistoryView.as_view(), name="workout_history"),
     path("workouts/cardio/new/", views.CardioWorkoutFormView.as_view(), name="cardio_create"),
+    # Подготовка кардио заранее: та же вьюха и та же форма без даты, длительности
+    # и пульса. Отдельный маршрут, а не флаг в query, — чтобы «записать» и
+    # «запланировать» нельзя было перепутать подменой параметра.
+    path(
+        "workouts/cardio/prepare/",
+        views.CardioWorkoutFormView.as_view(planned=True),
+        name="cardio_prepare",
+    ),
     path("workouts/<int:pk>/edit/", views.CardioWorkoutFormView.as_view(), name="workout_edit"),
     path("workouts/<int:pk>/delete/", views.WorkoutDeleteView.as_view(), name="workout_delete"),
     path("sports/new/", views.SportCreateView.as_view(), name="sport_create"),

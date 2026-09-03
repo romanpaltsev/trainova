@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{% if workout %}Правка тренировки{% else %}Новая тренировка{% endif %} · Дневник тренировок{% endblock %}
+{% block title %}{% if planned %}План тренировки{% elif recording_plan %}Запись тренировки{% elif workout %}Правка тренировки{% else %}Новая тренировка{% endif %} · Дневник тренировок{% endblock %}
 
 {% block main_class %}app-main-form{% endblock %}
 
@@ -12,7 +12,7 @@
       <path d="M15 18l-6-6 6-6"/>
     </svg>
   </a>
-  <h1 class="app-page-title mb-0">{% if workout %}Правка тренировки{% else %}Новая тренировка{% endif %}</h1>
+  <h1 class="app-page-title mb-0">{% if planned %}План тренировки{% elif recording_plan %}Запись тренировки{% elif workout %}Правка тренировки{% else %}Новая тренировка{% endif %}</h1>
 </div>
 
 <form method="post" novalidate x-data="cardioForm()">
@@ -32,6 +32,12 @@
     {% endfor %}
   </div>
 
+  {% comment %}
+    У плана этого блока нет вовсе: дата и длительность появляются, когда
+    тренировка состоялась. Полей нет и в самой форме, поэтому здесь только
+    разметка — скрытых инпутов, которые можно дослать руками, не остаётся.
+  {% endcomment %}
+  {% if not planned %}
   <div class="app-field-grid">
     <div>
       <label class="form-label" for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
@@ -52,13 +58,22 @@
       {% for error in form.duration_minutes.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
   </div>
+  {% endif %}
 
-  <div class="app-field-grid">
+  {% comment %}
+    У плана в этой паре остаётся одна дистанция: пульса до тренировки нет.
+    Поэтому там не сетка на две колонки, иначе поле заняло бы половину ширины,
+    а рядом висела бы пустая ячейка.
+  {% endcomment %}
+  <div class="{% if planned %}mb-3{% else %}app-field-grid{% endif %}">
     <div>
-      <label class="form-label" for="{{ form.distance_km.id_for_label }}">{{ form.distance_km.label }}</label>
+      <label class="form-label" for="{{ form.distance_km.id_for_label }}">
+        {% if planned %}Цель, км{% else %}{{ form.distance_km.label }}{% endif %}
+      </label>
       {{ form.distance_km }}
       {% for error in form.distance_km.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
+    {% if not planned %}
     <div>
       <label class="form-label" for="{{ form.avg_heart_rate.id_for_label }}">
         {{ form.avg_heart_rate.label }} <span class="text-muted-app">· необязательно</span>
@@ -66,6 +81,7 @@
       {{ form.avg_heart_rate }}
       {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
+    {% endif %}
   </div>
 
   <div class="app-computed" x-show="metric" x-cloak>
@@ -95,10 +111,12 @@
 
   <div class="app-form-actions">
     <button type="submit" class="btn btn-accent w-100">
-      {% if workout %}Сохранить изменения{% else %}Сохранить тренировку{% endif %}
+      {% if planned %}Подготовить{% elif recording_plan %}Записать тренировку{% elif workout %}Сохранить изменения{% else %}Сохранить тренировку{% endif %}
     </button>
     {% if workout %}
-      <a class="btn btn-danger-quiet w-100" href="{% url 'workout_delete' workout.pk %}">Удалить тренировку</a>
+      <a class="btn btn-danger-quiet w-100" href="{% url 'workout_delete' workout.pk %}">
+        {% if recording_plan %}Удалить план{% else %}Удалить тренировку{% endif %}
+      </a>
     {% endif %}
   </div>
 </form>

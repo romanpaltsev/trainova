@@ -113,10 +113,19 @@ class CardioWorkoutForm(forms.Form):
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
     )
 
-    def __init__(self, *args, user, instance=None, **kwargs):
+    def __init__(self, *args, user, instance=None, planned=False, **kwargs):
         self.user = user
         self.instance = instance
+        self.planned = planned
         super().__init__(*args, **kwargs)
+        if planned:
+            # План не знает ни даты, ни длительности, ни пульса: всё это появится,
+            # когда тренировка состоится. Поля именно удаляются, а не гасятся
+            # флагом required — тогда «этой формой нельзя записать тренировку»
+            # держится структурой, а не договорённостью. Заодно отключается
+            # проверка длительности в clean(): она и так стоит под `in cleaned`.
+            for name in ("date", "duration_hours", "duration_minutes", "avg_heart_rate"):
+                del self.fields[name]
         # Священное правило: только глобальные виды спорта и свои, только кардио.
         self.fields["sport"].queryset = Sport.objects.visible_to(user).filter(
             category=Sport.Category.CARDIO
@@ -138,15 +147,18 @@ class CardioWorkoutForm(forms.Form):
 
     @staticmethod
     def _initial_from_instance(workout):
-        started_at = timezone.localtime(workout.started_at)
-        hours, minutes = divmod(workout.duration_min, 60)
+        # У черновика нет ни начала, ни длительности — это и есть его признак,
+        # поэтому оба поля разбираются с оглядкой. Дата подставляется сегодняшняя:
+        # план записывается тем днём, когда тренировка наконец состоялась.
+        started_at = timezone.localtime(workout.started_at) if workout.started_at else None
+        hours, minutes = divmod(workout.duration_min, 60) if workout.duration_min else (None, None)
         cardio = getattr(workout, "cardio", None)
         return {
             "sport": workout.sport_id,
             # location_id, а не объект: get_instance тянет только sport, и
             # обращение к workout.location стоило бы отдельного запроса.
             "location": workout.location_id,
-            "date": started_at.date(),
+            "date": started_at.date() if started_at else timezone.localdate(),
             "duration_hours": hours or None,
             "duration_minutes": minutes or None,
             "distance_km": cardio.distance_km if cardio else None,
@@ -195,8 +207,14 @@ class CardioWorkoutForm(forms.Form):
         workout = self.instance or Workout(user=self.user)
         workout.sport = self.cleaned_data["sport"]
         workout.location = self.chosen_location()
-        workout.started_at = self.started_at()
-        workout.duration_min = self.cleaned_data["duration_min"]
+        if self.planned:
+            # Черновик: время не идёт и длительности нет — ровно те же две
+            # колонки, которыми состояние тренировки задаётся у силовой.
+            workout.started_at = None
+            workout.duration_min = None
+        else:
+            workout.started_at = self.started_at()
+            workout.duration_min = self.cleaned_data["duration_min"]
         workout.note = self.cleaned_data["note"]
         workout.save()
 
@@ -204,7 +222,9 @@ class CardioWorkoutForm(forms.Form):
             workout=workout,
             defaults={
                 "distance_km": self.cleaned_data["distance_km"],
-                "avg_heart_rate": self.cleaned_data["avg_heart_rate"],
+                # Пульс есть только у состоявшейся тренировки: у плана поля нет,
+                # а на записи черновика оно придёт из формы как обычно.
+                "avg_heart_rate": self.cleaned_data.get("avg_heart_rate"),
             },
         )
         return workout

@@ -2,7 +2,8 @@
   Чузер «+»: продолжить идущую тренировку, открыть подготовленную либо выбрать вид спорта.
   Тумблер переключает намерение: «Начать сейчас» — силовая уходит в живой режим,
   кардио открывает форму с этим же видом; «Подготовить» — силовая создаётся черновиком
-  (у кардио живого режима нет, готовить нечего, поэтому его строки скрываются).
+  сразу, а кардио открывает форму плана: у него нет экрана, где план набирается,
+  поэтому цель по дистанции спрашивается формой.
   Вторая идущая тренировка невозможна, поэтому при canStartNow=false строки «начать
   сейчас» спрятаны, а подготовка следующей остаётся доступной.
 {% endcomment %}
@@ -27,7 +28,13 @@
       <h3 class="app-section-title">Подготовлено</h3>
       <div class="app-pick-list">
         {% for draft in drafts %}
-          <a class="app-pick-row" href="{% url 'workout_live' draft.pk %}">
+          {% comment %}
+            Силовой черновик открывается экраном живого режима, кардио — формой
+            записи: экрана живого режима у него нет, а дозаполнить план до
+            тренировки и значит вписать длительность с дистанцией.
+          {% endcomment %}
+          <a class="app-pick-row"
+             href="{% if draft.sport.is_strength %}{% url 'workout_live' draft.pk %}{% else %}{% url 'workout_edit' draft.pk %}{% endif %}">
             <span class="app-sport-dot" style="--dot: var(--app-sport-{{ draft.sport.color_key }})"></span>
             <span class="app-pick-name">{{ draft.muscle_groups|default:draft.sport.name }}</span>
             <span class="app-pick-meta">{{ draft.plan_label }}</span>
@@ -66,8 +73,15 @@
             </button>
           </form>
         {% else %}
+          {% comment %}
+            href по умолчанию — «начать сейчас», как и у силовой формы выше:
+            без Alpine работает главный сценарий. :href подменяет адрес на
+            подготовку, когда выбран второй режим.
+          {% endcomment %}
           <a class="app-pick-row" href="{% url 'cardio_create' %}?sport={{ sport.pk }}"
-             x-show="mode === 'now'">
+             x-show="mode === 'prepare' || canStartNow"
+             {% if not can_start_now %}x-cloak{% endif %}
+             :href="(mode === 'now' ? '{% url 'cardio_create' %}' : '{% url 'cardio_prepare' %}') + '?sport={{ sport.pk }}'">
             <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
             <span class="app-pick-name">{{ sport.name }}</span>
             {% include "includes/chevron.html" %}
@@ -77,7 +91,8 @@
     </div>
 
     <p class="app-queue-hint mt-2 mb-0" x-show="mode === 'prepare'" x-cloak>
-      Соберите упражнения заранее — время пойдёт в зале по кнопке «Начать тренировку».
+      Силовую соберите упражнениями, кардио — целью по дистанции. Время пойдёт
+      потом: у силовой по кнопке «Начать тренировку», у кардио при записи.
     </p>
   </div>
 </div>

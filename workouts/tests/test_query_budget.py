@@ -6,6 +6,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
+from workouts.models import Sport
 from workouts.tests.factories import (
     CardioDetailsFactory,
     ExerciseFactory,
@@ -141,11 +142,23 @@ def test_draft_screen_query_budget(client, user, django_assert_max_num_queries, 
 
 @pytest.mark.parametrize("drafts", [1, 4], ids=["one-draft", "four-drafts"])
 def test_start_modal_query_budget(client, user, django_assert_max_num_queries, drafts):
-    """Число запросов чузера не должно расти вместе с числом черновиков."""
+    """Число запросов чузера не должно расти вместе с числом черновиков.
+
+    Черновики обоих видов: силовой подписан составом, кардио — целью по
+    дистанции, и цель обязана приходить тем же запросом (select_related), иначе
+    каждая строка плана спрашивала бы свою CardioDetails отдельно.
+    """
     fill_history(user)
     for _ in range(drafts):
         planned = WorkoutFactory(user=user, started_at=None, duration_min=None)
         StrengthSetFactory(workout=planned, set_number=1, done=False)
+        cardio_plan = WorkoutFactory(
+            user=user,
+            started_at=None,
+            duration_min=None,
+            sport__category=Sport.Category.CARDIO,
+        )
+        CardioDetailsFactory(workout=cardio_plan, distance_km=30)
 
     client.force_login(user)
     # Идущая тренировка и черновики берутся одним запросом с аннотацией, седьмой —
