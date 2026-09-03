@@ -224,6 +224,8 @@ __marimo__/
 
 # Скриншоты и снапшоты Playwright при вёрстке
 .playwright-mcp/
+# Присланные скриншоты (Telegram кладёт их с таким именем) — не код проекта
+/photo_*.jpg
 # Секреты и бэкапы окружения (этап деплоя)
 rclone.conf
 deploy/secrets/
