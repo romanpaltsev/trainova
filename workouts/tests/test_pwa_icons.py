@@ -118,3 +118,72 @@ def test_icon_is_served_from_site_root(client, path):
     body = b"".join(response.streaming_content)
     assert body[:8] == b"\x89PNG\r\n\x1a\n"
     assert len(body) == Path(finders.find(APPLE_ICON)).stat().st_size
+
+
+def load_generator():
+    """Модуль scripts/make_icons.py — не пакет, поэтому грузим по пути.
+
+    Тесты заставки сверяются с тем же списком устройств, из которого генератор
+    пишет и картинки, и шаблон со ссылками. Иначе правка SPLASHES без
+    перегенерации осталась бы незамеченной до первого запуска с телефона.
+    """
+    import importlib.util
+
+    path = Path(settings.BASE_DIR) / "scripts" / "make_icons.py"
+    spec = importlib.util.spec_from_file_location("make_icons", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_every_iphone_size_has_a_startup_image(client):
+    """На каждую геометрию из SPLASHES — по ссылке на обе темы.
+
+    iOS выбирает заставку точным совпадением device-width, device-height и
+    плотности: без совпадения показывается белый экран, а не «похожая» картинка.
+    """
+    generator = load_generator()
+    links = [link for link in head_links(client) if "apple-touch-startup-image" in link]
+
+    assert links, "без apple-touch-startup-image запуск с рабочего стола будет белым"
+    for width, height, ratio in generator.SPLASHES:
+        for scheme in ("dark", "light"):
+            expected = (
+                f"(device-width: {width}px) and (device-height: {height}px) "
+                f"and (-webkit-device-pixel-ratio: {ratio}) "
+                f"and (prefers-color-scheme: {scheme})"
+            )
+            assert any(expected in link for link in links), (
+                f"нет заставки для {width}×{height}@{ratio}x ({scheme}) — "
+                "перегенерируйте: uv run python scripts/make_icons.py"
+            )
+
+
+def test_startup_images_match_declared_device_size(client):
+    """Пиксельный размер файла обязан совпадать с обещанным в медиазапросе.
+
+    Не совпадёт — iOS растянет заставку, и вместо ровного фона на старте будет
+    заметный скачок в момент отрисовки страницы.
+    """
+    generator = load_generator()
+
+    for width, height, ratio in generator.SPLASHES:
+        for theme in ("dark", "light"):
+            name = generator.splash_name(width * ratio, height * ratio, theme)
+            path = finders.find(f"img/{name}")
+
+            assert path, f"{name} нет в static"
+            assert png_header(path)[:2] == (width * ratio, height * ratio)
+
+
+def test_startup_images_have_no_alpha_channel(client):
+    """То же требование, что к иконкам: прозрачность iOS может проигнорировать."""
+    generator = load_generator()
+
+    for width, height, ratio in generator.SPLASHES:
+        for theme in ("dark", "light"):
+            name = generator.splash_name(width * ratio, height * ratio, theme)
+            path = finders.find(f"img/{name}")
+
+            assert path, f"{name} нет в static"
+            assert png_header(path)[2] == 2, f"{name} с альфа-каналом"

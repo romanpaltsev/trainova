@@ -35,6 +35,15 @@
   <meta name="apple-mobile-web-app-title" content="Trainova">
   {% comment %}То же имя для закреплённых сайтов в Edge и Windows.{% endcomment %}
   <meta name="application-name" content="Trainova">
+  {% comment %}
+    Заставка запуска: iOS в режиме standalone не строит её из манифеста
+    (background_color оттуда читает Android), и без apple-touch-startup-image
+    всё время загрузки показывается белым. Двадцать ссылок вынесены в партиал и
+    сгенерированы scripts/make_icons.py вместе с самими картинками — руками они
+    разъехались бы с именами файлов, а промах ссылки возвращает тот же белый
+    экран молча.
+  {% endcomment %}
+  {% include "includes/apple_splash.html" %}
   <meta name="mobile-web-app-capable" content="yes">
 
   {% comment %}
