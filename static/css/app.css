@@ -1862,6 +1862,36 @@ body {
   color: var(--app-accent-text);
 }
 
+/* ---------- Экспорт и импорт ---------- */
+
+.app-import-summary {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  color: var(--app-text);
+  font-size: 0.9375rem;
+}
+
+.app-import-list {
+  margin: 0;
+  padding-left: var(--app-space-5);
+  color: var(--app-text-secondary);
+  font-size: 0.9375rem;
+}
+
+.app-import-summary li + li,
+.app-import-list li + li {
+  margin-top: var(--app-space-1);
+}
+
+/* Незагруженные строки — тем же приёмом, что у сообщений: полоса слева вместо
+   заливки, чтобы список ошибок не выглядел тревожнее, чем он есть. */
+.app-import-errors {
+  padding-left: var(--app-space-4);
+  border-left: 3px solid var(--app-text-muted);
+  list-style: none;
+}
+
 /* ---------- Десктоп ---------- */
 
 /* ---------- Отделка: наведение, фокус, переходы ----------

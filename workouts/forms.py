@@ -3,7 +3,7 @@
 from django import forms
 from django.utils import timezone
 
-from workouts import services
+from workouts import excel, excel_import, services
 from workouts.models import (
     LOCATION_NAME_MAX_LENGTH,
     CardioDetails,
@@ -456,3 +456,31 @@ class ExerciseQuickForm(forms.ModelForm):
             muscle_group=self.cleaned_data["muscle_group"],
         )
 
+
+class WorkoutImportForm(forms.Form):
+    """Книга с историей. Здесь — только размер и расширение.
+
+    Содержимое разбирает excel_import: форма не должна знать про листы и
+    колонки, её дело — не пустить в разбор то, что заведомо не книга.
+    """
+
+    file = forms.FileField(
+        label="Файл .xlsx",
+        error_messages={"required": "Выберите файл."},
+        widget=forms.ClearableFileInput(
+            attrs={"class": "form-control", "accept": ".xlsx," + excel.CONTENT_TYPE}
+        ),
+    )
+
+    def clean_file(self):
+        upload = self.cleaned_data["file"]
+        if upload.size > excel_import.MAX_UPLOAD_BYTES:
+            limit = excel_import.MAX_UPLOAD_BYTES // (1024 * 1024)
+            raise forms.ValidationError(
+                f"Файл больше {limit} МБ. Разделите таблицу на части и загрузите по очереди."
+            )
+        if not upload.name.lower().endswith(".xlsx"):
+            raise forms.ValidationError(
+                "Нужен файл .xlsx — сохраните таблицу из Excel как «Книга Excel (.xlsx)»."
+            )
+        return upload

@@ -1,0 +1,50 @@
+{% comment %}
+  Отчёт о загрузке. Показывается на той же странице после POST: списки созданного
+  и ошибочные строки в messages не помещаются.
+{% endcomment %}
+<div class="app-card mt-3">
+  <h3 class="app-section-title">Что получилось</h3>
+
+  <ul class="app-import-summary">
+    <li>Добавлено тренировок: <span class="num">{{ report.workouts }}</span></li>
+    {% if report.sets %}<li>Подходов: <span class="num">{{ report.sets }}</span></li>{% endif %}
+    {% if report.skipped %}
+      <li>Пропущено — уже были в дневнике: <span class="num">{{ report.skipped }}</span></li>
+    {% endif %}
+    {% if report.error_count %}
+      <li>Строк не разобрали: <span class="num">{{ report.error_count }}</span></li>
+    {% endif %}
+  </ul>
+
+  {% if report.created_anything %}
+    <p class="app-queue-hint mt-3 mb-1">Заведено по ходу загрузки:</p>
+    <ul class="app-import-list">
+      {% if report.created_sports %}
+        <li>виды спорта — {{ report.created_sports|join:", " }}</li>
+      {% endif %}
+      {% if report.created_exercises %}
+        <li>упражнения — {{ report.created_exercises|join:", " }}</li>
+      {% endif %}
+      {% if report.created_locations %}
+        <li>места — {{ report.created_locations|join:", " }}</li>
+      {% endif %}
+    </ul>
+  {% endif %}
+
+  {% for warning in report.warnings %}
+    <p class="app-queue-hint mb-1">{{ warning }}</p>
+  {% endfor %}
+
+  {% if report.errors %}
+    <p class="app-queue-hint mt-3 mb-1">Эти строки остались незагруженными:</p>
+    <ul class="app-import-list app-import-errors">
+      {% for error in report.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% if report.hidden_errors %}
+      <p class="app-queue-hint mb-0">…и ещё {{ report.hidden_errors }}.</p>
+    {% endif %}
+    <p class="app-queue-hint mt-2 mb-0">
+      Поправьте их в файле и загрузите его снова — то, что уже записано, не задвоится.
+    </p>
+  {% endif %}
+</div>

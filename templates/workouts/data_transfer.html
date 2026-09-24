@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Экспорт и импорт · Дневник тренировок{% endblock %}
+
+{% block main_class %}app-main-form{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Экспорт и импорт</h1>
+</div>
+
+<section class="app-card">
+  <h2 class="app-section-title">Выгрузить историю</h2>
+  {% if workouts_count %}
+    <p class="app-queue-hint mt-1 mb-3">
+      В дневнике {{ workouts_count }} {{ workouts_label }} — выгрузится вся записанная история,
+      по строке на подход. Файл открывается в Excel и в Google Таблицах.
+    </p>
+    <a class="btn btn-accent w-100" href="{% url 'workout_export' %}" download>Скачать .xlsx</a>
+  {% else %}
+    <p class="app-queue-hint mt-1 mb-0">
+      Пока выгружать нечего: запишите первую тренировку, и она появится в файле.
+    </p>
+  {% endif %}
+</section>
+
+<section class="app-card mt-3">
+  <h2 class="app-section-title">Загрузить из файла</h2>
+  <p class="app-queue-hint mt-1 mb-3">
+    Подойдёт файл, выгруженный отсюда же, и своя таблица с такой же шапкой.
+    Строка — подход: дата, вид спорта, упражнение, вес и повторы либо удержание
+    в виде 1:30; у кардио упражнение пустое, а заполнены дистанция и пульс.
+    Длительность нужна у каждой тренировки.
+  </p>
+
+  {% if error %}<div class="app-alert app-alert-danger" role="alert">{{ error }}</div>{% endif %}
+
+  {% comment %}
+    Обычный POST без HTMX: экран холодный, загрузка длинная, а отчёт меняет всю
+    страницу целиком. Alpine здесь только гасит двойной тап по кнопке.
+  {% endcomment %}
+  <form method="post" enctype="multipart/form-data" x-data="{ sending: false }"
+        @submit="sending = true">
+    {% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label" for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
+      {{ form.file }}
+      {% for message in form.file.errors %}
+        <div class="invalid-feedback d-block">{{ message }}</div>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-accent w-100" :disabled="sending"
+            x-text="sending ? 'Загружаем…' : 'Загрузить'">Загрузить</button>
+  </form>
+</section>
+
+{% if report %}{% include "workouts/_import_report.html" %}{% endif %}
+{% endblock %}

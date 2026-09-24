@@ -41,6 +41,11 @@ urlpatterns = [
         views.LocationDeleteView.as_view(),
         name="location_delete",
     ),
+    # Обмен данными: страница живёт под profile/, как остальные служебные
+    # разделы, а у выгрузки в адресе есть расширение — мобильные браузеры
+    # иногда игнорируют Content-Disposition и сохраняют файл по адресу.
+    path("profile/data/", views.DataTransferView.as_view(), name="data_transfer"),
+    path("profile/data/export.xlsx", views.WorkoutExportView.as_view(), name="workout_export"),
     path("changelog/", views.ChangelogView.as_view(), name="changelog"),
     path("history/", views.WorkoutHistoryView.as_view(), name="workout_history"),
     path("workouts/cardio/new/", views.CardioWorkoutFormView.as_view(), name="cardio_create"),

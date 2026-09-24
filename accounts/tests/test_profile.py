@@ -245,3 +245,13 @@ def test_new_default_applies_to_next_workout_timer(client, user):
     workout = WorkoutFactory(user=user, duration_min=None, rest_seconds=None)
 
     assert Workout.objects.get(pk=workout.pk).effective_rest_seconds == 105
+
+
+def test_profile_links_to_data_transfer(client, user):
+    """Обмен данными доступен из профиля — единственная точка входа."""
+    client.force_login(user)
+
+    content = client.get(reverse("profile")).content.decode()
+
+    assert reverse("data_transfer") in content
+    assert "Экспорт и импорт" in content

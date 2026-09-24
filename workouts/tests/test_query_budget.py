@@ -264,3 +264,29 @@ def test_history_query_budget(client, user, django_assert_max_num_queries, weeks
     client.force_login(user)
     with django_assert_max_num_queries(9):
         client.get(reverse("workout_history"))
+
+
+@pytest.mark.parametrize("weeks", [2, 8])
+def test_export_query_budget(client, user, django_assert_max_num_queries, weeks):
+    """Выгрузка: три запроса на данные, сколько бы истории ни было.
+
+    Ценность теста не в числе, а в том, что оно одинаково при двух неделях и при
+    восьми: подходы и заметки выбираются пачкой, а не по тренировке.
+    """
+    fill_history(user, weeks=weeks)
+    ExerciseNoteFactory(workout=user.workouts.first(), exercise=ExerciseFactory())
+    client.force_login(user)
+
+    # Семь: сессия, пользователь, транзакция запроса — и три на данные.
+    with django_assert_max_num_queries(7):
+        response = client.get(reverse("workout_export"))
+        b"".join(response.streaming_content)
+
+
+def test_data_transfer_page_query_budget(client, user, django_assert_max_num_queries):
+    """Страница обмена: один счётчик тренировок и ничего больше."""
+    fill_history(user, weeks=4)
+    client.force_login(user)
+
+    with django_assert_max_num_queries(5):
+        client.get(reverse("data_transfer"))

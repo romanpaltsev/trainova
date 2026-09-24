@@ -122,6 +122,23 @@
         {% endif %}
         {% include "includes/chevron.html" %}
       </a>
+
+      {# Без счётчика намеренно: он стоил бы запроса, а бюджет профиля уже 9 из 9. #}
+      <a class="app-row" href="{% url 'data_transfer' %}">
+        <span class="app-row-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <path d="M7 10l5 5 5-5"/>
+            <path d="M12 15V3"/>
+          </svg>
+        </span>
+        <span class="app-row-text">
+          <span class="app-row-name">Экспорт и импорт</span>
+          <span class="app-row-meta">история тренировок в Excel</span>
+        </span>
+        {% include "includes/chevron.html" %}
+      </a>
     </div>
   </section>
 

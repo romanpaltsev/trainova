@@ -4,6 +4,7 @@
 по прямому URL даёт 404.
 """
 
+import io
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -12,7 +13,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Max, Q
 from django.db.models.deletion import ProtectedError
-from django.http import Http404, HttpResponse, HttpResponseBadRequest
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -20,13 +21,14 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
-from workouts import services, stats
+from workouts import excel, excel_import, services, stats
 from workouts.forms import (
     MAX_DURATION_HOURS,
     CardioWorkoutForm,
     ExerciseQuickForm,
     SportForm,
     StrengthTimeForm,
+    WorkoutImportForm,
 )
 from workouts.models import (
     DEFAULT_WEIGHT_STEP,
@@ -2045,3 +2047,58 @@ class ChangelogView(LoginRequiredMixin, View):
             {"entries": entries, "nav_active": "profile"},
         )
 
+
+class DataTransferView(LoginRequiredMixin, View):
+    """Экран обмена данными: выгрузка истории в файл и загрузка из файла."""
+
+    def get(self, request):
+        return self.page(request, WorkoutImportForm())
+
+    def post(self, request):
+        """Загрузка книги. Ответ — та же страница с отчётом, без редиректа.
+
+        Отчёт (что создано, что пропущено, где ошибки) в messages не влезает, а
+        повторная отправка формы по F5 безвредна: тренировки, которые уже есть,
+        уйдут в «пропущено».
+        """
+        form = WorkoutImportForm(request.POST, request.FILES)
+        if not form.is_valid():
+            return self.page(request, form)
+        try:
+            report = excel_import.import_workbook(request.user, form.cleaned_data["file"])
+        except excel.WorkbookError as error:
+            return self.page(request, WorkoutImportForm(), error=str(error))
+        return self.page(request, WorkoutImportForm(), report=report)
+
+    def page(self, request, form, **extra):
+        context = self.page_context(request, form=form, **extra)
+        return render(request, "workouts/data_transfer.html", context)
+
+    def page_context(self, request, **extra):
+        count = Workout.objects.filter(user=request.user).finished().count()
+        return {
+            "nav_active": "profile",
+            "workouts_count": count,
+            "workouts_label": ru_plural(count, "тренировка", "тренировки", "тренировок"),
+        } | extra
+
+
+class WorkoutExportView(LoginRequiredMixin, View):
+    """Выгрузка всей записанной истории одним файлом .xlsx.
+
+    Книга собирается в памяти: файлов на диске проект не держит вовсе, а дневник
+    на несколько лет — это сотни килобайт.
+    """
+
+    def get(self, request):
+        buffer = io.BytesIO()
+        excel.build_workbook(request.user).save(buffer)
+        buffer.seek(0)
+        # as_attachment вместо ручного Content-Disposition: Django сам кодирует
+        # кириллицу в имени по RFC 5987, иначе файл сохранился бы как «_____.xlsx».
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=excel.export_filename(timezone.localdate()),
+            content_type=excel.CONTENT_TYPE,
+        )
