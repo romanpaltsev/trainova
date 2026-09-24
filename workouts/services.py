@@ -4,9 +4,11 @@
 с этим упражнением» тестировалось без клиента и вьюх.
 """
 
+from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from workouts.models import (
     MEASUREMENT_FIELDS,
@@ -14,7 +16,9 @@ from workouts.models import (
     Exercise,
     ExerciseNote,
     Location,
+    Sport,
     StrengthSet,
+    collapse_spaces,
     decimal_display,
     exercise_order_key,
     metric_display,
@@ -22,6 +26,26 @@ from workouts.models import (
     ru_plural,
     with_weight_step,
 )
+
+# Время, которое ставим тренировке, записанной за прошедший день, когда его не
+# указали: точное время постфактум не вспомнить, а модели нужен datetime.
+DEFAULT_TIME = time(12, 0)
+
+
+def combine_started_at(date, moment=None):
+    """Начало тренировки из даты и необязательного времени.
+
+    Время указали — берём его. Не указали: у сегодняшней тренировки ставим
+    текущее, у прошедшей — полдень. Полдень сегодняшней не годится: запись,
+    сделанная вечером, уехала бы в прошлое и встала в ленте не туда.
+
+    Правило одно на кардио-форму, запись силовой задним числом и импорт из
+    таблицы — иначе они разошлись бы в том, что значит пустое поле времени.
+    """
+    if moment is None:
+        now = timezone.localtime()
+        moment = now.time() if date == now.date() else DEFAULT_TIME
+    return timezone.make_aware(datetime.combine(date, moment))
 
 
 def location_for_name(user, name):
@@ -58,6 +82,53 @@ def location_for_name(user, name):
         # названиями, и дефолт уже занят. Тогда место просто не дефолтное.
         with transaction.atomic():
             return Location.objects.create(owner=user, name=name, is_default=False)
+
+
+def exercise_for_name(user, name, *, measurement=None, muscle_group=""):
+    """Видимое упражнение с таким названием или новое личное.
+
+    Совпадение имени значит «это оно», а не ошибку дубля: посреди тренировки
+    ввод знакомого названия добавляет его, а импорт таблицы не плодит двойников.
+    Единица и группа мышц применяются только к новой записи — переопределить
+    измерение чужого (в том числе глобального) упражнения вводом его названия
+    нельзя.
+    """
+    name = collapse_spaces(name)
+    existing = Exercise.objects.visible_to(user).filter(name__iexact=name).first()
+    if existing is not None:
+        return existing
+    try:
+        # Savepoint: гонка двух вкладок упрётся в уникальный индекс, и тогда
+        # правильный ответ — взять только что созданную запись, а не отдать 500.
+        with transaction.atomic():
+            return Exercise.objects.create(
+                owner=user,
+                name=name,
+                measurement=measurement or Exercise.Measurement.WEIGHT_REPS,
+                muscle_group=muscle_group,
+            )
+    except IntegrityError:
+        return Exercise.objects.visible_to(user).get(name__iexact=name)
+
+
+def sport_for_name(user, name, *, category):
+    """Видимый вид спорта с таким названием или новый личный.
+
+    Тот же контракт, что у упражнений и мест. Форма «Свой вид спорта» им
+    намеренно не пользуется: там ввод имени — заявка на создание, и дубль
+    законно ошибка. В файле импорта имя — ссылка на запись, и совпадение
+    значит «это оно»; категория существующего вида спорта при этом истина и
+    содержимым файла не переписывается.
+    """
+    name = collapse_spaces(name)
+    existing = Sport.objects.visible_to(user).filter(name__iexact=name).first()
+    if existing is not None:
+        return existing
+    try:
+        with transaction.atomic():
+            return Sport.objects.create(owner=user, name=name, category=category)
+    except IntegrityError:
+        return Sport.objects.visible_to(user).get(name__iexact=name)
 
 
 def last_sets(user, exercise):
@@ -146,6 +217,21 @@ def exercise_groups(workout):
     rows = list(
         with_weight_step(workout.sets.select_related("exercise"), workout.user_id).order_by("id")
     )
+    # Заметки одним запросом на всю тренировку: в цикле по группам это был бы
+    # запрос на упражнение, и бюджет экрана рос бы вместе с их числом.
+    return group_sets(rows, notes_by_exercise(workout) if rows else {})
+
+
+def group_sets(rows, notes=None):
+    """Группы упражнений из уже загруженных подходов — чистая часть exercise_groups.
+
+    Запросов не делает и потому годится там, где подходы уже выбраны пачкой на
+    несколько тренировок: выгрузка в файл обязана расставить упражнения тем же
+    порядком, что экран итога, и переизобретать правило для неё нельзя.
+
+    `rows` ожидаются отсортированными по id — на этом держится first_set_id.
+    """
+    notes = notes or {}
     groups = []
     index = {}
     for row in rows:
@@ -169,9 +255,6 @@ def exercise_groups(workout):
             (row.done_at for row in group["sets"] if row.done_at is not None), default=None
         )
     groups.sort(key=lambda g: exercise_order_key(g["first_done_at"], g["first_set_id"]))
-    # Заметки одним запросом на всю тренировку: в цикле по группам это был бы
-    # запрос на упражнение, и бюджет экрана рос бы вместе с их числом.
-    notes = notes_by_exercise(workout) if groups else {}
     for position, group in enumerate(groups, start=1):
         # Номер упражнения на экране. Считается здесь, а не в шаблоне: живой экран
         # разрезает этот список на «сейчас / дальше / выполнено», и forloop.counter

@@ -1,9 +1,6 @@
 """Формы записи тренировок и личных справочников."""
 
-from datetime import datetime, time
-
 from django import forms
-from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from workouts import services
@@ -20,25 +17,6 @@ from workouts.models import (
 )
 
 MAX_DURATION_HOURS = 24
-# Время, которое ставим тренировке, записанной за прошедший день, когда его не
-# указали: точное время постфактум не вспомнить, а модели нужен datetime.
-DEFAULT_TIME = time(12, 0)
-
-
-def combine_started_at(date, moment=None):
-    """Начало тренировки из даты и необязательного времени.
-
-    Время указали — берём его. Не указали: у сегодняшней тренировки ставим
-    текущее, у прошедшей — полдень. Полдень сегодняшней не годится: запись,
-    сделанная вечером, уехала бы в прошлое и встала в ленте не туда.
-
-    Правило одно на кардио-форму и на запись силовой задним числом — иначе две
-    формы разошлись бы в том, что значит пустое поле времени.
-    """
-    if moment is None:
-        now = timezone.localtime()
-        moment = now.time() if date == now.date() else DEFAULT_TIME
-    return timezone.make_aware(datetime.combine(date, moment))
 
 
 def duration_fields():
@@ -284,7 +262,7 @@ class CardioWorkoutForm(forms.Form):
             # Проверяем собранный момент, а не дату: сегодняшнее число с
             # временем 23:00 в десять утра — это будущее, и одна дата такое
             # пропустила бы. У плана поля даты нет вовсе — ветка не про него.
-            started_at = combine_started_at(cleaned["date"], cleaned.get("time"))
+            started_at = services.combine_started_at(cleaned["date"], cleaned.get("time"))
             if started_at > timezone.now():
                 # Запомнить день нужно ДО add_error: тот удаляет ключ из
                 # cleaned_data, и обратный порядок дал бы KeyError.
@@ -388,7 +366,7 @@ class StrengthTimeForm(forms.Form):
             if error:
                 self.add_error(*error)
         if "date" in cleaned:
-            started_at = combine_started_at(cleaned["date"], cleaned.get("time"))
+            started_at = services.combine_started_at(cleaned["date"], cleaned.get("time"))
             if started_at > timezone.now():
                 self.add_error("date", "Дата не может быть в будущем.")
             else:
@@ -467,21 +445,14 @@ class ExerciseQuickForm(forms.ModelForm):
         """Вернуть видимое упражнение с таким именем или создать личное.
 
         Посреди тренировки ввод существующего названия означает «добавь его»,
-        а не ошибку дубля — намеренное отличие от SportForm. Единица при этом
-        не применяется: переопределить измерение чужого (в том числе глобального)
-        упражнения вводом его названия нельзя.
+        а не ошибку дубля — намеренное отличие от SportForm. Правило одно с
+        импортом из таблицы, поэтому живёт в services: две реализации разошлись
+        бы в том, что делать с совпавшим именем.
         """
-        name = self.cleaned_data["name"]
-        existing = Exercise.objects.visible_to(self.user).filter(name__iexact=name).first()
-        if existing is not None:
-            return existing
-        exercise = self.save(commit=False)
-        exercise.owner = self.user
-        try:
-            # Savepoint: гонка двух вкладок упрётся в уникальный индекс, и тогда
-            # правильный ответ — взять только что созданную запись, а не 500.
-            with transaction.atomic():
-                exercise.save()
-        except IntegrityError:
-            return Exercise.objects.visible_to(self.user).get(name__iexact=name)
-        return exercise
+        return services.exercise_for_name(
+            self.user,
+            self.cleaned_data["name"],
+            measurement=self.cleaned_data["measurement"],
+            muscle_group=self.cleaned_data["muscle_group"],
+        )
+

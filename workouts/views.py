@@ -37,6 +37,7 @@ from workouts.models import (
     METRIC_UNITS,
     MUSCLE_GROUP_MAX_LENGTH,
     NOTE_MAX_LENGTH,
+    REQUIRED_FIELD,
     REST_DELTAS,
     SET_LIMITS,
     SET_STEPS,
@@ -69,15 +70,8 @@ HISTORY_PAGE_SIZE = 10
 # Шаги и границы значений подхода живут в модели (SET_STEPS, SET_LIMITS): по ним
 # же подписаны кнопки и предсказывается значение на клиенте. Ключи там — поля
 # модели, поэтому применимость поля к единице упражнения проверяется по
-# MEASUREMENT_FIELDS без словаря-переводчика.
-# Что обязано быть заполнено, чтобы подход считался выполненным: у весовых это
-# повторы (вес 0 — «со своим весом»), у удержаний — время.
-REQUIRED_FIELD = {
-    Exercise.Measurement.WEIGHT_REPS: ("reps", "Укажите повторения."),
-    Exercise.Measurement.REPS: ("reps", "Укажите повторения."),
-    Exercise.Measurement.TIME: ("duration_sec", "Укажите время."),
-    Exercise.Measurement.TIME_WEIGHT: ("duration_sec", "Укажите время."),
-}
+# MEASUREMENT_FIELDS без словаря-переводчика. Там же REQUIRED_FIELD — порог
+# «подход выполнен», общий у живого режима, записи задним числом и импорта.
 EXERCISE_RESULTS_LIMIT = 30
 # Дашборд: силовых рекордов в блоке (кардио добавляются по числу видов).
 STRENGTH_RECORDS_LIMIT = 3
@@ -2050,3 +2044,4 @@ class ChangelogView(LoginRequiredMixin, View):
             "workouts/changelog.html",
             {"entries": entries, "nav_active": "profile"},
         )
+
