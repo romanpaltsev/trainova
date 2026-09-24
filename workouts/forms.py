@@ -201,6 +201,11 @@ class CardioWorkoutForm(forms.Form):
         self.user = user
         self.instance = instance
         self.planned = planned
+        # День, на который замахнулись датой в будущем: по нему шаблон предлагает
+        # подготовить тренировку вместо записи. Атрибут заводим всегда — шаблон
+        # спрашивает его и на GET, а «тихо False из-за отсутствия» — случайность,
+        # а не контракт.
+        self.future_date = None
         super().__init__(*args, **kwargs)
         if planned:
             # Даты записи и пульса у плана не бывает: первая появится, когда
@@ -281,6 +286,9 @@ class CardioWorkoutForm(forms.Form):
             # пропустила бы. У плана поля даты нет вовсе — ветка не про него.
             started_at = combine_started_at(cleaned["date"], cleaned.get("time"))
             if started_at > timezone.now():
+                # Запомнить день нужно ДО add_error: тот удаляет ключ из
+                # cleaned_data, и обратный порядок дал бы KeyError.
+                self.future_date = cleaned["date"]
                 self.add_error("date", "Дата не может быть в будущем.")
             else:
                 cleaned["started_at"] = started_at

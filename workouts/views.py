@@ -204,25 +204,35 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
         )
         return self.render_form(form, instance)
 
-    @staticmethod
-    def preselected(request, instance):
-        """Вид спорта из чузера «+» (?sport=): подсказка, а не адрес.
+    def preselected(self, request, instance):
+        """Вид спорта и день из чузера «+» (?sport=, ?planned_for=): подсказка, а не адрес.
 
         Чужой личный, силовой или мусорный id молча игнорируем — 404 здесь был бы
         грубостью, а расширить набор сохраняемых видов параметр всё равно не может:
         форма валидирует sport своим queryset'ом. На правке подсказка запрещена:
         переданный initial перебивает данные тренировки и подменил бы ей вид спорта.
+
+        День подставляется только у формы плана: на записи поля planned_for нет
+        вовсе, и ключ в initial был бы мёртвым.
         """
-        sport_id = request.GET.get("sport", "")
-        if instance is not None or not sport_id.isdecimal():
+        if instance is not None:
             return None
-        pk = (
-            Sport.objects.visible_to(request.user)
-            .filter(category=Sport.Category.CARDIO, pk=int(sport_id))
-            .values_list("pk", flat=True)
-            .first()
-        )
-        return {"sport": pk} if pk is not None else None
+        initial = {}
+        sport_id = request.GET.get("sport", "")
+        if sport_id.isdecimal():
+            pk = (
+                Sport.objects.visible_to(request.user)
+                .filter(category=Sport.Category.CARDIO, pk=int(sport_id))
+                .values_list("pk", flat=True)
+                .first()
+            )
+            if pk is not None:
+                initial["sport"] = pk
+        if self.planned:
+            day = parse_day(request.GET.get("planned_for", ""))
+            if day is not None:
+                initial["planned_for"] = day
+        return initial or None
 
     def post(self, request, **kwargs):
         instance = self.get_instance()
@@ -429,31 +439,58 @@ def live_region_response(request, workout, *, oob=False, restart_timer=False, er
     return HttpResponse(html)
 
 
+def parse_day(raw):
+    """День из недоверенного ввода: пусто и мусор одинаково значат «дня нет».
+
+    parse_date сам по себе не годится: на «2026-02-30» он не возвращает None, а
+    бросает ValueError — формат-то ISO, — и устаревшая вкладка или подобранный
+    руками адрес роняли бы страницу пятисоткой. Один разбор на все три точки
+    входа дня: чузер, модалка черновика и подсказка кардио-плана.
+    """
+    try:
+        return parse_date(raw) if raw else None
+    except ValueError:
+        return None
+
+
+def unfinished_workouts(user):
+    """Идущая тренировка и подготовленные черновики, готовые к показу.
+
+    Один запрос на обе сущности: вместе их единицы, а состояние выводится из
+    двух колонок уже в Python. Черновики возвращаются с проставленными
+    `plan_label` и подписью по группам мышц — то есть пригодными для шаблона.
+
+    Общий хелпер на чузер «+» и блок «Подготовлено» на дашборде: разъехавшись,
+    два экрана показали бы один и тот же план по-разному.
+    """
+    rows = list(
+        Workout.objects.filter(user=user)
+        .unfinished()
+        # cardio — обратная OneToOne: ярлык кардио-черновика это его цель,
+        # и без select_related каждая строка спрашивала бы её отдельно.
+        .select_related("sport", "cardio")
+        .annotate(exercises_count=Count("sets__exercise", distinct=True))
+        # Явно: с GROUP BY Django игнорирует Meta.ordering. Датированные планы
+        # идут по возрастанию дня — ближайший сверху, — недатированные после
+        # них: nulls_last, иначе Postgres в ASC поставил бы NULL в конец сам,
+        # но полагаться на это молча не стоит.
+        .order_by(F("planned_for").asc(nulls_last=True), "-id")
+    )
+    live = next((row for row in rows if not row.is_planned), None)
+    drafts = [row for row in rows if row.is_planned]
+    # Черновики плана на неделю различаются только составом, поэтому им тоже
+    # нужна подпись по группам мышц: у всех троих иначе было бы «Силовая».
+    stats.attach_muscle_groups(user, drafts)
+    for draft in drafts:
+        draft.plan_label = plan_label(draft, draft.exercises_count)
+    return live, drafts
+
+
 class WorkoutStartView(LoginRequiredMixin, View):
     """HTMX-модалка «+»: продолжить идущую, открыть черновик, начать или записать."""
 
     def get(self, request):
-        # Один запрос на идущую и на черновики: вместе их единицы.
-        rows = list(
-            Workout.objects.filter(user=request.user)
-            .unfinished()
-            # cardio — обратная OneToOne: ярлык кардио-черновика это его цель,
-            # и без select_related каждая строка спрашивала бы её отдельно.
-            .select_related("sport", "cardio")
-            .annotate(exercises_count=Count("sets__exercise", distinct=True))
-            # Явно: с GROUP BY Django игнорирует Meta.ordering. Датированные планы
-            # идут по возрастанию дня — ближайший сверху, — недатированные после
-            # них: nulls_last, иначе Postgres в ASC поставил бы NULL в конец сам,
-            # но полагаться на это молча не стоит.
-            .order_by(F("planned_for").asc(nulls_last=True), "-id")
-        )
-        live = next((row for row in rows if not row.is_planned), None)
-        drafts = [row for row in rows if row.is_planned]
-        # Черновики плана на неделю различаются только составом, поэтому им тоже
-        # нужна подпись по группам мышц: у всех троих иначе было бы «Силовая».
-        stats.attach_muscle_groups(request.user, drafts)
-        for draft in drafts:
-            draft.plan_label = plan_label(draft, draft.exercises_count)
+        live, drafts = unfinished_workouts(request.user)
         return render(
             request,
             "workouts/_start_modal.html",
@@ -491,6 +528,12 @@ class StrengthWorkoutStartView(LoginRequiredMixin, View):
         # можно на самом экране тренировки. Один запрос на обе ветки.
         location = Location.objects.default_for(request.user)
         if self.planned:
+            # День приходит из чузера. Читаем его ТОЛЬКО в этой ветке: у начатой
+            # тренировки планового дня не бывает (planned_for_only_when_planned),
+            # а скрытое поле остаётся в разметке и в режиме «начать сейчас» —
+            # Alpine подменяет там лишь адрес. Мусор уводит в пустоту, а не в
+            # 500: тот же выбор, что у WorkoutPlannedForView.
+            raw = request.POST.get("planned_for", "")
             # Черновиков может быть сколько угодно: уникальный индекс требует начала,
             # поэтому ловить IntegrityError здесь не нужно.
             workout = Workout.objects.create(
@@ -499,6 +542,7 @@ class StrengthWorkoutStartView(LoginRequiredMixin, View):
                 location=location,
                 started_at=None,
                 duration_min=None,
+                planned_for=parse_day(raw),
             )
             return redirect("workout_live", pk=workout.pk)
         try:
@@ -964,7 +1008,7 @@ class WorkoutPlannedForView(LoginRequiredMixin, View):
         raw = "" if request.POST.get("clear") else request.POST.get("planned_for", "")
         # Пустая строка — законный ввод: «убрать день». Мусор тоже уводит в
         # пустоту, а не в 500: это тот же выбор, что у фильтров истории.
-        workout.planned_for = parse_date(raw) if raw else None
+        workout.planned_for = parse_day(raw)
         workout.save(update_fields=["planned_for"])
         return render(
             request, "workouts/_planned_for_value.html", {"workout": workout, "oob": True}
@@ -1295,8 +1339,13 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         chart = stats.weekly_chart(user)
         # Рекорды считаются один раз: прожектору нужен тот же топ, что и плиткам.
         strength = stats.strength_records(user, limit=STRENGTH_RECORDS_LIMIT)
+        # Подготовленное — первым делом: смысл плана на неделю в том, чтобы он
+        # был перед глазами, а не находился в модалке. Идущая тренировка сюда не
+        # идёт: её показывает кнопка «Продолжить» в том же чузере.
+        _, drafts = unfinished_workouts(user)
         context.update(
             {
+                "planned": drafts,
                 "summary": stats.seven_day_summary(user),
                 "chart": chart,
                 "has_chart": bool(chart["datasets"]),

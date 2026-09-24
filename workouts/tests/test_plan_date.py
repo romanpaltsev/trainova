@@ -247,3 +247,103 @@ def test_other_user_cannot_touch_the_day(client, user, other_user):
     theirs.refresh_from_db()
     assert response.status_code == 404
     assert theirs.planned_for is None
+
+
+# ---------- День спрашивается прямо в чузере ----------
+#
+# При плане на неделю назначать день потом, на экране каждого черновика, значило
+# бы два лишних тапа на тренировку.
+
+
+def test_chooser_day_is_saved_with_the_strength_plan(client, user):
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH, owner=None)
+    day = timezone.localdate() + timedelta(days=2)
+    client.force_login(user)
+
+    client.post(reverse("strength_prepare"), {"sport": strength.pk, "planned_for": day.isoformat()})
+
+    assert Workout.objects.get(user=user).planned_for == day
+
+
+def test_chooser_day_is_ignored_when_starting_now(client, user):
+    """Скрытое поле остаётся в форме и в режиме «сейчас» — отбрасывает его вьюха.
+
+    У начатой тренировки планового дня не бывает: строку с ним не приняла бы и
+    сама база (planned_for_only_when_planned).
+    """
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH, owner=None)
+    day = (timezone.localdate() + timedelta(days=2)).isoformat()
+    client.force_login(user)
+
+    response = client.post(reverse("strength_start"), {"sport": strength.pk, "planned_for": day})
+
+    workout = Workout.objects.get(user=user)
+    assert response.status_code == 302
+    assert workout.planned_for is None
+    assert not workout.is_planned
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("завтра", id="words"),
+        # ISO по форме, но такого дня нет: parse_date на нём бросает ValueError,
+        # и без терпимого разбора устаревшая вкладка роняла бы страницу.
+        pytest.param("2026-02-30", id="impossible"),
+    ],
+)
+def test_garbage_day_from_chooser_creates_a_draft_without_a_day(client, user, raw):
+    strength = SportFactory(name="Силовая", category=Sport.Category.STRENGTH, owner=None)
+    client.force_login(user)
+
+    response = client.post(reverse("strength_prepare"), {"sport": strength.pk, "planned_for": raw})
+
+    assert response.status_code == 302
+    assert Workout.objects.get(user=user).planned_for is None
+
+
+def test_impossible_day_in_the_draft_modal_does_not_crash(client, user, draft):
+    """Тот же терпимый разбор на модалке черновика — раньше это была пятисотка."""
+    client.force_login(user)
+
+    response = client.post(
+        reverse("workout_planned_for", args=[draft.pk]), {"planned_for": "2026-02-30"}
+    )
+
+    draft.refresh_from_db()
+    assert response.status_code == 200
+    assert draft.planned_for is None
+
+
+def test_chooser_day_prefills_the_cardio_plan_form(client, user, bike):
+    day = timezone.localdate() + timedelta(days=2)
+    client.force_login(user)
+
+    url = f"{reverse('cardio_prepare')}?sport={bike.pk}&planned_for={day.isoformat()}"
+    form = client.get(url).context["form"]
+
+    assert form.initial["planned_for"] == day
+    assert form.initial["sport"] == bike.pk
+
+
+def test_chooser_day_is_ignored_on_the_recording_form(client, user, bike):
+    """У записи поля planned_for нет вовсе — ключ в initial был бы мёртвым."""
+    day = (timezone.localdate() + timedelta(days=2)).isoformat()
+    client.force_login(user)
+
+    url = f"{reverse('cardio_create')}?sport={bike.pk}&planned_for={day}"
+    form = client.get(url).context["form"]
+
+    assert "planned_for" not in form.fields
+    assert "planned_for" not in form.initial
+
+
+def test_chooser_asks_for_the_day_in_prepare_mode(client, user):
+    SportFactory(name="Силовая", category=Sport.Category.STRENGTH, owner=None)
+    client.force_login(user)
+
+    content = client.get(reverse("workout_start")).content.decode()
+
+    assert 'id="start-day"' in content
+    assert 'name="planned_for"' in content

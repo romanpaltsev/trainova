@@ -123,6 +123,26 @@
       </section>
     {% endif %}
 
+    {% comment %}
+      Подготовленное стоит над «последними»: это то, что предстоит, а не то, что
+      было. Класс app-latest берём тот же — на мобильном он поднимает блок над
+      рекордами, на 1200px даёт карточное оформление, и ни строчки нового CSS
+      для этого не нужно. Пустого состояния нет: у нового пользователя на
+      дашборде и так три подсказки.
+    {% endcomment %}
+    {% if planned %}
+      <section class="app-latest app-planned">
+        <div class="app-dash-section-head">
+          <h2 class="app-section-title mb-0">Подготовлено</h2>
+        </div>
+        <div class="app-latest-list">
+          {% for draft in planned %}
+            {% include "workouts/_dashboard_plan_row.html" %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
     <section class="app-latest">
       <div class="app-dash-section-head">
         <h2 class="app-section-title mb-0">Последние тренировки</h2>

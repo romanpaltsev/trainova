@@ -8,13 +8,21 @@ from django.urls import reverse
 from django.utils import timezone
 
 from workouts import stats
+from workouts.models import Sport
 from workouts.tests.factories import (
+    CardioDetailsFactory,
     ExerciseFactory,
+    SportFactory,
     StrengthSetFactory,
     WorkoutFactory,
 )
 
 pytestmark = pytest.mark.django_db
+
+
+@pytest.fixture
+def bike():
+    return SportFactory(name="Велосипед", category=Sport.Category.CARDIO, owner=None)
 
 
 def test_dashboard_renders_for_new_user_without_workouts(client, user):
@@ -181,3 +189,100 @@ def test_exercise_page_redirects_anonymous_to_login(client):
 
     assert response.status_code == 302
     assert reverse("account_login") in response.url
+
+
+# ---------- Блок «Подготовлено» ----------
+#
+# Смысл плана на неделю в том, чтобы он был перед глазами, поэтому черновики
+# видны не только в модалке «+».
+
+
+def strength_draft(user, **kwargs):
+    draft = WorkoutFactory(user=user, started_at=None, duration_min=None, **kwargs)
+    StrengthSetFactory(workout=draft, set_number=1, done=False)
+    return draft
+
+
+def test_dashboard_lists_drafts_nearest_day_first(client, user):
+    """Ближайший день сверху, недатированный — после всех датированных."""
+    today = timezone.localdate()
+    later = strength_draft(user, planned_for=today + timedelta(days=5))
+    tomorrow = strength_draft(user, planned_for=today + timedelta(days=1))
+    someday = strength_draft(user)
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    order = [content.index(f'data-workout="{draft.pk}"') for draft in (tomorrow, later, someday)]
+    assert "Подготовлено" in content
+    assert order == sorted(order)
+
+
+def test_dashboard_draft_rows_lead_where_the_plan_is_filled(client, user, bike):
+    """Силовая набирается живым экраном, у кардио его нет — там форма."""
+    strength = strength_draft(user)
+    cardio = WorkoutFactory(user=user, sport=bike, started_at=None, duration_min=None)
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert reverse("workout_live", args=[strength.pk]) in content
+    assert reverse("workout_edit", args=[cardio.pk]) in content
+
+
+def test_dashboard_draft_row_shows_day_and_targets(client, user, bike):
+    """Подпись та же, что в чузере: день, потом содержание."""
+    cardio = WorkoutFactory(
+        user=user,
+        sport=bike,
+        started_at=None,
+        duration_min=None,
+        planned_for=timezone.localdate() + timedelta(days=1),
+    )
+    CardioDetailsFactory(workout=cardio, distance_km=30)
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert "завтра · 30 км" in content
+
+
+def test_dashboard_shows_overdue_drafts(client, user):
+    """Прошедший день — повод прибраться в списке, а не повод спрятать план."""
+    overdue = strength_draft(user, planned_for=timezone.localdate() - timedelta(days=3))
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert f'data-workout="{overdue.pk}"' in content
+
+
+def test_dashboard_has_no_planned_block_without_drafts(client, user):
+    """Пустой блок не рендерится: подсказок на дашборде и так три."""
+    WorkoutFactory(user=user)
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert "Подготовлено" not in content
+
+
+def test_dashboard_hides_other_users_drafts(client, user, other_user):
+    alien = strength_draft(other_user)
+
+    client.force_login(user)
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert f'data-workout="{alien.pk}"' not in content
+    assert "Подготовлено" not in content
+
+
+def test_live_workout_is_not_in_the_planned_block(client, user):
+    """Идущую показывает кнопка «Продолжить» в чузере, а не список планов."""
+    live = WorkoutFactory(user=user, duration_min=None)
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert f'data-workout="{live.pk}"' not in content
+    assert "Подготовлено" not in content

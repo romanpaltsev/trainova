@@ -7,7 +7,8 @@
   Вторая идущая тренировка невозможна, поэтому при canStartNow=false строки «начать
   сейчас» спрятаны, а подготовка следующей остаётся доступной.
 {% endcomment %}
-<div class="app-modal-backdrop" x-data="{mode: 'now', canStartNow: {{ can_start_now|yesno:'true,false' }}}"
+<div class="app-modal-backdrop"
+     x-data="{mode: 'now', day: '', canStartNow: {{ can_start_now|yesno:'true,false' }}}"
      @keydown.escape.window="$root.remove()">
   <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="start-modal-title">
     <div class="app-modal-head">
@@ -53,6 +54,20 @@
       <label class="app-chip" for="start-mode-prepare">Подготовить</label>
     </div>
 
+    {% comment %}
+      День спрашивается сразу, одним полем на весь список: при плане на неделю
+      назначать его потом, на экране каждого черновика, значило бы два лишних
+      тапа на тренировку. Поле живёт только в режиме подготовки — у начатой
+      тренировки планового дня не бывает. Без Alpine поле не появится и врать не
+      будет, а главный сценарий работает на статических action/href.
+    {% endcomment %}
+    <div class="mb-3" x-show="mode === 'prepare'" x-cloak>
+      <label class="form-label" for="start-day">
+        На какой день <span class="text-muted-app">· необязательно</span>
+      </label>
+      <input type="date" class="form-control" id="start-day" x-model="day">
+    </div>
+
     <div class="app-pick-list">
       {% for sport in sports %}
         {% if sport.is_strength %}
@@ -66,6 +81,12 @@
                 :action="mode === 'now' ? '{% url 'strength_start' %}' : '{% url 'strength_prepare' %}'">
             {% csrf_token %}
             <input type="hidden" name="sport" value="{{ sport.pk }}">
+            {% comment %}
+              Поле остаётся в форме и в режиме «начать сейчас» — Alpine подменяет
+              только адрес. Отбрасывает день там вьюха: класть его начатой
+              тренировке запрещает planned_for_only_when_planned.
+            {% endcomment %}
+            <input type="hidden" name="planned_for" :value="day">
             <button type="submit" class="app-pick-row">
               <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
               <span class="app-pick-name">{{ sport.name }}</span>
@@ -81,7 +102,8 @@
           <a class="app-pick-row" href="{% url 'cardio_create' %}?sport={{ sport.pk }}"
              x-show="mode === 'prepare' || canStartNow"
              {% if not can_start_now %}x-cloak{% endif %}
-             :href="(mode === 'now' ? '{% url 'cardio_create' %}' : '{% url 'cardio_prepare' %}') + '?sport={{ sport.pk }}'">
+             :href="(mode === 'now' ? '{% url 'cardio_create' %}' : '{% url 'cardio_prepare' %}')
+                    + '?sport={{ sport.pk }}' + (mode === 'prepare' && day ? '&planned_for=' + day : '')">
             <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
             <span class="app-pick-name">{{ sport.name }}</span>
             {% include "includes/chevron.html" %}
@@ -92,8 +114,8 @@
 
     <p class="app-queue-hint mt-2 mb-0" x-show="mode === 'prepare'" x-cloak>
       Силовую соберите упражнениями, кардио — целью по километрам или времени;
-      обе необязательны. День можно назначить каждому плану — тогда список идёт
-      по дням. Время пойдёт потом: у силовой по кнопке «Начать тренировку»,
+      обе необязательны. Планы идут по дням, ближайший сверху, и видны на
+      дашборде. Время пойдёт потом: у силовой по кнопке «Начать тренировку»,
       у кардио при записи.
     </p>
   </div>

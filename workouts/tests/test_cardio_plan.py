@@ -1,5 +1,6 @@
 """Кардио-тренировку можно подготовить заранее: план, его запись и изоляция."""
 
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
@@ -303,3 +304,106 @@ def test_recording_plan_clears_time_target(client, user, bike):
     draft.refresh_from_db()
     assert draft.duration_min == 95
     assert draft.target_duration_min is None
+
+
+# ---------- Будущая дата предлагает подготовить план ----------
+#
+# Дата в будущем — не ошибка человека, а другое намерение: тренировки ещё не
+# было, значит её готовят. Из тупика «Дата не может быть в будущем» должен быть
+# выход, не теряющий введённого.
+
+
+def record_data(sport, **overrides):
+    """Поля формы записи — той самой, где и возникает тупик."""
+    data = {
+        "sport": str(sport.pk),
+        "date": (timezone.localdate() + timedelta(days=3)).isoformat(),
+        "time": "",
+        "duration_hours": "1",
+        "duration_minutes": "0",
+        "distance_km": "30",
+        "avg_heart_rate": "",
+        "note": "",
+        "location_own": "",
+    }
+    return data | overrides
+
+
+def test_future_date_offers_to_prepare_that_day(client, user, bike):
+    client.force_login(user)
+    day = timezone.localdate() + timedelta(days=3)
+
+    response = client.post(reverse("cardio_create"), record_data(bike))
+
+    content = response.content.decode()
+    assert response.context["form"].future_date == day
+    assert reverse("cardio_prepare") in content
+    assert f'value="{day.isoformat()}"' in content
+
+
+def test_offer_carries_entered_values_into_the_plan(client, user, bike):
+    """Кнопка шлёт ту же форму на маршрут плана — набирать заново нечего."""
+    client.force_login(user)
+    day = timezone.localdate() + timedelta(days=3)
+    data = record_data(bike) | {"planned_for": day.isoformat()}
+
+    client.post(reverse("cardio_prepare"), data)
+
+    workout = Workout.objects.get(user=user)
+    assert workout.is_planned
+    assert workout.planned_for == day
+    assert workout.cardio.distance_km == 30
+    assert workout.target_duration_min == 60
+    # Форма плана полей date и time не имеет вовсе, поэтому дослать их
+    # обходным путём нельзя — «планом нельзя записать тренировку» цело.
+    assert workout.started_at is None
+    assert workout.duration_min is None
+
+
+def test_no_offer_for_a_valid_past_date(client, user, bike):
+    client.force_login(user)
+    yesterday = (timezone.localdate() - timedelta(days=1)).isoformat()
+
+    response = client.post(reverse("cardio_create"), record_data(bike, date=yesterday), follow=True)
+
+    assert Workout.objects.get(user=user).is_finished
+    assert reverse("cardio_prepare") not in response.content.decode()
+
+
+@pytest.mark.parametrize(
+    "state", [pytest.param("finished", id="edit"), pytest.param("draft", id="record-plan")]
+)
+def test_no_offer_when_a_workout_is_open(client, user, bike, state):
+    """На правке кнопка создавала бы вторую тренировку вместо правки первой."""
+    client.force_login(user)
+    workout = WorkoutFactory(
+        user=user,
+        sport=bike,
+        started_at=None if state == "draft" else timezone.now(),
+        duration_min=None if state == "draft" else 60,
+    )
+    future = (timezone.localdate() + timedelta(days=3)).isoformat()
+
+    response = client.post(
+        reverse("workout_edit", args=[workout.pk]), record_data(bike, date=future)
+    )
+
+    assert response.context["form"].future_date is not None
+    assert reverse("cardio_prepare") not in response.content.decode()
+    assert Workout.objects.filter(user=user).count() == 1
+
+
+def test_offer_survives_other_invalid_fields(client, user, bike):
+    """Сломано что-то ещё — предложение остаётся, и план тоже не создаётся молча."""
+    client.force_login(user)
+    day = timezone.localdate() + timedelta(days=3)
+
+    broken = record_data(bike, distance_km="abc")
+    assert (
+        reverse("cardio_prepare") in client.post(reverse("cardio_create"), broken).content.decode()
+    )
+
+    response = client.post(reverse("cardio_prepare"), broken | {"planned_for": day.isoformat()})
+
+    assert "distance_km" in response.context["form"].errors
+    assert not Workout.objects.exists()

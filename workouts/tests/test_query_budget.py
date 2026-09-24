@@ -36,24 +36,51 @@ def fill_history(user, weeks=6):
     return bench
 
 
-def test_dashboard_query_budget(client, user, django_assert_max_num_queries):
-    """Дашборд собирает сводку, график, рекорды и последние тренировки.
+def fill_drafts(user, count=1):
+    """Подготовленные тренировки для блока «Подготовлено».
 
-    Шестнадцатый запрос — подписи «Последних тренировок» по группам мышц: один
-    агрегат на весь блок, а не по строке.
+    Кардио берём и с целью, и без неё: ярлык плана читает обратную OneToOne, и
+    без select_related каждая такая строка спрашивала бы её отдельным запросом.
+    """
+    bench = ExerciseFactory(name="Жим стоя")
+    bike = Sport.objects.get_or_create(
+        name="Велосипед", owner=None, category=Sport.Category.CARDIO
+    )[0]
+    for index in range(count):
+        strength = WorkoutFactory(user=user, started_at=None, duration_min=None)
+        StrengthSetFactory(workout=strength, exercise=bench, set_number=1, done=False)
+        CardioDetailsFactory(
+            workout__user=user,
+            workout__sport=bike,
+            workout__started_at=None,
+            workout__duration_min=None,
+            distance_km=10 + index,
+        )
+        WorkoutFactory(user=user, sport=bike, started_at=None, duration_min=None)
+
+
+@pytest.mark.parametrize("drafts", [1, 4], ids=["one-draft", "four-drafts"])
+def test_dashboard_query_budget(client, user, django_assert_max_num_queries, drafts):
+    """Дашборд собирает подготовленное, сводку, график, рекорды и последние.
+
+    Два последних запроса — подписи по группам мышц: по одному агрегату на блок
+    «Подготовлено» и на «Последние тренировки», а не по строке. Число черновиков
+    параметризовано: именно оно поймало бы N+1 по цели кардио-плана.
     """
     fill_history(user)
+    fill_drafts(user, drafts)
 
     client.force_login(user)
-    with django_assert_max_num_queries(16):
+    with django_assert_max_num_queries(18):
         client.get(reverse("dashboard"))
 
 
 def test_dashboard_queries_do_not_scale_with_history(client, user, django_assert_max_num_queries):
     fill_history(user, weeks=12)
+    fill_drafts(user, 4)
 
     client.force_login(user)
-    with django_assert_max_num_queries(16):
+    with django_assert_max_num_queries(18):
         client.get(reverse("dashboard"))
 
 

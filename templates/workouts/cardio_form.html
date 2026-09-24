@@ -132,6 +132,31 @@
     <button type="submit" class="btn btn-accent w-100">
       {% if planned %}Подготовить{% elif recording_plan %}Записать тренировку{% elif workout %}Сохранить изменения{% else %}Сохранить тренировку{% endif %}
     </button>
+    {% comment %}
+      Дата в будущем — не ошибка человека, а другое намерение: тренировки ещё не
+      было, значит её готовят. Кнопка отправляет эту же форму на маршрут плана
+      (formaction), а день приезжает именем и значением самой кнопки — введённое
+      не приходится набирать заново.
+
+      Место блока обязано быть здесь, ПОСЛЕ основной кнопки: неявная отправка
+      (Enter в поле даты) активирует первую в DOM кнопку submit, и предложение,
+      поставленное выше, молча готовило бы план вместо исправления даты.
+
+      Только при создании с нуля: тот же шаблон рендерит правку и запись
+      черновика, а там кнопка создала бы вторую тренировку вместо правки первой.
+    {% endcomment %}
+    {% if form.future_date and not workout %}
+      <div class="app-offer">
+        <p class="app-offer-text mb-0">
+          Здесь записывают состоявшуюся тренировку. Подготовить её на этот день?
+        </p>
+        <button type="submit" class="btn btn-quiet w-100"
+                formaction="{% url 'cardio_prepare' %}"
+                name="planned_for" value="{{ form.future_date|date:'Y-m-d' }}">
+          Подготовить на {{ form.future_date|date:"j b" }}
+        </button>
+      </div>
+    {% endif %}
     {% if workout %}
       <a class="btn btn-danger-quiet w-100" href="{% url 'workout_delete' workout.pk %}">
         {% if recording_plan %}Удалить план{% else %}Удалить тренировку{% endif %}

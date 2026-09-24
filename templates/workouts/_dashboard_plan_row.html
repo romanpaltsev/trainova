@@ -1,0 +1,16 @@
+{% comment %}
+  Строка подготовленной тренировки на дашборде. Клон _dashboard_workout_row.html:
+  те же классы, потому что это тот же элемент списка, только смотрит вперёд, а не
+  назад. Силовая ведёт в живой режим (там план и набирается), кардио — в форму:
+  экрана живого режима у него нет, а дозаполнить план и значит вписать факт.
+{% endcomment %}
+<a class="app-latest-row"
+   href="{% if draft.sport.is_strength %}{% url 'workout_live' draft.pk %}{% else %}{% url 'workout_edit' draft.pk %}{% endif %}"
+   data-workout="{{ draft.pk }}">
+  <span class="app-sport-dot" style="--dot: var(--app-sport-{{ draft.sport.color_key }})"></span>
+  <span class="app-latest-text">
+    <span class="app-latest-name">{{ draft.muscle_groups|default:draft.sport.name }}</span>
+    <span class="app-latest-meta">{{ draft.plan_label }}</span>
+  </span>
+  {% include "includes/chevron.html" %}
+</a>
