@@ -51,6 +51,12 @@
     {% for error in form.planned_for.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
   </div>
   {% else %}
+  {% comment %}
+    Дата и время — пара, длительность под ними во всю ширину: три поля в две
+    колонки не помещаются, а длительность и так набирается двумя вводами.
+    Время необязательно: пустое значит «как обычно» — полдень за прошедший день
+    и текущее время за сегодняшний.
+  {% endcomment %}
   <div class="app-field-grid">
     <div>
       <label class="form-label" for="{{ form.date.id_for_label }}">{{ form.date.label }}</label>
@@ -58,8 +64,15 @@
       {% for error in form.date.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
     <div>
-      {% include "workouts/_duration_fields.html" with label="Длительность" %}
+      <label class="form-label" for="{{ form.time.id_for_label }}">
+        {{ form.time.label }} <span class="text-muted-app">· необязательно</span>
+      </label>
+      {{ form.time }}
+      {% for error in form.time.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
+  </div>
+  <div class="mb-3">
+    {% include "workouts/_duration_fields.html" with label="Длительность" %}
   </div>
   {% endif %}
 

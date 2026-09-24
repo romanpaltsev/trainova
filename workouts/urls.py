@@ -100,6 +100,14 @@ urlpatterns = [
         views.WorkoutLocationView.as_view(),
         name="workout_location",
     ),
+    # Запись черновика за прошедший день и правка этих же значений у записанной.
+    # Не под live/ по той же причине, что и место: вторая нужна завершённой.
+    path(
+        "workouts/<int:pk>/backdate/",
+        views.WorkoutBackdateView.as_view(),
+        name="workout_backdate",
+    ),
+    path("workouts/<int:pk>/time/", views.WorkoutTimeView.as_view(), name="workout_time"),
     path("workouts/<int:pk>/finish/", views.WorkoutFinishView.as_view(), name="workout_finish"),
     path("workouts/<int:pk>/summary/", views.WorkoutSummaryView.as_view(), name="workout_summary"),
     path("workouts/<int:pk>/repeat/", views.WorkoutRepeatView.as_view(), name="workout_repeat"),

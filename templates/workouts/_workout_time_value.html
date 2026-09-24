@@ -1,0 +1,14 @@
+{% comment %}
+  Дата и время записанной тренировки: значение и кнопка правки в одном —
+  приём _location_value.html и _planned_for_value.html.
+
+  OOB-ветки здесь нет намеренно: модалка отвечает редиректом на этот же итог,
+  потому что вместе с датой меняется и «время» в карточке метрик.
+{% endcomment %}
+<button type="button" class="app-when-btn"
+        aria-label="Изменить дату и длительность"
+        hx-get="{% url 'workout_time' workout.pk %}"
+        hx-target="#modal" hx-swap="innerHTML">
+  {% include "includes/pencil.html" %}
+  <span>{{ workout.started_at|date:"D, j b, H:i"|lower }}</span>
+</button>

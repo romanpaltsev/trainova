@@ -1,7 +1,7 @@
 """Ввод, правка и удаление кардио-тренировки."""
 
 import re
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -140,6 +140,35 @@ def test_workout_can_be_edited(client, user, bike):
     assert workout.duration_min == 120
     assert workout.cardio.distance_km == Decimal("42.20")
     assert CardioDetails.objects.count() == 1
+
+
+def test_time_field_sets_the_exact_moment(client, user, bike):
+    """Время начала можно указать — пробежка перестаёт быть полуденной."""
+    client.force_login(user)
+    yesterday = timezone.localdate() - timedelta(days=1)
+
+    client.post(reverse("cardio_create"), form_data(bike, date=yesterday.isoformat(), time="19:30"))
+
+    started_at = timezone.localtime(Workout.objects.get(user=user).started_at)
+    assert (started_at.date(), started_at.hour, started_at.minute) == (yesterday, 19, 30)
+
+
+def test_editing_keeps_the_recorded_time(client, user, bike):
+    """Правка не сдвигает время: раньше вечерняя тренировка за прошлый день
+    при каждом сохранении уезжала на полдень."""
+    client.force_login(user)
+    yesterday = timezone.localdate() - timedelta(days=1)
+    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+    workout.started_at = timezone.make_aware(datetime.combine(yesterday, time(19, 30)))
+    workout.save()
+
+    edit_url = reverse("workout_edit", args=[workout.pk])
+    initial = client.get(edit_url).context["form"].initial
+    client.post(edit_url, form_data(bike, date=yesterday.isoformat(), time="19:30"))
+
+    workout.refresh_from_db()
+    assert initial["time"] == time(19, 30)
+    assert timezone.localtime(workout.started_at).hour == 19
 
 
 def test_edit_form_is_prefilled(client, user, bike):

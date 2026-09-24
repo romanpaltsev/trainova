@@ -78,6 +78,16 @@
       {% csrf_token %}
       <button type="submit" class="btn btn-accent w-100 app-btn-big">Начать тренировку</button>
     </form>
+    {% comment %}
+      Смысловая пара «начать сейчас»: та же подготовка, но тренировка уже была —
+      так в приложение переезжает бумажная тетрадка. Кнопка стоит здесь, а не в
+      шапке экрана: в шапке на 375px уже заголовок, статус, место и день.
+    {% endcomment %}
+    <button type="button" class="btn btn-quiet w-100 mt-2"
+            hx-get="{% url 'workout_backdate' workout.pk %}"
+            hx-target="#modal" hx-swap="innerHTML">
+      Записать задним числом
+    </button>
   {% else %}
     <button type="button" class="btn btn-accent w-100 app-btn-big"
             hx-post="{% url 'set_done' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"

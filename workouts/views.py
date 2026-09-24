@@ -21,7 +21,13 @@ from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
 from workouts import services, stats
-from workouts.forms import MAX_DURATION_HOURS, CardioWorkoutForm, ExerciseQuickForm, SportForm
+from workouts.forms import (
+    MAX_DURATION_HOURS,
+    CardioWorkoutForm,
+    ExerciseQuickForm,
+    SportForm,
+    StrengthTimeForm,
+)
 from workouts.models import (
     DEFAULT_WEIGHT_STEP,
     LOCATION_NAME_MAX_LENGTH,
@@ -963,6 +969,158 @@ class WorkoutPlannedForView(LoginRequiredMixin, View):
         return render(
             request, "workouts/_planned_for_value.html", {"workout": workout, "oob": True}
         )
+
+
+def time_modal_response(request, workout, form, *, action, title, submit_label, error=None):
+    """Модалка «когда и сколько» — одна на запись черновика и на правку.
+
+    Заголовок, адрес и подпись кнопки приходят параметрами: поля и проверки у
+    двух сценариев совпадают ровно, и вторая копия шаблона разошлась бы с первой.
+    """
+    return render(
+        request,
+        "workouts/_workout_time_modal.html",
+        {
+            "workout": workout,
+            "form": form,
+            "action": action,
+            "title": title,
+            "submit_label": submit_label,
+            "error": error,
+        },
+    )
+
+
+class WorkoutBackdateView(LoginRequiredMixin, View):
+    """Запись подготовленного черновика за прошедший день.
+
+    Так в приложение переезжает бумажная тетрадка: состав набирается обычными
+    экранами живого режима, а здесь спрашивается ровно то, чего у черновика нет
+    по определению, — когда это было и сколько длилось.
+    """
+
+    def get_workout(self):
+        # Только свой силовой черновик. У кардио тренировка вводится формой
+        # целиком, у идущей есть «Завершить», у записанной — правка времени.
+        return get_object_or_404(
+            Workout.objects.filter(
+                user=self.request.user, sport__category=Sport.Category.STRENGTH
+            ).planned(),
+            pk=self.kwargs["pk"],
+        )
+
+    @staticmethod
+    def content_error(workout):
+        """Почему черновик нельзя записать как есть, либо None.
+
+        Подход с пустым значением не выбрасываем молча: при переносе тетрадки
+        потерянная строка незаметна, а порог тот же, что у «Подход выполнен».
+        """
+        rows = list(workout.sets.select_related("exercise").order_by("id"))
+        if not rows:
+            return "В черновике нет упражнений."
+        for row in rows:
+            field, message = REQUIRED_FIELD[row.measurement]
+            if getattr(row, field) < 1:
+                return f"{row.exercise.name}: {message}"
+        return None
+
+    def render_modal(self, request, workout, form, error=None):
+        return time_modal_response(
+            request,
+            workout,
+            form,
+            action=reverse("workout_backdate", args=[workout.pk]),
+            title="Когда была тренировка",
+            submit_label="Записать",
+            error=error,
+        )
+
+    def get(self, request, pk):
+        workout = self.get_workout()
+        return self.render_modal(request, workout, StrengthTimeForm())
+
+    def post(self, request, pk):
+        workout = self.get_workout()
+        form = StrengthTimeForm(request.POST)
+        error = self.content_error(workout) if form.is_valid() else None
+        if not form.is_valid() or error:
+            return self.render_modal(request, workout, form, error)
+
+        with transaction.atomic():
+            # Метка времени подхода остаётся пустой: в тетрадке её нет, а NULL
+            # у выполненного подхода как раз и значит «времени не знаем».
+            # Порядок упражнений от этого не страдает — exercise_order_key без
+            # меток раскладывает тренировку по порядку добавления.
+            workout.sets.filter(done=False).update(done=True)
+            # Одним UPDATE: между двумя строка на мгновение выглядела бы идущей
+            # и упёрлась бы в unique_live_workout_per_user, если тренировка у
+            # пользователя уже идёт (частичный индекс проверяется немедленно).
+            # Тем же UPDATE гасится planned_for — его держит констрейнт.
+            # Условие по started_at делает безвредным даблтап: 0 строк.
+            Workout.objects.filter(pk=workout.pk, started_at__isnull=True).update(
+                started_at=form.cleaned_data["started_at"],
+                duration_min=form.cleaned_data["duration_min"],
+                planned_for=None,
+            )
+        messages.success(request, "Тренировка записана.")
+        # HX-Redirect, а не OOB: черновик становится итогом, меняется весь экран.
+        return HttpResponse(headers={"HX-Redirect": reverse("workout_summary", args=[workout.pk])})
+
+
+class WorkoutTimeView(LoginRequiredMixin, View):
+    """Правка даты, времени и длительности записанной силовой тренировки.
+
+    Экрана правки силовой в проекте нет — по той же причине, по которой место
+    правится точечным эндпоинтом: промах днём при переносе тетрадки иначе
+    остался бы неисправимым.
+    """
+
+    def get_workout(self):
+        workout = get_object_or_404(
+            Workout.objects.filter(user=self.request.user).finished().select_related("sport"),
+            pk=self.kwargs["pk"],
+        )
+        if not workout.sport.is_strength:
+            raise Http404("У кардио свой экран правки")
+        return workout
+
+    def render_modal(self, request, workout, form):
+        return time_modal_response(
+            request,
+            workout,
+            form,
+            action=reverse("workout_time", args=[workout.pk]),
+            title="Когда была тренировка",
+            submit_label="Сохранить",
+        )
+
+    def get(self, request, pk):
+        workout = self.get_workout()
+        return self.render_modal(request, workout, StrengthTimeForm(instance=workout))
+
+    def post(self, request, pk):
+        workout = self.get_workout()
+        form = StrengthTimeForm(request.POST)
+        if not form.is_valid():
+            return self.render_modal(request, workout, form)
+
+        started_at = form.cleaned_data["started_at"]
+        delta = started_at - workout.started_at
+        with transaction.atomic():
+            if delta:
+                # У тренировки, записанной живым режимом, метки настоящие: без
+                # сдвига они остались бы в прежнем дне. Пустые остаются пустыми,
+                # порядок упражнений сдвиг не меняет.
+                workout.sets.filter(done_at__isnull=False).update(done_at=F("done_at") + delta)
+            workout.started_at = started_at
+            workout.duration_min = form.cleaned_data["duration_min"]
+            # Одного save хватает: duration_min остаётся непустым, и в частичный
+            # индекс идущих тренировок строка не попадает ни на мгновение.
+            workout.save(update_fields=["started_at", "duration_min"])
+        messages.success(request, "Тренировка обновлена.")
+        # Меняются два разных куска итога — дата в шапке и «время» в карточке.
+        return HttpResponse(headers={"HX-Redirect": reverse("workout_summary", args=[workout.pk])})
 
 
 class WorkoutFinishView(LoginRequiredMixin, View):

@@ -20,9 +20,103 @@ from workouts.models import (
 )
 
 MAX_DURATION_HOURS = 24
-# Время, которое ставим тренировке, записанной за прошедший день: точное время
-# постфактум не вспомнить, а модели нужен datetime.
+# Время, которое ставим тренировке, записанной за прошедший день, когда его не
+# указали: точное время постфактум не вспомнить, а модели нужен datetime.
 DEFAULT_TIME = time(12, 0)
+
+
+def combine_started_at(date, moment=None):
+    """Начало тренировки из даты и необязательного времени.
+
+    Время указали — берём его. Не указали: у сегодняшней тренировки ставим
+    текущее, у прошедшей — полдень. Полдень сегодняшней не годится: запись,
+    сделанная вечером, уехала бы в прошлое и встала в ленте не туда.
+
+    Правило одно на кардио-форму и на запись силовой задним числом — иначе две
+    формы разошлись бы в том, что значит пустое поле времени.
+    """
+    if moment is None:
+        now = timezone.localtime()
+        moment = now.time() if date == now.date() else DEFAULT_TIME
+    return timezone.make_aware(datetime.combine(date, moment))
+
+
+def duration_fields():
+    """Пара полей «ч / мин»: одна длительность, набранная с телефона в два поля.
+
+    Возвращает кортеж, чтобы в теле формы читалось как объявление:
+    `duration_hours, duration_minutes = duration_fields()`. Функция, а не общий
+    базовый класс: формам нужны одинаковые поля, но не одинаковое поведение — у
+    кардио-плана та же пара значит цель по времени.
+
+    Имена полей одни и те же у всех потребителей: на них завязан партиал
+    _duration_fields.html.
+    """
+    return (
+        forms.IntegerField(
+            label="ч",
+            min_value=0,
+            max_value=MAX_DURATION_HOURS,
+            required=False,
+            widget=forms.NumberInput(
+                attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "0"}
+            ),
+        ),
+        forms.IntegerField(
+            label="мин",
+            min_value=0,
+            max_value=59,
+            required=False,
+            widget=forms.NumberInput(
+                attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "00"}
+            ),
+        ),
+    )
+
+
+def clean_duration(cleaned, *, required):
+    """Длительность из пары «ч / мин» — общая проверка обеих форм.
+
+    `required=False` — это цель по времени у плана: пустая значит «не загадывал»,
+    а не ошибку. Верхняя граница общая: цель в 30 часов тоже опечатка. Ошибка
+    возвращается парой «поле, текст», потому что вешать её умеет только форма.
+    """
+    duration = (cleaned.get("duration_hours") or 0) * 60 + (cleaned.get("duration_minutes") or 0)
+    cleaned["duration_min"] = duration
+    if duration <= 0:
+        return ("duration_minutes", "Укажите длительность тренировки.") if required else None
+    if duration > MAX_DURATION_HOURS * 60:
+        return "duration_hours", "Слишком долгая тренировка."
+    return None
+
+
+def date_field():
+    """Поле даты тренировки.
+
+    input_formats и format — обязательны: <input type="date"> понимает только
+    ISO-формат, а с локалью ru-ru Django по умолчанию рендерит 27.08.2026.
+    """
+    return forms.DateField(
+        label="Дата",
+        error_messages={"required": "Укажите дату.", "invalid": "Не похоже на дату."},
+        input_formats=["%Y-%m-%d"],
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}, format="%Y-%m-%d"),
+    )
+
+
+def time_field():
+    """Время начала — необязательное: из тетрадки его обычно не вспомнить.
+
+    Форматы заданы явно по той же причине, что у даты: <input type="time">
+    принимает и отдаёт только ЧЧ:ММ.
+    """
+    return forms.TimeField(
+        label="Время",
+        required=False,
+        error_messages={"invalid": "Не похоже на время."},
+        input_formats=["%H:%M", "%H:%M:%S"],
+        widget=forms.TimeInput(attrs={"type": "time", "class": "form-control"}, format="%H:%M"),
+    )
 
 
 class CardioWorkoutForm(forms.Form):
@@ -56,32 +150,13 @@ class CardioWorkoutForm(forms.Form):
         max_length=LOCATION_NAME_MAX_LENGTH,
         widget=forms.TextInput(attrs={"class": "form-control"}),
     )
-    date = forms.DateField(
-        label="Дата",
-        error_messages={"required": "Укажите дату.", "invalid": "Не похоже на дату."},
-        # input_formats и format — обязательны: <input type="date"> понимает только
-        # ISO-формат, а с локалью ru-ru Django по умолчанию рендерит 27.08.2026.
-        input_formats=["%Y-%m-%d"],
-        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}, format="%Y-%m-%d"),
-    )
-    duration_hours = forms.IntegerField(
-        label="ч",
-        min_value=0,
-        max_value=MAX_DURATION_HOURS,
-        required=False,
-        widget=forms.NumberInput(
-            attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "0"}
-        ),
-    )
-    duration_minutes = forms.IntegerField(
-        label="мин",
-        min_value=0,
-        max_value=59,
-        required=False,
-        widget=forms.NumberInput(
-            attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "00"}
-        ),
-    )
+    date = date_field()
+    # Время необязательно и живёт рядом с датой: пустое значит «как обычно»
+    # (см. combine_started_at). Нужно оно правке — без него тренировка,
+    # записанная вечером за прошлый день, при каждом сохранении уезжала бы
+    # на полдень.
+    time = time_field()
+    duration_hours, duration_minutes = duration_fields()
     distance_km = forms.DecimalField(
         label="Дистанция, км",
         max_digits=6,
@@ -137,7 +212,7 @@ class CardioWorkoutForm(forms.Form):
             # А вот поля длительности остаются: у плана они значат цель по
             # времени — тем же приёмом, каким distance_km служит и цели, и факту.
             # Плата за это честная: clean() и save() теперь смотрят на self.planned.
-            for name in ("date", "avg_heart_rate"):
+            for name in ("date", "time", "avg_heart_rate"):
                 del self.fields[name]
             # Обе цели необязательны: планов на неделю наготавливают пачкой, и
             # заставлять заполнять значения было бы издевательством.
@@ -183,6 +258,8 @@ class CardioWorkoutForm(forms.Form):
             # обращение к workout.location стоило бы отдельного запроса.
             "location": workout.location_id,
             "date": started_at.date() if started_at else timezone.localdate(),
+            # У черновика времени нет — пустое поле и значит «как обычно».
+            "time": started_at.time() if started_at else None,
             "duration_hours": hours or None,
             "duration_minutes": minutes or None,
             "distance_km": cardio.distance_km if cardio else None,
@@ -190,25 +267,23 @@ class CardioWorkoutForm(forms.Form):
             "note": workout.note,
         }
 
-    def clean_date(self):
-        date = self.cleaned_data["date"]
-        if date > timezone.localdate():
-            raise forms.ValidationError("Дата не может быть в будущем.")
-        return date
-
     def clean(self):
         cleaned = super().clean()
-        hours = cleaned.get("duration_hours") or 0
-        minutes = cleaned.get("duration_minutes") or 0
-        duration = hours * 60 + minutes
+        # Ключей нет, когда поле уже дало свою ошибку: пересчитывать по обрывку
+        # значило бы повесить вторую, противоречащую первой.
         if "duration_hours" in cleaned and "duration_minutes" in cleaned:
-            # У плана пустая длительность значит «не загадывал», а не ошибку;
-            # верхняя граница остаётся общей — цель в 30 часов тоже опечатка.
-            if duration <= 0 and not self.planned:
-                self.add_error("duration_minutes", "Укажите длительность тренировки.")
-            elif duration > MAX_DURATION_HOURS * 60:
-                self.add_error("duration_hours", "Слишком долгая тренировка.")
-        cleaned["duration_min"] = duration
+            error = clean_duration(cleaned, required=not self.planned)
+            if error:
+                self.add_error(*error)
+        if "date" in cleaned:
+            # Проверяем собранный момент, а не дату: сегодняшнее число с
+            # временем 23:00 в десять утра — это будущее, и одна дата такое
+            # пропустила бы. У плана поля даты нет вовсе — ветка не про него.
+            started_at = combine_started_at(cleaned["date"], cleaned.get("time"))
+            if started_at > timezone.now():
+                self.add_error("date", "Дата не может быть в будущем.")
+            else:
+                cleaned["started_at"] = started_at
         return cleaned
 
     def chosen_location(self):
@@ -221,13 +296,6 @@ class CardioWorkoutForm(forms.Form):
         if name:
             return services.location_for_name(self.user, name)
         return self.cleaned_data["location"]
-
-    def started_at(self):
-        """Дата + время: для сегодняшней тренировки — текущее, иначе полдень."""
-        date = self.cleaned_data["date"]
-        now = timezone.localtime()
-        moment = now.time() if date == now.date() else DEFAULT_TIME
-        return timezone.make_aware(datetime.combine(date, moment))
 
     def save(self):
         workout = self.instance or Workout(user=self.user)
@@ -242,7 +310,7 @@ class CardioWorkoutForm(forms.Form):
             workout.target_duration_min = self.cleaned_data["duration_min"] or None
             workout.planned_for = self.cleaned_data.get("planned_for")
         else:
-            workout.started_at = self.started_at()
+            workout.started_at = self.cleaned_data["started_at"]
             workout.duration_min = self.cleaned_data["duration_min"]
             # Цель заменяется фактом, плановый день — настоящей датой. То же
             # самое происходит с целью по дистанции строкой ниже, просто ей для
@@ -271,6 +339,53 @@ class CardioWorkoutForm(forms.Form):
                 },
             )
         return workout
+
+
+class StrengthTimeForm(forms.Form):
+    """Когда была силовая тренировка и сколько длилась.
+
+    Два применения на одну форму: записать подготовленный черновик за прошедший
+    день (тренировка из бумажной тетрадки) и поправить эти же значения у уже
+    записанной. Разводит их вьюха, а не форма: набор полей и проверки совпадают
+    ровно, и вторая копия разошлась бы с первой на первой же правке.
+
+    Длительность обязательна: у такой тренировки время не шло, и вычислить её,
+    как это делает WorkoutFinishView, попросту неоткуда.
+    """
+
+    date = date_field()
+    time = time_field()
+    duration_hours, duration_minutes = duration_fields()
+
+    def __init__(self, *args, instance=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if instance is not None and instance.started_at is not None:
+            # Правка: поля показывают то, что записано сейчас.
+            started_at = timezone.localtime(instance.started_at)
+            hours, minutes = divmod(instance.duration_min or 0, 60)
+            self.initial = {
+                "date": started_at.date(),
+                "time": started_at.time(),
+                "duration_hours": hours or None,
+                "duration_minutes": minutes or None,
+                **self.initial,
+            }
+        else:
+            self.initial.setdefault("date", timezone.localdate())
+
+    def clean(self):
+        cleaned = super().clean()
+        if "duration_hours" in cleaned and "duration_minutes" in cleaned:
+            error = clean_duration(cleaned, required=True)
+            if error:
+                self.add_error(*error)
+        if "date" in cleaned:
+            started_at = combine_started_at(cleaned["date"], cleaned.get("time"))
+            if started_at > timezone.now():
+                self.add_error("date", "Дата не может быть в будущем.")
+            else:
+                cleaned["started_at"] = started_at
+        return cleaned
 
 
 class SportForm(forms.ModelForm):

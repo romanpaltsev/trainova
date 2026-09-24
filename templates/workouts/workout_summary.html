@@ -20,7 +20,11 @@
       осталось бы неисправимым. Точка не висит — кнопка есть всегда.
     {% endcomment %}
     <div class="app-live-meta text-secondary-app">
-      <span>{{ workout.started_at|date:"D, j b, H:i"|lower }} ·</span>
+      {% comment %}
+        Дата правится здесь же и тем же приёмом, что место: экрана правки
+        силовой нет, а при переносе тетрадки промахнуться днём легко.
+      {% endcomment %}
+      {% include "workouts/_workout_time_value.html" %}
       {% include "workouts/_location_value.html" %}
     </div>
   </div>

@@ -51,7 +51,9 @@ def test_prepare_form_has_no_date_and_pulse(client, user, bike):
 
     for present in ("distance_km", "duration_hours", "duration_minutes", "planned_for"):
         assert present in form.fields
-    for absent in ("date", "avg_heart_rate"):
+    # Времени нет вместе с датой: без даты оно ничего не значит, а оставленное
+    # поле размывало бы ту самую структурную гарантию.
+    for absent in ("date", "time", "avg_heart_rate"):
         assert absent not in form.fields
 
 
