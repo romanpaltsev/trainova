@@ -7,12 +7,25 @@
           hx-post="{% url 'live_exercises' workout.pk %}"
           hx-vals='{"exercise": "{{ exercise.pk }}"}'
           hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
-    <span class="app-pick-name">{{ exercise.name }}</span>
+    {% comment %}
+      is-wrap: имена стали точными, и вся добавленная точность сидит в хвосте —
+      «Жим штанги на наклон…» и «Жим гантелей на наклон…» в одну обрезанную
+      строку неразличимы. Модификатор именно здесь, в результатах поиска:
+      у строки плана обрезка в одну строку объяснена отдельно и остаётся.
+    {% endcomment %}
+    <span class="app-pick-name is-wrap">{{ exercise.name }}</span>
     {% if exercise.muscle_group %}<span class="app-pick-meta">{{ exercise.muscle_group }}</span>{% endif %}
   </button>
 {% empty %}
   {% if not offer_create %}<p class="text-secondary-app mb-0">Ничего не найдено.</p>{% endif %}
 {% endfor %}
+{% if results_truncated %}
+  {% comment %}
+    Честная подпись вместо молчаливой обрезки: иначе «нет в справочнике»
+    показалось бы правдой, и человек завёл бы дубль уже существующего упражнения.
+  {% endcomment %}
+  <p class="text-secondary-app mb-0">Показаны первые {{ exercises|length }} — уточните запрос.</p>
+{% endif %}
 {% if offer_create %}
   {% comment %}
     Название едет hidden-полем: в hx-vals кавычки пользователя сломали бы JSON.
@@ -49,6 +62,25 @@
       <input type="text" class="form-control app-group-input" name="muscle_group_own"
              maxlength="{{ muscle_group_max_length }}" placeholder="своя"
              aria-label="Своя группа мышц" x-model="own">
+    </div>
+
+    {% comment %}
+      Снаряд — вторая ось справочника, и правила у неё те же, что у группы мышц.
+      Выбор так же возвращается на круг: hx-include шлёт весь контейнер, и без
+      selected_equipment следующая буква сбросила бы его.
+    {% endcomment %}
+    <div class="app-stepper-label">Снаряд</div>
+    <div class="app-chips mb-2" role="group" aria-label="Снаряд"
+         x-data="{ own: '{{ selected_equipment|escapejs }}' }">
+      {% for equipment in equipment_list %}
+        <input type="radio" name="equipment" id="new-equipment-{{ forloop.counter }}"
+               value="{{ equipment }}" class="app-chip-input"
+               {% if selected_equipment == equipment %}checked{% endif %} @change="own = ''">
+        <label class="app-chip" for="new-equipment-{{ forloop.counter }}">{{ equipment }}</label>
+      {% endfor %}
+      <input type="text" class="form-control app-group-input" name="equipment_own"
+             maxlength="{{ equipment_max_length }}" placeholder="свой"
+             aria-label="Свой снаряд" x-model="own">
     </div>
     <button type="submit" class="app-pick-row app-pick-create">+ Создать «{{ q }}»</button>
   </form>

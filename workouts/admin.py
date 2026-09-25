@@ -36,8 +36,8 @@ class SportAdmin(CatalogAdmin):
 
 @admin.register(Exercise)
 class ExerciseAdmin(CatalogAdmin):
-    list_display = ("name", "muscle_group", "measurement", "owner_display")
-    list_filter = ("measurement", "muscle_group", "owner")
+    list_display = ("name", "muscle_group", "equipment", "measurement", "owner_display")
+    list_filter = ("measurement", "muscle_group", "equipment", "owner")
 
 
 @admin.register(Location)

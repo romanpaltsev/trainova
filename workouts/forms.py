@@ -11,6 +11,7 @@ from workouts.models import (
     Location,
     Sport,
     Workout,
+    chosen_equipment,
     chosen_muscle_group,
     collapse_spaces,
     facets_for,
@@ -501,7 +502,7 @@ class ExerciseQuickForm(forms.ModelForm):
 
     class Meta:
         model = Exercise
-        fields = ("name", "measurement", "muscle_group")
+        fields = ("name", "measurement", "muscle_group", "equipment")
         error_messages = {"name": {"required": "Введите название."}}
 
     def __init__(self, *args, user, **kwargs):
@@ -516,7 +517,17 @@ class ExerciseQuickForm(forms.ModelForm):
 
     def clean_muscle_group(self):
         """Группа мышц необязательна; выбор чипа и своё поле сводит одно правило."""
-        return chosen_muscle_group(self.data, facets_for(self.user).muscle_groups)
+        return chosen_muscle_group(self.data, self.facets().muscle_groups)
+
+    def clean_equipment(self):
+        """Снаряд — вторая ось справочника, правило у него то же."""
+        return chosen_equipment(self.data, self.facets().equipment)
+
+    def facets(self):
+        """Обе оси одним запросом: два clean-метода спрашивают один и тот же список."""
+        if not hasattr(self, "_facets"):
+            self._facets = facets_for(self.user)
+        return self._facets
 
     def clean_name(self):
         return self.cleaned_data["name"].strip()
@@ -534,6 +545,7 @@ class ExerciseQuickForm(forms.ModelForm):
             self.cleaned_data["name"],
             measurement=self.cleaned_data["measurement"],
             muscle_group=self.cleaned_data["muscle_group"],
+            equipment=self.cleaned_data["equipment"],
         )
 
 

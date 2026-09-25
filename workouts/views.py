@@ -79,7 +79,11 @@ HISTORY_PAGE_SIZE = 10
 # модели, поэтому применимость поля к единице упражнения проверяется по
 # MEASUREMENT_FIELDS без словаря-переводчика. Там же REQUIRED_FIELD — порог
 # «подход выполнен», общий у живого режима, записи задним числом и импорта.
-EXERCISE_RESULTS_LIMIT = 30
+# Сколько строк показывает поиск упражнений. Полсотни — весь справочник в шесть
+# десятков записей почти целиком: с точными именами («Жим штанги лёжа», «Жим
+# гантелей лёжа») по запросу «жим» находится полтора десятка, и обрезка на
+# тридцати прятала бы нужное.
+EXERCISE_RESULTS_LIMIT = 50
 # Дашборд: силовых рекордов в блоке (кардио добавляются по числу видов).
 STRENGTH_RECORDS_LIMIT = 3
 
@@ -710,20 +714,19 @@ class LiveExerciseView(LoginRequiredMixin, View):
             bool(query)
             and not Exercise.objects.visible_to(request.user).filter(name__iexact=query).exists()
         )
-        # Выбранные единица и группа мышц возвращаются на круг: чипы живут в
-        # свапаемом блоке результатов, и без этого следующая набранная буква
-        # сбросила бы выбор.
+        # Выбранная единица возвращается на круг по той же причине, что группа
+        # и снаряд (см. chosen_facet_value): чипы живут в свапаемом блоке.
         chosen = request.GET.get("measurement") or request.POST.get("measurement") or ""
-        group = (
-            request.GET.get("muscle_group_own")
-            or request.GET.get("muscle_group")
-            or request.POST.get("muscle_group_own")
-            or request.POST.get("muscle_group")
-            or ""
-        )
+        group = chosen_facet_value(request, "muscle_group")
+        equipment = chosen_facet_value(request, "equipment")
+        # Лишняя строка — весь способ узнать, что список обрезан: COUNT(*) стоил
+        # бы второго запроса на каждую набранную букву.
+        found = list(exercises[: EXERCISE_RESULTS_LIMIT + 1])
+        facets = facets_for(request.user) if offer_create else None
         return {
             "workout": workout,
-            "exercises": list(exercises[:EXERCISE_RESULTS_LIMIT]),
+            "exercises": found[:EXERCISE_RESULTS_LIMIT],
+            "results_truncated": len(found) > EXERCISE_RESULTS_LIMIT,
             "q": query,
             "offer_create": offer_create,
             "form": form,
@@ -733,12 +736,30 @@ class LiveExerciseView(LoginRequiredMixin, View):
                 if chosen in Exercise.Measurement.values
                 else Exercise.Measurement.WEIGHT_REPS
             ),
-            # Только при предложении создать: на поиске список групп не нужен,
+            # Только при предложении создать: на поиске списки фасетов не нужны,
             # и лишний запрос на каждую набранную букву тоже.
-            "muscle_groups": facets_for(request.user).muscle_groups if offer_create else [],
+            "muscle_groups": facets.muscle_groups if facets else [],
             "selected_muscle_group": group.strip(),
             "muscle_group_max_length": MUSCLE_GROUP_MAX_LENGTH,
+            "equipment_list": facets.equipment if facets else [],
+            "selected_equipment": equipment.strip(),
+            "equipment_max_length": EQUIPMENT_MAX_LENGTH,
         }
+
+
+def chosen_facet_value(request, field):
+    """Значение фасета, как его прислала форма поиска или создания.
+
+    Выбор возвращается на круг: чипы живут в свапаемом блоке результатов, и без
+    этого следующая набранная буква сбросила бы и группу, и снаряд.
+    """
+    return (
+        request.GET.get(f"{field}_own")
+        or request.GET.get(field)
+        or request.POST.get(f"{field}_own")
+        or request.POST.get(field)
+        or ""
+    )
 
 
 class LiveExerciseSelectView(LoginRequiredMixin, View):

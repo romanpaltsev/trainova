@@ -3,7 +3,7 @@
 import pytest
 from django.urls import reverse
 
-from workouts import services
+from workouts import services, views
 from workouts.models import Exercise
 from workouts.tests.factories import ExerciseFactory, StrengthSetFactory, WorkoutFactory
 
@@ -182,3 +182,97 @@ def test_current_falls_back_when_selected_exercise_is_done(client, user, active)
     active.sets.filter(exercise=squat).update(done=True, reps=5)
 
     assert services.live_context(active)["current_group"]["exercise"] == bench
+
+
+# ---------- Точный справочник: лимит выдачи, снаряд, честная обрезка ----------
+
+
+def test_results_are_capped_and_the_cut_is_announced(client, user, active):
+    """Молчаливая обрезка читалась бы как «в справочнике этого нет» — и человек
+    завёл бы дубль уже существующего упражнения."""
+    client.force_login(user)
+    ExerciseFactory.create_batch(views.EXERCISE_RESULTS_LIMIT + 5)
+
+    response = client.get(modal_url(active))
+
+    assert len(response.context["exercises"]) == views.EXERCISE_RESULTS_LIMIT
+    assert response.context["results_truncated"] is True
+    assert "Показаны первые" in response.content.decode()
+
+
+def test_full_result_list_says_nothing_about_a_cut(client, user, active):
+    client.force_login(user)
+    ExerciseFactory.create_batch(views.EXERCISE_RESULTS_LIMIT)
+
+    response = client.get(modal_url(active))
+
+    assert response.context["results_truncated"] is False
+    assert "Показаны первые" not in response.content.decode()
+
+
+def test_created_exercise_takes_the_chosen_equipment(client, user, active):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", equipment="Штанга")
+
+    client.post(modal_url(active), {"name": "Жим в Смите", "equipment": "Штанга"})
+
+    created = Exercise.objects.get(name="Жим в Смите")
+    assert created.owner == user
+    assert created.equipment == "Штанга"
+
+
+def test_own_equipment_beats_the_chip_and_is_normalized(client, user, active):
+    client.force_login(user)
+    ExerciseFactory(name="Жим гантелей лёжа", equipment="Гантели")
+
+    client.post(
+        modal_url(active),
+        {"name": "Разводка", "equipment": "Гантели", "equipment_own": "  гиря "},
+    )
+    client.post(modal_url(active), {"name": "Пуловер", "equipment_own": "ГАНТЕЛИ"})
+
+    assert Exercise.objects.get(name="Разводка").equipment == "гиря"
+    # Написание приводится к уже принятому: иначе в чипах были бы два варианта.
+    assert Exercise.objects.get(name="Пуловер").equipment == "Гантели"
+
+
+def test_equipment_chips_appear_only_with_the_create_option(client, user, active):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", equipment="Штанга")
+
+    with_offer = client.get(modal_url(active), {"q": "Совсем новое"})
+    without_offer = client.get(modal_url(active), {"q": "Жим штанги лёжа"})
+
+    assert with_offer.context["equipment_list"] == ["Штанга"]
+    assert without_offer.context["equipment_list"] == []
+
+
+def test_chosen_equipment_survives_the_next_letter(client, user, active):
+    """Чипы живут в свапаемом блоке результатов, поэтому выбор ездит на сервер."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", equipment="Штанга")
+
+    response = client.get(modal_url(active), {"q": "Пуловер", "equipment": "Штанга"})
+
+    assert response.context["selected_equipment"] == "Штанга"
+
+
+def test_equipment_chips_hide_other_users(client, user, other_user, active):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", equipment="Штанга")
+    ExerciseFactory(name="Чужое", owner=other_user, equipment="Каяк")
+
+    chips = client.get(modal_url(active), {"q": "Совсем новое"}).context["equipment_list"]
+
+    assert chips == ["Штанга"]
+
+
+def test_long_names_wrap_in_the_results(client, user, active):
+    """Точность имени сидит в хвосте: обрезка в одну строку делала бы соседей
+    неразличимыми — «Жим штанги на наклон…» и «Жим гантелей на наклон…»."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги на наклонной скамье")
+
+    content = client.get(modal_url(active)).content.decode()
+
+    assert "app-pick-name is-wrap" in content
