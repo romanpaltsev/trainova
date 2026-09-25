@@ -53,6 +53,7 @@ from workouts.models import (
     Sport,
     StrengthSet,
     Workout,
+    cardio_parts_prefetch,
     chosen_muscle_group,
     clamp_rest_seconds,
     collapse_spaces,
@@ -92,9 +93,11 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
             # Незавершённая (живой режим) в ленту не попадает: у неё нет длительности.
             Workout.objects.filter(user=self.request.user)
             .finished()
-            # cardio — обратная OneToOne, тянется тем же запросом; location —
-            # для подписи места на карточке, тоже без лишнего запроса
-            .select_related("sport", "cardio", "location")
+            # cardio_parts — отдельным запросом на всю страницу: частей у
+            # тренировки может быть несколько, и джойн размножил бы карточки.
+            # location — для подписи места, тем же запросом.
+            .select_related("sport", "location")
+            .prefetch_related(cardio_parts_prefetch())
             # Иначе каждая силовая карточка делала бы свой COUNT по подходам
             .annotate(
                 exercises_count=Count("sets__exercise", distinct=True),
@@ -356,13 +359,10 @@ def plan_label(workout, exercises_count=None):
             exercises_count = workout.sets.values("exercise").distinct().count()
         parts.append(exercises_label(exercises_count))
         return " · ".join(parts)
-    # getattr со значением по умолчанию: у обратной OneToOne отсутствие строки —
-    # это AttributeError, и Django делает его таким намеренно. Строки нет — значит
-    # цели по дистанции не задавали.
-    cardio = getattr(workout, "cardio", None)
+    # Частей нет — значит цели по дистанции не задавали.
     targets = []
-    if cardio:
-        targets.append(f"{cardio.distance_display} км")
+    # all() по prefetch'у: у плана часть одна или её нет вовсе.
+    targets += [f"{part.distance_display} км" for part in workout.cardio_parts.all()]
     if workout.target_duration_min:
         targets.append(workout.target_duration_display)
     parts.extend(targets or ["пусто"])
@@ -462,9 +462,10 @@ def unfinished_workouts(user):
     rows = list(
         Workout.objects.filter(user=user)
         .unfinished()
-        # cardio — обратная OneToOne: ярлык кардио-черновика это его цель,
-        # и без select_related каждая строка спрашивала бы её отдельно.
-        .select_related("sport", "cardio")
+        # cardio_parts — ярлык кардио-черновика это его цель, и без prefetch
+        # каждая строка спрашивала бы её отдельно.
+        .select_related("sport")
+        .prefetch_related(cardio_parts_prefetch())
         .annotate(exercises_count=Count("sets__exercise", distinct=True))
         # Явно: с GROUP BY Django игнорирует Meta.ordering. Датированные планы
         # идут по возрастанию дня — ближайший сверху, — недатированные после
@@ -1400,7 +1401,8 @@ class DashboardWeekView(LoginRequiredMixin, View):
             Workout.objects.filter(user=request.user)
             .finished()
             .filter(started_at__gte=first_moment, started_at__lt=next_week)
-            .select_related("sport", "cardio")
+            .select_related("sport")
+            .prefetch_related(cardio_parts_prefetch())
             .annotate(**stats.WORKLOAD_ANNOTATIONS)
             .order_by("-started_at", "-id")
         )

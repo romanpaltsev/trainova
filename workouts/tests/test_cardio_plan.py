@@ -7,7 +7,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from workouts.models import CardioDetails, Sport, Workout
+from workouts.models import CardioPart, Sport, Workout
 from workouts.tests.factories import SportFactory, WorkoutFactory
 
 pytestmark = pytest.mark.django_db
@@ -36,7 +36,7 @@ def test_prepare_creates_draft_with_target(client, user, bike):
     assert workout.started_at is None
     assert workout.duration_min is None
     assert workout.is_planned
-    assert workout.cardio.distance_km == 30
+    assert workout.cardio_parts.get().distance_km == 30
 
 
 def test_prepare_form_has_no_date_and_pulse(client, user, bike):
@@ -139,8 +139,8 @@ def test_recording_draft_turns_it_into_finished_workout(client, user, bike):
     assert draft.duration_min == 80
     assert draft.started_at is not None
     # Цель заменилась фактом — это одно и то же поле, как вес у подхода.
-    assert draft.cardio.distance_km == Decimal("32.40")
-    assert draft.cardio.avg_heart_rate == 138
+    assert draft.cardio_parts.get().distance_km == Decimal("32.40")
+    assert draft.cardio_parts.get().avg_heart_rate == 138
     assert Workout.objects.filter(user=user).count() == 1
 
 
@@ -175,7 +175,7 @@ def test_delete_page_shows_target(client, user, bike):
 def test_other_user_cannot_open_or_record_draft(client, user, other_user, bike):
     """Изоляция: чужой план по прямому адресу — 404, и записать его нельзя."""
     theirs = WorkoutFactory(user=other_user, sport=bike, started_at=None, duration_min=None)
-    CardioDetails.objects.create(workout=theirs, distance_km=30)
+    CardioPart.objects.create(workout=theirs, sport=theirs.sport, distance_km=30)
     client.force_login(user)
 
     assert client.get(reverse("workout_edit", args=[theirs.pk])).status_code == 404
@@ -204,7 +204,7 @@ def test_other_users_draft_not_in_start_modal(client, user, other_user, bike):
     или поздно совпадёт с чем-нибудь посторонним.
     """
     theirs = WorkoutFactory(user=other_user, sport=bike, started_at=None, duration_min=None)
-    CardioDetails.objects.create(workout=theirs, distance_km=77)
+    CardioPart.objects.create(workout=theirs, sport=theirs.sport, distance_km=77)
     client.force_login(user)
 
     content = client.get(reverse("workout_start")).content.decode()
@@ -226,7 +226,7 @@ def test_strength_sport_rejected_by_prepare(client, user):
 
 
 def test_prepare_with_time_target_only(client, user, bike):
-    """Цель только по времени: строки CardioDetails при этом не появляется."""
+    """Цель только по времени: строки CardioPart при этом не появляется."""
     client.force_login(user)
 
     prepare(client, bike, distance_km="", duration_minutes="45")
@@ -234,7 +234,7 @@ def test_prepare_with_time_target_only(client, user, bike):
     workout = Workout.objects.get(user=user)
     assert workout.target_duration_min == 45
     assert workout.is_planned
-    assert not CardioDetails.objects.filter(workout=workout).exists()
+    assert not CardioPart.objects.filter(workout=workout).exists()
 
 
 def test_prepare_without_any_target(client, user, bike):
@@ -247,7 +247,7 @@ def test_prepare_without_any_target(client, user, bike):
     assert response.status_code == 302
     assert workout.is_planned
     assert workout.target_duration_min is None
-    assert not CardioDetails.objects.filter(workout=workout).exists()
+    assert not CardioPart.objects.filter(workout=workout).exists()
 
 
 @pytest.mark.parametrize(
@@ -352,7 +352,7 @@ def test_offer_carries_entered_values_into_the_plan(client, user, bike):
     workout = Workout.objects.get(user=user)
     assert workout.is_planned
     assert workout.planned_for == day
-    assert workout.cardio.distance_km == 30
+    assert workout.cardio_parts.get().distance_km == 30
     assert workout.target_duration_min == 60
     # Форма плана полей date и time не имеет вовсе, поэтому дослать их
     # обходным путём нельзя — «планом нельзя записать тренировку» цело.

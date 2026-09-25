@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from workouts.models import Location, Sport, Workout
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     LocationFactory,
     SportFactory,
@@ -185,7 +185,7 @@ def test_cardio_form_shows_only_own_locations(client, user, other_user, bike):
 def test_cardio_edit_keeps_the_location(client, user, bike):
     """Правка без трогания места не должна его стирать."""
     place = LocationFactory(owner=user, name="Парк у реки")
-    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+    workout = CardioPartFactory(workout__user=user, workout__sport=bike).workout
     workout.location = place
     workout.save(update_fields=["location"])
 
@@ -201,7 +201,7 @@ def test_cardio_edit_keeps_the_location(client, user, bike):
 def test_cardio_edit_does_not_substitute_the_default(client, user, bike):
     """Подстановка дефолта на правке подменила бы место записанной тренировки."""
     LocationFactory(owner=user, name="СпортЛайф", is_default=True)
-    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+    workout = CardioPartFactory(workout__user=user, workout__sport=bike).workout
 
     client.force_login(user)
     response = client.get(reverse("workout_edit", args=[workout.pk]))
@@ -211,7 +211,7 @@ def test_cardio_edit_does_not_substitute_the_default(client, user, bike):
 
 def test_cardio_location_can_be_cleared_on_edit(client, user, bike):
     place = LocationFactory(owner=user, name="Парк у реки")
-    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+    workout = CardioPartFactory(workout__user=user, workout__sport=bike).workout
     workout.location = place
     workout.save(update_fields=["location"])
 

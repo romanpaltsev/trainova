@@ -6,7 +6,7 @@ from django.utils import timezone
 from workouts import excel, excel_import, services
 from workouts.models import (
     LOCATION_NAME_MAX_LENGTH,
-    CardioDetails,
+    CardioPart,
     Exercise,
     Location,
     Sport,
@@ -98,7 +98,7 @@ def time_field():
 
 
 class CardioWorkoutForm(forms.Form):
-    """Кардио-тренировка целиком: и Workout, и CardioDetails.
+    """Кардио-тренировка целиком: и Workout, и CardioPart.
 
     Дата и длительность вводятся так, как удобно с телефона: дата — одним полем,
     длительность — часы и минуты по отдельности.
@@ -234,7 +234,9 @@ class CardioWorkoutForm(forms.Form):
         # в дистанцию. Правится поверх, если вышло иначе.
         planned_minutes = workout.duration_min or workout.target_duration_min
         hours, minutes = divmod(planned_minutes, 60) if planned_minutes else (None, None)
-        cardio = getattr(workout, "cardio", None)
+        # У чистого кардио часть ровно одна — эта форма только такие и правит
+        # (тренировку с подходами она не откроет вовсе).
+        cardio = workout.cardio_parts.first()
         return {
             "sport": workout.sport_id,
             # location_id, а не объект: get_instance тянет только sport, и
@@ -313,17 +315,19 @@ class CardioWorkoutForm(forms.Form):
             # приём, что у ExerciseNote. Ветка delete сегодня всегда попадает в
             # пустоту (planned бывает только у новой тренировки), но делает
             # ветвление полным и переживёт появление правки плана.
-            CardioDetails.objects.filter(workout=workout).delete()
+            workout.cardio_parts.all().delete()
         else:
-            CardioDetails.objects.update_or_create(
-                workout=workout,
-                defaults={
-                    "distance_km": distance,
-                    # Пульс есть только у состоявшейся тренировки: у плана поля
-                    # нет, а на записи черновика оно придёт из формы как обычно.
-                    "avg_heart_rate": self.cleaned_data.get("avg_heart_rate"),
-                },
-            )
+            # Часть здесь ровно одна и совпадает с тренировкой целиком, поэтому
+            # вид спорта и длительность у неё те же: это тот инвариант, на
+            # который опираются скорость и темп, считая по полям части.
+            part = workout.cardio_parts.first() or CardioPart(workout=workout)
+            part.sport = workout.sport
+            part.duration_min = workout.duration_min
+            part.distance_km = distance
+            # Пульс есть только у состоявшейся тренировки: у плана поля нет,
+            # а на записи черновика оно придёт из формы как обычно.
+            part.avg_heart_rate = self.cleaned_data.get("avg_heart_rate")
+            part.save()
         return workout
 
 

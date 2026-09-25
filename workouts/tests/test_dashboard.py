@@ -10,7 +10,7 @@ from django.utils import timezone
 from workouts import stats
 from workouts.models import Sport
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     SportFactory,
     StrengthSetFactory,
@@ -239,7 +239,7 @@ def test_dashboard_draft_row_shows_day_and_targets(client, user, bike):
         duration_min=None,
         planned_for=timezone.localdate() + timedelta(days=1),
     )
-    CardioDetailsFactory(workout=cardio, distance_km=30)
+    CardioPartFactory(workout=cardio, distance_km=30)
     client.force_login(user)
 
     content = client.get(reverse("dashboard")).content.decode()

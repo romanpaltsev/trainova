@@ -18,7 +18,7 @@ from workouts import excel, services
 from workouts.models import (
     NOTE_MAX_LENGTH,
     REQUIRED_FIELD,
-    CardioDetails,
+    CardioPart,
     Exercise,
     ExerciseNote,
     Location,
@@ -318,4 +318,12 @@ def _create_cardio(report, workout, group):
         # Кардио без дистанции — законная запись: «плавал 40 минут, не мерил».
         return
     pulse = next((row.avg_heart_rate for row in group if row.avg_heart_rate), None)
-    CardioDetails.objects.create(workout=workout, distance_km=distance, avg_heart_rate=pulse)
+    # Часть здесь одна и описывает тренировку целиком: вид спорта и длительность
+    # те же, что у неё. Тот же инвариант держит CardioWorkoutForm.save.
+    CardioPart.objects.create(
+        workout=workout,
+        sport=workout.sport,
+        duration_min=workout.duration_min,
+        distance_km=distance,
+        avg_heart_rate=pulse,
+    )

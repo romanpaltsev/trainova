@@ -30,6 +30,7 @@ from workouts.models import (
     ExerciseNote,
     StrengthSet,
     Workout,
+    cardio_parts_prefetch,
     collapse_spaces,
     parse_field_value,
     rest_display,
@@ -122,7 +123,8 @@ def sheet_rows(user):
     workouts = list(
         Workout.objects.filter(user=user)
         .finished()
-        .select_related("sport", "location", "cardio")
+        .select_related("sport", "location")
+        .prefetch_related(cardio_parts_prefetch())
         .order_by("started_at", "id")
     )
     if not workouts:
@@ -166,7 +168,9 @@ def _workout_rows(workout, sets, notes):
         # середину тренировки, она нужна там же, а не в первой строке сверху.
         "duration": workout.duration_min,
     }
-    cardio = getattr(workout, "cardio", None)
+    # Первая часть из prefetch'а: строкой кардио пока описывается только чистое
+    # кардио, у которого часть ровно одна.
+    cardio = next(iter(workout.cardio_parts.all()), None)
     if not sets:
         row = dict(common)
         row["distance"] = cardio.distance_km if cardio else None

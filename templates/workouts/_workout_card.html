@@ -33,7 +33,11 @@
         <dd class="num">{{ workout.workload.value }}</dd>
       </div>
     {% else %}
-      {% with cardio=workout.cardio %}
+      {% comment %}
+        Первая часть: карточка кардио сейчас описывает тренировку, у которой
+        часть ровно одна. Смешанная получит свою строку метрик отдельно.
+      {% endcomment %}
+      {% with cardio=workout.cardio_parts.all.0 %}
         <div>
           <dt>дистанция</dt>
           <dd class="num">{{ cardio.distance_display }} км</dd>

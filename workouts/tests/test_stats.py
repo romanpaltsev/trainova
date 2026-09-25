@@ -9,7 +9,7 @@ from django.utils import timezone
 from workouts import stats
 from workouts.models import Exercise, Sport
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     SportFactory,
     StrengthSetFactory,
@@ -97,13 +97,13 @@ def test_summary_tonnage_and_strength_count(user):
 
 
 def test_summary_distance_and_cardio_sport_names(user):
-    bike = CardioDetailsFactory(
+    bike = CardioPartFactory(
         workout__user=user,
         workout__started_at=local_dt(TODAY.year, TODAY.month, TODAY.day),
         workout__sport__name="Велосипед",
         distance_km=Decimal("32.4"),
     )
-    CardioDetailsFactory(
+    CardioPartFactory(
         workout__user=user,
         workout__started_at=local_dt(TODAY.year, TODAY.month, TODAY.day - 1),
         workout__sport__name="Бег",
@@ -153,7 +153,7 @@ def test_weekly_chart_returns_twelve_weeks_with_zero_fill(user, today):
 def test_weekly_chart_splits_hours_by_sport(user):
     monday = stats.week_start(TODAY)
     workout_on(user, monday, minutes=60)
-    CardioDetailsFactory(
+    CardioPartFactory(
         workout__user=user,
         workout__started_at=local_dt(monday.year, monday.month, monday.day + 1),
         workout__duration_min=30,
@@ -170,7 +170,7 @@ def test_weekly_chart_splits_hours_by_sport(user):
 def test_weekly_chart_orders_sports_strength_first_then_by_name(user):
     workout_on(user, TODAY, sport__name="Кроссфит", sport__owner=user)
     workout_on(user, TODAY - timedelta(days=1), sport__name="Силовая")
-    CardioDetailsFactory(
+    CardioPartFactory(
         workout__user=user,
         workout__started_at=local_dt(TODAY.year, TODAY.month, TODAY.day),
         workout__sport__name="Бег",
@@ -247,7 +247,7 @@ def test_latest_workouts_day_labels(user, days_ago, expected):
 def test_latest_workouts_metric_for_strength_and_cardio(user):
     strength = workout_on(user, TODAY, minutes=62)
     StrengthSetFactory(workout=strength, set_number=1, weight_kg=80, reps=10)
-    CardioDetailsFactory(
+    CardioPartFactory(
         workout__user=user,
         workout__started_at=local_dt(TODAY.year, TODAY.month, TODAY.day - 1),
         workout__duration_min=84,
@@ -346,7 +346,7 @@ def test_strength_records_ignore_other_users_sets(user, other_user):
 def test_cardio_records_take_max_distance_per_sport(user):
     bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
     for day, distance in ((TODAY, "32.4"), (TODAY - timedelta(days=3), "64")):
-        CardioDetailsFactory(
+        CardioPartFactory(
             workout__user=user,
             workout__started_at=local_dt(day.year, day.month, day.day),
             workout__sport=bike,
@@ -361,7 +361,7 @@ def test_cardio_records_take_max_distance_per_sport(user):
 
 
 def test_cardio_records_show_speed_above_threshold(user):
-    CardioDetailsFactory(
+    CardioPartFactory(
         workout__user=user,
         workout__sport__name="Велосипед",
         workout__duration_min=84,
@@ -375,7 +375,7 @@ def test_cardio_records_show_speed_above_threshold(user):
 
 
 def test_cardio_records_show_pace_below_threshold(user):
-    CardioDetailsFactory(
+    CardioPartFactory(
         workout__user=user,
         workout__sport__name="Бег",
         workout__duration_min=41,
@@ -392,7 +392,7 @@ def test_cardio_records_choose_unit_by_best_workout(user):
     """Один вид спорта, медленная и быстрая тренировки — юнит по лучшей."""
     bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
     for minutes, distance in ((60, "10"), (60, "20")):
-        CardioDetailsFactory(
+        CardioPartFactory(
             workout__user=user,
             workout__sport=bike,
             workout__duration_min=minutes,
@@ -405,13 +405,13 @@ def test_cardio_records_choose_unit_by_best_workout(user):
 
 
 def test_cardio_records_skip_zero_distance(user):
-    CardioDetailsFactory(workout__user=user, distance_km=0)
+    CardioPartFactory(workout__user=user, distance_km=0)
 
     assert stats.cardio_records(user) == []
 
 
 def test_cardio_records_ignore_other_users_workouts(user, other_user):
-    CardioDetailsFactory(workout__user=other_user, distance_km=10)
+    CardioPartFactory(workout__user=other_user, distance_km=10)
 
     assert stats.cardio_records(user) == []
 
@@ -483,7 +483,7 @@ def test_exercise_spotlight_picks_top_record_with_sparkline(user):
 
 
 def test_exercise_spotlight_is_none_without_strength_records(user):
-    CardioDetailsFactory(workout__user=user)
+    CardioPartFactory(workout__user=user)
 
     assert stats.exercise_spotlight(user) is None
 

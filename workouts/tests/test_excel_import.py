@@ -10,7 +10,7 @@ from django.utils import timezone
 from accounts.tests.factories import UserFactory
 from workouts import excel, excel_import
 from workouts.models import (
-    CardioDetails,
+    CardioPart,
     Exercise,
     ExerciseNote,
     Location,
@@ -153,7 +153,7 @@ def test_cardio_row_creates_details(user):
 
     report = run(user, [cardio_row()])
 
-    details = CardioDetails.objects.get()
+    details = CardioPart.objects.get()
     assert report.workouts == 1
     assert report.sets == 0
     assert details.distance_km == Decimal("24.50")
@@ -166,7 +166,7 @@ def test_cardio_without_distance_is_still_a_workout(user):
     run(user, [cardio_row(sport="Плавание", distance=None, pulse=None, duration=40)])
 
     assert Workout.objects.get(user=user).duration_min == 40
-    assert not CardioDetails.objects.exists()
+    assert not CardioPart.objects.exists()
 
 
 def test_unknown_sport_is_created_as_personal(user):
@@ -415,7 +415,13 @@ def test_round_trip_keeps_the_diary(user):
         started_at=timezone.make_aware(datetime.combine(date(2026, 9, 3), time(8, 0))),
         duration_min=60,
     )
-    CardioDetails.objects.create(workout=ride, distance_km=Decimal("24.50"), avg_heart_rate=142)
+    CardioPart.objects.create(
+        workout=ride,
+        sport=ride.sport,
+        duration_min=ride.duration_min,
+        distance_km=Decimal("24.50"),
+        avg_heart_rate=142,
+    )
 
     book = excel.build_workbook(user)
     buffer = io.BytesIO()

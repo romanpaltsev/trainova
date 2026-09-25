@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from workouts.models import Workout
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -136,7 +136,7 @@ def test_summary_of_other_users_workout_is_404(client, user, other_user):
 
 def test_summary_for_cardio_is_404(client, user):
     client.force_login(user)
-    cardio = CardioDetailsFactory(workout__user=user).workout
+    cardio = CardioPartFactory(workout__user=user).workout
 
     response = client.get(reverse("workout_summary", args=[cardio.pk]))
 

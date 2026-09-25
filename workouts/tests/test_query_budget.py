@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from workouts.models import Sport
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     ExerciseNoteFactory,
     LocationFactory,
@@ -30,7 +30,7 @@ def fill_history(user, weeks=6):
             StrengthSetFactory(
                 workout=workout, exercise=exercise, set_number=number, weight_kg=70 + week, reps=8
             )
-        CardioDetailsFactory(
+        CardioPartFactory(
             workout__user=user, workout__started_at=started - timedelta(days=2), distance_km=10
         )
     return bench
@@ -49,7 +49,7 @@ def fill_drafts(user, count=1):
     for index in range(count):
         strength = WorkoutFactory(user=user, started_at=None, duration_min=None)
         StrengthSetFactory(workout=strength, exercise=bench, set_number=1, done=False)
-        CardioDetailsFactory(
+        CardioPartFactory(
             workout__user=user,
             workout__sport=bike,
             workout__started_at=None,
@@ -63,15 +63,18 @@ def fill_drafts(user, count=1):
 def test_dashboard_query_budget(client, user, django_assert_max_num_queries, drafts):
     """Дашборд собирает подготовленное, сводку, график, рекорды и последние.
 
-    Два последних запроса — подписи по группам мышц: по одному агрегату на блок
-    «Подготовлено» и на «Последние тренировки», а не по строке. Число черновиков
-    параметризовано: именно оно поймало бы N+1 по цели кардио-плана.
+    Два запроса — подписи по группам мышц: по одному агрегату на блок
+    «Подготовлено» и на «Последние тренировки», а не по строке. Ещё четыре —
+    кардио-части: prefetch на те же два блока и по запросу на окна сводки и на
+    график, где части забираются отдельно от тренировок (джойн размножил бы
+    строки и задвоил минуты). Число черновиков параметризовано: именно оно
+    поймало бы N+1 по цели кардио-плана.
     """
     fill_history(user)
     fill_drafts(user, drafts)
 
     client.force_login(user)
-    with django_assert_max_num_queries(18):
+    with django_assert_max_num_queries(22):
         client.get(reverse("dashboard"))
 
 
@@ -80,7 +83,7 @@ def test_dashboard_queries_do_not_scale_with_history(client, user, django_assert
     fill_drafts(user, 4)
 
     client.force_login(user)
-    with django_assert_max_num_queries(18):
+    with django_assert_max_num_queries(22):
         client.get(reverse("dashboard"))
 
 
@@ -173,7 +176,7 @@ def test_start_modal_query_budget(client, user, django_assert_max_num_queries, d
 
     Черновики обоих видов: силовой подписан составом, кардио — целью по
     дистанции, и цель обязана приходить тем же запросом (select_related), иначе
-    каждая строка плана спрашивала бы свою CardioDetails отдельно.
+    каждая строка плана спрашивала бы свою CardioPart отдельно.
     """
     fill_history(user)
     for _ in range(drafts):
@@ -185,11 +188,10 @@ def test_start_modal_query_budget(client, user, django_assert_max_num_queries, d
             duration_min=None,
             sport__category=Sport.Category.CARDIO,
         )
-        CardioDetailsFactory(workout=cardio_plan, distance_km=30)
-        # План без цели по дистанции — строки CardioDetails у него нет вовсе.
-        # select_related кеширует промах как None, поэтому getattr не делает
-        # дополнительного запроса; этот черновик здесь ровно затем, чтобы
-        # проверка не сломалась молча, если select_related когда-нибудь уберут.
+        CardioPartFactory(workout=cardio_plan, distance_km=30)
+        # План без цели по дистанции — частей у него нет вовсе. Prefetch отдаёт
+        # пустой список без отдельного запроса; этот черновик здесь ровно затем,
+        # чтобы проверка не сломалась молча, если prefetch когда-нибудь уберут.
         WorkoutFactory(
             user=user,
             started_at=None,
@@ -200,8 +202,9 @@ def test_start_modal_query_budget(client, user, django_assert_max_num_queries, d
 
     client.force_login(user)
     # Идущая тренировка и черновики берутся одним запросом с аннотацией, седьмой —
-    # подписи черновиков по группам мышц, тоже один на всех.
-    with django_assert_max_num_queries(7):
+    # подписи черновиков по группам мышц, восьмой — их кардио-части вместе с
+    # видами спорта: оба агрегата один на всех, а не по строке.
+    with django_assert_max_num_queries(8):
         client.get(reverse("workout_start"))
 
 
@@ -262,7 +265,7 @@ def test_history_query_budget(client, user, django_assert_max_num_queries, weeks
     fill_history(user, weeks=weeks)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(10):
         client.get(reverse("workout_history"))
 
 
@@ -278,7 +281,7 @@ def test_export_query_budget(client, user, django_assert_max_num_queries, weeks)
     client.force_login(user)
 
     # Семь: сессия, пользователь, транзакция запроса — и три на данные.
-    with django_assert_max_num_queries(7):
+    with django_assert_max_num_queries(8):
         response = client.get(reverse("workout_export"))
         b"".join(response.streaming_content)
 

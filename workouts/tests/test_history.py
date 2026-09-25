@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from workouts.models import Sport
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     LocationFactory,
     SportFactory,
@@ -53,7 +53,7 @@ def test_cardio_card_shows_distance_time_and_pace(client, user):
     client.force_login(user)
     run = SportFactory(name="Бег", category=Sport.Category.CARDIO)
     workout = WorkoutFactory(user=user, sport=run, duration_min=41)
-    CardioDetailsFactory(workout=workout, distance_km="7.2")
+    CardioPartFactory(workout=workout, distance_km="7.2")
 
     content = client.get(reverse("workout_history")).content.decode()
 
@@ -157,7 +157,7 @@ def test_feed_does_not_scale_queries_with_cards(client, user, django_assert_num_
     bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
     for _ in range(3):
         StrengthSetFactory(workout=WorkoutFactory(user=user, sport=strength), set_number=1)
-        CardioDetailsFactory(workout__user=user, workout__sport=bike)
+        CardioPartFactory(workout__user=user, workout__sport=bike)
 
     with CaptureQueriesContext(connection) as few:
         client.get(reverse("workout_history"))

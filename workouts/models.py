@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
@@ -14,6 +13,10 @@ from django.utils.timezone import localtime
 # Порог, а не поле в Sport: набор полей справочника зафиксирован в CLAUDE.md,
 # а личных видов спорта может быть сколько угодно. Дубль порога есть в static/js/cardio.js.
 SPEED_THRESHOLD_KMH = Decimal("14")
+# Прочерк вместо значения: «этой метрики у тренировки нет». Константа, а не
+# литерал, потому что по ней же отличают пустую метрику от настоящей — например
+# собирая подпись смешанной тренировки из силовой и кардио-частей.
+NO_VALUE = "—"
 
 # Цветовой токен закреплён за видом спорта, а не за порядком в наборе.
 GLOBAL_SPORT_COLORS = {
@@ -264,7 +267,7 @@ REQUIRED_FIELD = {
 
 # Метрика упражнения — поле подхода, по которому считаются рекорд и прогресс,
 # и подпись к нему. Тот же приём, что у кардио: единица выбирается по данным,
-# а не зашита в шаблон (ср. CardioDetails.metric_label).
+# а не зашита в шаблон (ср. CardioPart.metric_label).
 METRIC_FIELDS = {
     Exercise.Measurement.WEIGHT_REPS: "weight_kg",
     Exercise.Measurement.REPS: "reps",
@@ -696,7 +699,7 @@ class Workout(models.Model):
         seconds = getattr(self, "total_duration", None) or 0
         if seconds:
             return {"label": "удержание", "value": rest_display(seconds)}
-        return {"label": "тоннаж", "value": "—"}
+        return {"label": "тоннаж", "value": NO_VALUE}
 
     @property
     def effective_rest_seconds(self):
@@ -792,10 +795,6 @@ class StrengthSet(models.Model):
 
     def __str__(self):
         return f"{self.exercise} · {self.set_number}: {self.value_display}"
-
-    def clean(self):
-        if self.workout_id and not self.workout.sport.is_strength:
-            raise ValidationError("Подходы бывают только у силовой тренировки.")
 
     @property
     def tonnage_kg(self):
@@ -1012,31 +1011,66 @@ class ExerciseSettings(models.Model):
         return f"{self.exercise} · шаг {decimal_display(self.weight_step)} кг"
 
 
-class CardioDetails(models.Model):
-    workout = models.OneToOneField(
+class CardioPart(models.Model):
+    """Кардио-часть тренировки: бег, велосипед, лыжи — со своим временем.
+
+    Частей у тренировки может быть сколько угодно, и это главное: занятие
+    «разминка бегом → штанга → заминка на велосипеде» записывается одной
+    тренировкой, а не тремя. Силовая часть своей модели не получает — она и
+    есть подходы (`StrengthSet`), и пустой контейнер ей не нужен.
+
+    «Смешанность» нигде не хранится флагом: она выводится из того, что у
+    тренировки есть и подходы, и части, — тем же приёмом, каким три состояния
+    тренировки выводятся из двух колонок.
+
+    Порядок частей — порядок ввода (`id`): сделал разминку — добавил её первой.
+    Отдельной метки времени намеренно нет, и это тот же компромисс, что у
+    `exercise_order_key`: у всего, что внесено задним числом или импортом из
+    Excel, метки не существует, а смешанные тренировки как раз чаще вносят
+    постфактум.
+    """
+
+    workout = models.ForeignKey(
         Workout,
         verbose_name="тренировка",
         on_delete=models.CASCADE,
-        related_name="cardio",
+        related_name="cardio_parts",
     )
+    # Свой вид спорта, а не вид спорта тренировки: у смешанной тот силовой, и
+    # умолчание «взять у тренировки» приписало бы пробежку «Силовой» —
+    # и в рекордах, и в цвете точки.
+    sport = models.ForeignKey(
+        Sport,
+        verbose_name="вид спорта",
+        on_delete=models.PROTECT,
+        related_name="cardio_parts",
+    )
+    # Дистанция необязательна: «двадцать минут на дорожке, не мерил» — законная
+    # часть, а удалить строку, как раньше, уже нельзя: она несёт вид спорта и
+    # время.
     distance_km = models.DecimalField(
         "дистанция, км",
         max_digits=6,
         decimal_places=2,
+        null=True,
+        blank=True,
         validators=[MinValueValidator(0)],
     )
+    # Длительность самой части. NULL = не указана: так выглядит цель по
+    # дистанции у плана, где длительности нет и у тренировки. У всего
+    # записанного поле заполнено — это сделала миграция, — поэтому скорость и
+    # темп считаются по нему и больше не могут соврать на смешанной
+    # тренировке, где общее время включает силовую часть.
+    duration_min = models.PositiveIntegerField("длительность, мин", null=True, blank=True)
     avg_heart_rate = models.PositiveSmallIntegerField("средний пульс", null=True, blank=True)
 
     class Meta:
-        verbose_name = "детали кардио"
-        verbose_name_plural = "детали кардио"
+        verbose_name = "кардио-часть"
+        verbose_name_plural = "кардио-части"
+        ordering = ["id"]
 
     def __str__(self):
-        return f"{self.distance_km} км"
-
-    def clean(self):
-        if self.workout_id and self.workout.sport.is_strength:
-            raise ValidationError("Детали кардио бывают только у кардио-тренировки.")
+        return f"{self.sport} · {self.distance_display} км"
 
     @property
     def distance(self):
@@ -1054,19 +1088,22 @@ class CardioDetails(models.Model):
     @property
     def speed_kmh(self):
         """Средняя скорость, км/ч."""
-        minutes = self.workout.duration_min
-        if not minutes or not self.distance:
+        if not self.duration_min or not self.distance:
             return None
-        return (self.distance * 60 / Decimal(minutes)).quantize(Decimal("0.1"))
+        return (self.distance * 60 / Decimal(self.duration_min)).quantize(Decimal("0.1"))
 
     @property
     def pace_seconds_per_km(self):
-        """Темп в секундах на километр."""
-        # duration_min теперь nullable: чужими руками (админка) кардио без
-        # длительности возможно, и деление не должно ронять страницу.
-        if not self.workout.duration_min or not self.distance:
+        """Темп в секундах на километр.
+
+        Считается по времени САМОЙ части, а не тренировки: у смешанной общее
+        время включает силовую, и пять километров за 25 минут превратились бы в
+        темп 18:00 — молча, без единой ошибки в логах. Пустая длительность
+        (цель плана, правка через админку) даёт None, а не деление на ноль.
+        """
+        if not self.duration_min or not self.distance:
             return None
-        return int(self.workout.duration_min * 60 / self.distance)
+        return int(self.duration_min * 60 / self.distance)
 
     @property
     def pace_display(self):
@@ -1093,6 +1130,17 @@ class CardioDetails(models.Model):
             return f"{self.speed_kmh} км/ч".replace(".", ",")
         pace = self.pace_display
         return f"{pace} /км" if pace else "—"
+
+
+def cardio_parts_prefetch():
+    """Кардио-части вместе с их видами спорта — одним запросом на страницу.
+
+    Голый `prefetch_related("cardio_parts__sport")` стоит двух запросов: строки
+    частей и строки видов спорта. Видов спорта единицы, поэтому дешевле забрать
+    их тем же запросом. Функция, а не константа: объект Prefetch переиспользуют
+    несколько разных queryset'ов, и общий экземпляр между ними — лишний риск.
+    """
+    return models.Prefetch("cardio_parts", queryset=CardioPart.objects.select_related("sport"))
 
 
 class ChangelogQuerySet(models.QuerySet):

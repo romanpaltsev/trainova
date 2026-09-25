@@ -9,7 +9,7 @@ from django.utils import timezone
 from workouts import stats
 from workouts.models import Sport
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -106,7 +106,7 @@ def test_workout_without_any_group_has_no_label(user):
 
 def test_cardio_workout_has_no_label(user):
     """У кардио подходов нет, значит и групп мышц не бывает."""
-    cardio = CardioDetailsFactory(workout__user=user).workout
+    cardio = CardioPartFactory(workout__user=user).workout
 
     assert label_for(cardio) == ""
 
@@ -171,7 +171,7 @@ def test_history_card_falls_back_to_sport_name(client, user):
 
 def test_cardio_card_keeps_sport_name(client, user):
     """Кардио-карточка подписана видом спорта, а не пустотой."""
-    CardioDetailsFactory(
+    CardioPartFactory(
         workout__user=user,
         workout__sport__name="Велосипед",
         workout__sport__category=Sport.Category.CARDIO,

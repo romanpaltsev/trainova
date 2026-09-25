@@ -9,7 +9,7 @@ from django.utils import timezone
 from workouts import services
 from workouts.models import Sport, Workout
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -80,7 +80,7 @@ def test_repeat_of_other_users_workout_is_404(client, user, other_user):
 
 def test_repeat_of_cardio_or_unfinished_is_404(client, user):
     client.force_login(user)
-    cardio = CardioDetailsFactory(workout__user=user).workout
+    cardio = CardioPartFactory(workout__user=user).workout
     unfinished = WorkoutFactory(user=user, duration_min=None)
 
     assert client.post(reverse("workout_repeat", args=[cardio.pk])).status_code == 404
@@ -90,7 +90,7 @@ def test_repeat_of_cardio_or_unfinished_is_404(client, user):
 def test_history_strength_card_has_repeat_and_open_buttons(client, user):
     client.force_login(user)
     strength = WorkoutFactory(user=user)
-    cardio = CardioDetailsFactory(workout__user=user).workout
+    cardio = CardioPartFactory(workout__user=user).workout
 
     content = client.get(reverse("workout_history")).content.decode()
 

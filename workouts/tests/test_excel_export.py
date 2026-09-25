@@ -12,7 +12,7 @@ from accounts.tests.factories import UserFactory
 from workouts import excel
 from workouts.models import Exercise, Sport
 from workouts.tests.factories import (
-    CardioDetailsFactory,
+    CardioPartFactory,
     ExerciseFactory,
     ExerciseNoteFactory,
     LocationFactory,
@@ -143,7 +143,7 @@ def test_time_weight_set_keeps_both_values(user):
 def test_cardio_workout_gives_single_row(user):
     sport = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
     workout = WorkoutFactory(user=user, sport=sport, started_at=moment(3), duration_min=60)
-    CardioDetailsFactory(workout=workout, distance_km=24.5, avg_heart_rate=142)
+    CardioPartFactory(workout=workout, distance_km=24.5, avg_heart_rate=142)
 
     rows = rows_of(sheet_of(user))
 

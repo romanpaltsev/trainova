@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from accounts.tests.factories import UserFactory
 from workouts.models import (
-    CardioDetails,
+    CardioPart,
     ChangelogEntry,
     Exercise,
     ExerciseNote,
@@ -111,11 +111,20 @@ class ExerciseNoteFactory(factory.django.DjangoModelFactory):
     text = "Болело плечо"
 
 
-class CardioDetailsFactory(factory.django.DjangoModelFactory):
+class CardioPartFactory(factory.django.DjangoModelFactory):
+    """Кардио-часть. По умолчанию — единственная часть чистого кардио.
+
+    Вид спорта и длительность берутся у тренировки: так выглядит вся история
+    до появления частей, и так же их проставила миграция. У смешанной
+    тренировки то и другое задаётся явно.
+    """
+
     class Meta:
-        model = CardioDetails
+        model = CardioPart
 
     workout = factory.SubFactory(WorkoutFactory, sport__category=Sport.Category.CARDIO)
+    sport = factory.SelfAttribute("workout.sport")
+    duration_min = factory.SelfAttribute("workout.duration_min")
     distance_km = 10
     avg_heart_rate = 140
 

@@ -10,7 +10,7 @@ from django.utils import timezone
 from openpyxl import Workbook
 
 from workouts import excel
-from workouts.models import Workout
+from workouts.models import Workout, cardio_parts_prefetch
 
 KEYS = [column.key for column in excel.COLUMNS]
 TITLES = [column.title for column in excel.COLUMNS]
@@ -49,11 +49,12 @@ def dump(user):
     workouts = (
         Workout.objects.filter(user=user)
         .finished()
-        .select_related("sport", "location", "cardio")
+        .select_related("sport", "location")
+        .prefetch_related(cardio_parts_prefetch())
         .order_by("started_at", "id")
     )
     for workout in workouts:
-        cardio = getattr(workout, "cardio", None)
+        cardio = next(iter(workout.cardio_parts.all()), None)
         snapshot.append(
             {
                 "started_at": timezone.localtime(workout.started_at).replace(

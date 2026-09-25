@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from workouts.models import (
-    CardioDetails,
+    CardioPart,
     ChangelogEntry,
     Exercise,
     ExerciseNote,
@@ -84,11 +84,13 @@ class ExerciseNoteInline(admin.TabularInline):
     fields = ("exercise", "text")
 
 
-class CardioDetailsInline(admin.StackedInline):
-    model = CardioDetails
+class CardioPartInline(admin.TabularInline):
+    """Табличный, а не стопкой: частей у тренировки может быть несколько."""
+
+    model = CardioPart
     extra = 0
-    max_num = 1
-    fields = ("distance_km", "avg_heart_rate")
+    autocomplete_fields = ("sport",)
+    fields = ("sport", "distance_km", "duration_min", "avg_heart_rate")
 
 
 @admin.register(Workout)
@@ -101,7 +103,7 @@ class WorkoutAdmin(admin.ModelAdmin):
     # location в list_filter не идёт: у каждого пользователя свои места,
     # и фильтр разбух бы объединением всех справочников.
     autocomplete_fields = ("user", "sport", "location")
-    inlines = (StrengthSetInline, ExerciseNoteInline, CardioDetailsInline)
+    inlines = (StrengthSetInline, ExerciseNoteInline, CardioPartInline)
 
     @admin.display(description="состояние")
     def state(self, obj):
@@ -112,11 +114,13 @@ class WorkoutAdmin(admin.ModelAdmin):
 
     @admin.display(description="содержимое")
     def summary(self, obj):
-        if obj.sport.is_strength:
-            count = obj.sets.count()
-            return f"{count} подх." if count else "—"
-        cardio = getattr(obj, "cardio", None)
-        return f"{cardio.distance_km} км" if cardio else "—"
+        """Подходы и кардио-части разом: у смешанной тренировки есть и то, и другое."""
+        parts = []
+        count = obj.sets.count()
+        if count:
+            parts.append(f"{count} подх.")
+        parts += [str(part) for part in obj.cardio_parts.all()]
+        return " · ".join(parts) or "—"
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("sport", "user")

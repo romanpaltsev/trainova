@@ -14,12 +14,15 @@ from django.utils import formats, timezone
 from workouts.models import (
     METRIC_FIELDS,
     METRIC_LABELS,
+    NO_VALUE,
     SPEED_THRESHOLD_KMH,
+    CardioPart,
     Exercise,
     ExerciseNote,
     Sport,
     StrengthSet,
     Workout,
+    cardio_parts_prefetch,
     decimal_display,
     exercise_order_key,
     metric_display,
@@ -104,34 +107,52 @@ def _split_windows(user, current_start, previous_start, last_day):
         Workout.objects.filter(user=user)
         .finished()
         .filter(started_at__gte=start, started_at__lt=end)
-        .values_list("id", "started_at", "duration_min", "sport_id", "cardio__distance_km")
+        .values_list("id", "started_at", "duration_min")
     )
-    sports = Sport.objects.in_bulk({sport_id for *_, sport_id, _ in rows})
+    workout_ids = [row[0] for row in rows]
     tonnage_by_workout = dict(
-        StrengthSet.objects.filter(workout_id__in=[row[0] for row in rows])
+        StrengthSet.objects.filter(workout_id__in=workout_ids)
         .values_list("workout_id")
         .annotate(
             # Инвариант живого режима: в завершённых тренировках только выполненные подходы.
             value=Coalesce(Sum(F("weight_kg") * F("reps"), output_field=DecimalField()), Decimal(0))
         )
     )
-
+    # Кардио-части — отдельным запросом, а не джойном к выборке тренировок:
+    # частей у тренировки может быть несколько, и джойн размножил бы строки,
+    # задвоив минуты и тоннаж. Тот же довод, по которому отдельно считается
+    # тоннаж.
+    cardio_rows = list(
+        CardioPart.objects.filter(workout_id__in=workout_ids).values_list(
+            "workout_id", "sport_id", "distance_km"
+        )
+    )
+    # Вид спорта самой тренировки здесь больше не нужен: «силовая» выводится из
+    # наличия подходов, а имена для плитки дают виды спорта частей.
+    sports = Sport.objects.in_bulk({sport_id for _, sport_id, _ in cardio_rows})
+    # Ключи тоннажа — это и есть «у тренировки были подходы»: лишнего запроса
+    # на признак силовой части не нужно.
     windows = {"current": _empty_totals(), "previous": _empty_totals()}
     cardio_names = {"current": set(), "previous": set()}
-    for workout_id, started_at, duration, sport_id, distance in rows:
+    window_by_workout = {}
+    for workout_id, started_at, duration in rows:
         local_date = timezone.localtime(started_at).date()
         key = "current" if local_date >= current_start else "previous"
+        window_by_workout[workout_id] = key
         totals = windows[key]
         totals["count"] += 1
         totals["minutes"] += duration
-        totals["tonnage"] += tonnage_by_workout.get(workout_id, Decimal(0))
-        sport = sports[sport_id]
-        if sport.is_strength:
+        tonnage = tonnage_by_workout.get(workout_id)
+        if tonnage is not None:
+            # Силовая часть есть — считаем тренировку силовой. У смешанной это
+            # не мешает ей попасть и в дистанцию ниже: обе метрики законны.
+            totals["tonnage"] += tonnage
             totals["strength_count"] += 1
-        else:
-            cardio_names[key].add(sport.name)
-            if distance:
-                totals["distance"] += distance
+    for workout_id, sport_id, distance in cardio_rows:
+        key = window_by_workout[workout_id]
+        cardio_names[key].add(sports[sport_id].name)
+        if distance:
+            windows[key]["distance"] += distance
     for key, names in cardio_names.items():
         windows[key]["cardio_sports"] = sorted(names)
     return windows
@@ -191,18 +212,42 @@ def weekly_chart(user, today=None, weeks=12):
         Workout.objects.filter(user=user)
         .finished()
         .filter(started_at__gte=start, started_at__lt=end)
-        .values_list("started_at", "duration_min", "sport_id")
+        .values_list("id", "started_at", "duration_min", "sport_id")
     )
-    sports = Sport.objects.in_bulk({sport_id for _, _, sport_id in rows})
+    # Части — отдельным запросом: джойн размножил бы строки тренировок и
+    # задвоил минуты. Тот же довод, что в _split_windows.
+    part_rows = list(
+        CardioPart.objects.filter(workout_id__in=[row[0] for row in rows]).values_list(
+            "workout_id", "sport_id", "duration_min"
+        )
+    )
+    parts_by_workout = {}
+    for workout_id, sport_id, duration in part_rows:
+        parts_by_workout.setdefault(workout_id, []).append((sport_id, duration or 0))
+    sports = Sport.objects.in_bulk(
+        {row[3] for row in rows} | {sport_id for _, sport_id, _ in part_rows}
+    )
 
     index = {monday: position for position, monday in enumerate(mondays)}
     minutes = {}  # (sport_id, позиция недели) -> минуты
-    for started_at, duration, sport_id in rows:
+    for workout_id, started_at, duration, sport_id in rows:
         # Неделя определяется по локальной дате: started_at хранится в UTC,
         # и тренировка в понедельник 00:10 МСК — это ещё воскресенье по UTC.
         monday = week_start(timezone.localtime(started_at).date())
-        key = (sport_id, index[monday])
-        minutes[key] = minutes.get(key, 0) + duration
+        position = index[monday]
+        parts = parts_by_workout.get(workout_id, [])
+        for part_sport_id, part_duration in parts:
+            key = (part_sport_id, position)
+            minutes[key] = minutes.get(key, 0) + part_duration
+        # Виду спорта-хозяину достаётся остаток: у смешанной это силовая часть,
+        # у чистого кардио — ровно ноль, поэтому столбцы прежней истории не
+        # сдвигаются ни на минуту. max нужен на случай, когда части длиннее
+        # тренировки (правка через админку): отрицательных часов в стеке быть
+        # не должно.
+        rest = max(0, duration - sum(part_duration for _, part_duration in parts))
+        if rest or not parts:
+            key = (sport_id, position)
+            minutes[key] = minutes.get(key, 0) + rest
 
     ordered = sorted(sports.values(), key=lambda sport: (not sport.is_strength, sport.name))
     datasets = [
@@ -239,10 +284,15 @@ def workout_row(workout, today):
     else:
         day_label = formats.date_format(local_date, "j b")
 
-    if workout.sport.is_strength:
-        metric = workout.workload["value"]
-    else:
-        metric = f"{workout.cardio.distance_display} км"
+    # Метрика собирается из того, что в тренировке есть: у смешанной это и
+    # тоннаж, и дистанции частей. Пустой список невозможен — тренировка без
+    # подходов и без частей не записывается.
+    pieces = []
+    workload = workout.workload["value"]
+    if workload != NO_VALUE:
+        pieces.append(workload)
+    pieces += [f"{part.distance_display} км" for part in workout.cardio_parts.all()]
+    metric = " · ".join(pieces) if pieces else NO_VALUE
     return {
         "workout": workout,
         # Силовая подписывается группами мышц (attach_muscle_groups), иначе весь
@@ -260,7 +310,8 @@ def latest_workouts(user, today=None, limit=5):
     workouts = (
         Workout.objects.filter(user=user)
         .finished()
-        .select_related("sport", "cardio")
+        .select_related("sport")
+        .prefetch_related(cardio_parts_prefetch())
         .annotate(**WORKLOAD_ANNOTATIONS)
         .order_by("-started_at", "-id")[:limit]
     )
@@ -322,16 +373,18 @@ def cardio_records(user):
     Темп = 3600 / скорость, поэтому максимум скорости и лучший темп — одна и та же
     тренировка: хватает одной агрегации, а порог решает, в чём показывать.
     """
+    # Считаем по колонкам самой части: вид спорта у неё свой, и длительность
+    # своя. Из-за этого рекорд темпа у смешанной тренировки больше не может
+    # оказаться ложным, а по силовому виду спорта рекорд не построится вовсе.
     rows = (
-        Workout.objects.filter(user=user)
-        .finished()
-        .filter(cardio__distance_km__gt=0, duration_min__gt=0)
+        CardioPart.objects.filter(workout__user=user, workout__duration_min__isnull=False)
+        .filter(distance_km__gt=0, duration_min__gt=0)
         .values("sport_id")
         .annotate(
-            max_distance=Max("cardio__distance_km"),
+            max_distance=Max("distance_km"),
             best_speed=Max(
                 ExpressionWrapper(
-                    F("cardio__distance_km") * 60.0 / F("duration_min"),
+                    F("distance_km") * 60.0 / F("duration_min"),
                     output_field=FloatField(),
                 )
             ),
@@ -341,7 +394,7 @@ def cardio_records(user):
     records = []
     for row in rows:
         sport = sports[row["sport_id"]]
-        # Квантуем до 0,1 ДО сравнения с порогом — ровно как CardioDetails.shows_speed,
+        # Квантуем до 0,1 ДО сравнения с порогом — ровно как CardioPart.shows_speed,
         # иначе на границе (13,95…14,0) карточка и рекорд разошлись бы в юнитах.
         speed = Decimal(str(row["best_speed"])).quantize(Decimal("0.1"))
         if speed >= SPEED_THRESHOLD_KMH:

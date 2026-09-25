@@ -8,8 +8,8 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from workouts.models import CardioDetails, Sport, Workout
-from workouts.tests.factories import CardioDetailsFactory, SportFactory, WorkoutFactory
+from workouts.models import CardioPart, Sport, Workout
+from workouts.tests.factories import CardioPartFactory, SportFactory, WorkoutFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -42,9 +42,9 @@ def test_cardio_workout_is_created(client, user, bike):
     assert workout.sport == bike
     assert workout.duration_min == 84
     assert workout.note == "Круг вдоль набережной"
-    assert workout.cardio.distance_km == Decimal("32.40")
-    assert workout.cardio.avg_heart_rate == 142
-    assert workout.cardio.metric_display == "23,1 км/ч"
+    assert workout.cardio_parts.get().distance_km == Decimal("32.40")
+    assert workout.cardio_parts.get().avg_heart_rate == 142
+    assert workout.cardio_parts.get().metric_display == "23,1 км/ч"
 
 
 def test_cardio_workout_defaults_to_today(client, user, bike):
@@ -126,7 +126,7 @@ def test_other_users_sport_cannot_be_used(client, user, other_user):
 
 def test_workout_can_be_edited(client, user, bike):
     client.force_login(user)
-    cardio = CardioDetailsFactory(workout__user=user, workout__sport=bike, distance_km=10)
+    cardio = CardioPartFactory(workout__user=user, workout__sport=bike, distance_km=10)
     workout = cardio.workout
 
     response = client.post(
@@ -136,10 +136,9 @@ def test_workout_can_be_edited(client, user, bike):
 
     assert response.status_code == 302
     workout.refresh_from_db()
-    workout.cardio.refresh_from_db()
     assert workout.duration_min == 120
-    assert workout.cardio.distance_km == Decimal("42.20")
-    assert CardioDetails.objects.count() == 1
+    assert workout.cardio_parts.get().distance_km == Decimal("42.20")
+    assert CardioPart.objects.count() == 1
 
 
 def test_time_field_sets_the_exact_moment(client, user, bike):
@@ -158,7 +157,7 @@ def test_editing_keeps_the_recorded_time(client, user, bike):
     при каждом сохранении уезжала на полдень."""
     client.force_login(user)
     yesterday = timezone.localdate() - timedelta(days=1)
-    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+    workout = CardioPartFactory(workout__user=user, workout__sport=bike).workout
     workout.started_at = timezone.make_aware(datetime.combine(yesterday, time(19, 30)))
     workout.save()
 
@@ -173,7 +172,7 @@ def test_editing_keeps_the_recorded_time(client, user, bike):
 
 def test_edit_form_is_prefilled(client, user, bike):
     client.force_login(user)
-    cardio = CardioDetailsFactory(
+    cardio = CardioPartFactory(
         workout__user=user, workout__sport=bike, distance_km=25, avg_heart_rate=131
     )
     cardio.workout.duration_min = 95
@@ -189,7 +188,7 @@ def test_edit_form_is_prefilled(client, user, bike):
 
 def test_workout_is_deleted_after_confirmation(client, user, bike):
     client.force_login(user)
-    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+    workout = CardioPartFactory(workout__user=user, workout__sport=bike).workout
 
     confirm = client.get(reverse("workout_delete", args=[workout.pk]))
     assert confirm.status_code == 200
@@ -199,7 +198,7 @@ def test_workout_is_deleted_after_confirmation(client, user, bike):
 
     assert response.status_code == 302
     assert not Workout.objects.exists()
-    assert not CardioDetails.objects.exists()
+    assert not CardioPart.objects.exists()
 
 
 @pytest.mark.parametrize("url_name", ["workout_edit", "workout_delete"])
@@ -306,7 +305,7 @@ def test_preselect_does_not_override_edited_workout(client, user, bike):
     """На правке ?sport= игнорируется: переданный initial перебил бы вид тренировки."""
     client.force_login(user)
     run = SportFactory(name="Бег", category=Sport.Category.CARDIO, owner=None)
-    workout = CardioDetailsFactory(workout__user=user, workout__sport=bike).workout
+    workout = CardioPartFactory(workout__user=user, workout__sport=bike).workout
 
     response = client.get(reverse("workout_edit", args=[workout.pk]), {"sport": run.pk})
 
