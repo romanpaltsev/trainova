@@ -9,7 +9,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from workouts.models import CardioPart, Sport, Workout
-from workouts.tests.factories import CardioPartFactory, SportFactory, WorkoutFactory
+from workouts.tests.factories import (
+    CardioPartFactory,
+    SportFactory,
+    StrengthSetFactory,
+    WorkoutFactory,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -211,9 +216,15 @@ def test_other_users_workout_is_not_reachable(client, user, other_user, url_name
     assert Workout.objects.filter(pk=alien.pk).exists()
 
 
-def test_strength_workout_has_no_cardio_edit_screen(client, user):
+def test_workout_with_sets_has_no_cardio_edit_screen(client, user):
+    """Дом тренировки с подходами — живой режим и итог, а не эта форма.
+
+    Дискриминатор — подходы, а не категория: у смешанной тренировки вид спорта
+    силовой, и форма кардио подменила бы собой экран, где живут подходы.
+    """
     client.force_login(user)
     strength = WorkoutFactory(user=user, sport__category=Sport.Category.STRENGTH)
+    StrengthSetFactory(workout=strength, set_number=1)
 
     assert client.get(reverse("workout_edit", args=[strength.pk])).status_code == 404
 

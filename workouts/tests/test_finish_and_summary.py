@@ -134,10 +134,16 @@ def test_summary_of_other_users_workout_is_404(client, user, other_user):
     assert response.status_code == 404
 
 
-def test_summary_for_cardio_is_404(client, user):
+def test_summary_of_cardio_leads_to_its_form(client, user):
+    """Адрес итога безопасен для любой записанной тренировки.
+
+    Раньше здесь был 404, и старая ссылка на кардио ломалась. Теперь экран
+    выбирается содержимым: подходов нет — значит дом это форма кардио.
+    """
     client.force_login(user)
     cardio = CardioPartFactory(workout__user=user).workout
 
     response = client.get(reverse("workout_summary", args=[cardio.pk]))
 
-    assert response.status_code == 404
+    assert response.status_code == 302
+    assert response.url == reverse("workout_edit", args=[cardio.pk])

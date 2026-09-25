@@ -113,6 +113,18 @@ urlpatterns = [
         name="workout_backdate",
     ),
     path("workouts/<int:pk>/time/", views.WorkoutTimeView.as_view(), name="workout_time"),
+    # Кардио-часть тренировки: добавить и поправить. Не под live/ — заминку
+    # дописывают и к уже записанной тренировке, как и место.
+    path(
+        "workouts/<int:pk>/cardio/",
+        views.WorkoutCardioPartView.as_view(),
+        name="workout_cardio_part",
+    ),
+    path(
+        "workouts/<int:pk>/cardio/<int:part_pk>/",
+        views.WorkoutCardioPartView.as_view(),
+        name="workout_cardio_part_edit",
+    ),
     path("workouts/<int:pk>/finish/", views.WorkoutFinishView.as_view(), name="workout_finish"),
     path("workouts/<int:pk>/summary/", views.WorkoutSummaryView.as_view(), name="workout_summary"),
     path("workouts/<int:pk>/repeat/", views.WorkoutRepeatView.as_view(), name="workout_repeat"),

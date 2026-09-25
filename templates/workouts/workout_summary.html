@@ -87,6 +87,8 @@
   {% include "includes/empty_state.html" with text="В этой тренировке нет записанных подходов." %}
 {% endfor %}
 
+{% include "workouts/_cardio_parts.html" %}
+
 <div class="app-form-actions">
   <form method="post" action="{% url 'workout_repeat' workout.pk %}">
     {% csrf_token %}

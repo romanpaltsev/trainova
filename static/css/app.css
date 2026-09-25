@@ -366,6 +366,55 @@ body {
   margin-top: 1.5rem;
 }
 
+/* Кардио-части тренировки: строка на каждую плюс кнопка добавления. Строка —
+   тихая кнопка во всю ширину карточки, как .app-live-set: это список, а не
+   набор действий, и рамка у каждой строки превратила бы его в частокол. */
+.app-cardio-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+  /* Те же отступы и тот же ритм, что у карточки упражнения: это соседние
+     блоки одного экрана, и разъезжаться им незачем. */
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.app-cardio-part {
+  display: flex;
+  align-items: center;
+  /* Переносим, а не ужимаем: «Велосипед · 9 км · 0:20 · 27,0 км/ч» на 375px в
+     строку не влезает, и без переноса от названия остаётся «Вел…». Влезает —
+     одна строка; не влезает — метрика уходит под название и остаётся целой. */
+  flex-wrap: wrap;
+  gap: var(--app-space-2);
+  min-height: var(--app-tap-target);
+  padding: var(--app-space-2) var(--app-space-3);
+  border: 0;
+  border-radius: var(--app-radius-field);
+  background-color: var(--app-raised);
+  color: var(--app-text);
+  text-align: left;
+}
+
+.app-cardio-part-name {
+  font-weight: 700;
+  /* Обрезка — последняя мера: сначала метрика уйдёт на вторую строку */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Метрика прижата к карандашу справа: так у всех строк одна вертикаль.
+   nowrap — чтобы «9 км · 0:20 · 27,0 км/ч» не переносилось на вторую строку и
+   строки частей не разъезжались по высоте: ужиматься должно название. */
+.app-cardio-part-meta {
+  margin-left: auto;
+  color: var(--app-text-secondary);
+  white-space: nowrap;
+}
+
+.app-cardio-add { margin-top: var(--app-space-1); }
+
 /* Предложение подготовить тренировку на введённый будущий день. Отделено от
    основной кнопки рамкой сверху: это другое намерение, а не второй способ
    сделать то же самое. Своего отступа снизу нет — его задаёт gap контейнера. */
@@ -1918,6 +1967,7 @@ body {
 .app-location-edit,
 .app-place-btn,
 .app-when-btn,
+.app-cardio-part,
 .app-workout,
 .app-latest-row,
 .app-records-item,
@@ -1983,6 +2033,7 @@ body {
   }
 
   .app-icon-btn:hover,
+  .app-cardio-part:hover,
   .app-pick-row:hover {
     background-color: var(--app-raised);
     color: var(--app-text);

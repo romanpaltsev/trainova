@@ -68,6 +68,13 @@
 
 {% if not workout.is_planned %}{% include "workouts/_live_rest.html" %}{% endif %}
 {% include "workouts/_live_exercises.html" %}
+{% comment %}
+  Кардио этой же тренировки: разминка до подходов или заминка после — одна
+  запись, а не вторая тренировка за тот же день. Блок стоит под упражнениями,
+  но порядок частей внутри него — порядок добавления, поэтому «сначала пробежка»
+  выражается тем, что её добавили первой.
+{% endcomment %}
+{% include "workouts/_cardio_parts.html" %}
 </div>
 {% endblock %}
 

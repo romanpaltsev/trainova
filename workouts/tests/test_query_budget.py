@@ -135,7 +135,7 @@ def test_live_screen_query_budget(client, user, django_assert_max_num_queries, q
         StrengthSetFactory(workout=active, exercise=exercise, set_number=number, done=False)
 
     client.force_login(user)
-    with django_assert_max_num_queries(8):
+    with django_assert_max_num_queries(9):
         client.get(reverse("workout_live", args=[active.pk]))
 
 
@@ -153,7 +153,7 @@ def test_live_screen_with_notes_query_budget(client, user, django_assert_max_num
         ExerciseNoteFactory(workout=active, exercise=exercise, text="заметка очереди")
 
     client.force_login(user)
-    with django_assert_max_num_queries(10):
+    with django_assert_max_num_queries(11):
         client.get(reverse("workout_live", args=[active.pk]))
 
 
@@ -166,7 +166,7 @@ def test_draft_screen_query_budget(client, user, django_assert_max_num_queries, 
         StrengthSetFactory(workout=planned, exercise=exercise, set_number=number, done=False)
 
     client.force_login(user)
-    with django_assert_max_num_queries(8):
+    with django_assert_max_num_queries(9):
         client.get(reverse("workout_live", args=[planned.pk]))
 
 
@@ -249,7 +249,8 @@ def test_workout_summary_query_budget(client, user, django_assert_max_num_querie
     client.force_login(user)
     # Восьмой — группы мышц для заголовка: на экране одной тренировки это один
     # запрос, зато правило подписи остаётся одно на все экраны.
-    with django_assert_max_num_queries(8):
+    # Девятый — кардио-части вместе с их видами спорта: один запрос на блок.
+    with django_assert_max_num_queries(9):
         client.get(reverse("workout_summary", args=[workout.pk]))
 
 

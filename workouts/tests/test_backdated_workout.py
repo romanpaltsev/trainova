@@ -325,6 +325,7 @@ def test_time_edit_shifts_done_at_marks(client, user, strength):
 def test_time_edit_form_is_prefilled(client, user, strength):
     started_at = timezone.make_aware(datetime(2026, 8, 12, 18, 40))
     workout = WorkoutFactory(user=user, sport=strength, started_at=started_at, duration_min=95)
+    StrengthSetFactory(workout=workout, set_number=1)
     client.force_login(user)
 
     response = client.get(reverse("workout_time", args=[workout.pk]))

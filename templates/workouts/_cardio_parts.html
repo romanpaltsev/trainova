@@ -1,0 +1,31 @@
+{% comment %}
+  Кардио-части тренировки: строка на каждую, плюс кнопка добавления. Один
+  партиал на живой экран и на итог — это тот же список, и разойтись им незачем.
+
+  Кнопка есть всегда, даже когда частей нет: это единственная точка входа для
+  человека, который ещё ничего не добавлял.
+{% endcomment %}
+<section class="app-card app-cardio-parts">
+  <div class="app-live-exercise-head">
+    <h2 class="app-live-exercise-name">Кардио</h2>
+  </div>
+  {% for part in workout.cardio_parts.all %}
+    <button type="button" class="app-cardio-part"
+            hx-get="{% url 'workout_cardio_part_edit' workout.pk part.pk %}"
+            hx-target="#modal" hx-swap="innerHTML">
+      <span class="app-sport-dot" style="--dot: var(--app-sport-{{ part.sport.color_key }})"></span>
+      <span class="app-cardio-part-name">{{ part.sport.name }}</span>
+      <span class="app-cardio-part-meta num">
+        {% if part.distance_km %}{{ part.distance_display }} км{% endif %}
+        {% if part.duration_display %} · {{ part.duration_display }}{% endif %}
+        {% if part.metric_display and part.distance_km %} · {{ part.metric_display }}{% endif %}
+      </span>
+      {% include "includes/pencil.html" %}
+    </button>
+  {% endfor %}
+  <button type="button" class="btn btn-quiet w-100 app-cardio-add"
+          hx-get="{% url 'workout_cardio_part' workout.pk %}"
+          hx-target="#modal" hx-swap="innerHTML">
+    + Кардио
+  </button>
+</section>

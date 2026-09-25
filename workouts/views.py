@@ -24,6 +24,7 @@ from django.views.generic import DeleteView, ListView, TemplateView, View
 from workouts import excel, excel_import, services, stats
 from workouts.forms import (
     MAX_DURATION_HOURS,
+    CardioPartForm,
     CardioWorkoutForm,
     ExerciseQuickForm,
     SportForm,
@@ -109,7 +110,12 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
         )
         sport_id = self.request.GET.get("sport")
         if sport_id and sport_id.isdecimal():
-            queryset = queryset.filter(sport_id=int(sport_id))
+            # Вид спорта ищем и у тренировки, и у её кардио-частей: смешанная
+            # записана как силовая, но по чипу «Бег» найтись обязана. distinct —
+            # из-за джойна по частям.
+            queryset = queryset.filter(
+                Q(sport_id=int(sport_id)) | Q(cardio_parts__sport_id=int(sport_id))
+            ).distinct()
         location_id = self.request.GET.get("location")
         if location_id and location_id.isdecimal():
             # Мусор и чужой id молча дают пустую ленту: queryset уже сужен по
@@ -137,8 +143,16 @@ class WorkoutHistoryView(LoginRequiredMixin, ListView):
             # Оба условия — в одном filter: два вызова подряд дали бы два JOIN'а,
             # то есть «есть моя тренировка И есть чья-то завершённая». Чип строится
             # только по записанным: у черновика карточек в ленте нет.
+            #
+            # Второе условие — виды спорта кардио-частей: бег, который был только
+            # заминкой внутри силовой, тоже обязан дать чип, иначе фильтр по нему
+            # недостижим.
             Sport.objects.filter(
-                workouts__user=self.request.user, workouts__duration_min__isnull=False
+                Q(workouts__user=self.request.user, workouts__duration_min__isnull=False)
+                | Q(
+                    cardio_parts__workout__user=self.request.user,
+                    cardio_parts__workout__duration_min__isnull=False,
+                )
             )
             .distinct()
             .order_by("name")
@@ -188,9 +202,11 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
         workout = get_object_or_404(
             Workout.objects.select_related("sport"), pk=self.kwargs["pk"], user=self.request.user
         )
-        if workout.sport.is_strength:
-            # Экран правки силовой тренировки появится вместе с живым режимом.
-            raise Http404("Правка силовой тренировки пока не поддерживается")
+        if owns_sets(workout):
+            # Дом тренировки с подходами — живой режим и итог. Эта форма
+            # спрашивает дату и длительность занятия целиком, и у смешанной она
+            # подменила бы собой экран, где живут подходы.
+            raise Http404("У тренировки с подходами свой экран")
         return workout
 
     def get(self, request, **kwargs):
@@ -345,27 +361,29 @@ def plan_day_label(day, today):
 def plan_label(workout, exercises_count=None):
     """Чем один черновик отличается от другого того же вида спорта.
 
-    Сначала плановый день, если задан, потом содержание: у силовой это состав,
-    у кардио — цели, которых может быть две, одна или ни одной. Обе цели
-    необязательные, поэтому «пусто» — законный ответ, как у силового черновика
-    без упражнений. Счётчик упражнений принимается аргументом: в чузере он
+    Сначала плановый день, если задан, потом содержание: состав упражнений и
+    цели кардио-частей. Ветвления по виду спорта тут нет — у смешанного
+    черновика есть и то, и другое. Все цели необязательные, поэтому «пусто» —
+    законный ответ. Счётчик упражнений принимается аргументом: в чузере он
     приходит аннотацией на всю выборку сразу.
     """
     parts = []
     if workout.planned_for:
         parts.append(plan_day_label(workout.planned_for, timezone.localdate()))
-    if workout.sport.is_strength:
-        if exercises_count is None:
-            exercises_count = workout.sets.values("exercise").distinct().count()
-        parts.append(exercises_label(exercises_count))
-        return " · ".join(parts)
-    # Частей нет — значит цели по дистанции не задавали.
-    targets = []
-    # all() по prefetch'у: у плана часть одна или её нет вовсе.
-    targets += [f"{part.distance_display} км" for part in workout.cardio_parts.all()]
+    if exercises_count is None:
+        exercises_count = workout.sets.values("exercise").distinct().count()
+    # Содержание собирается из того, что в черновике есть: состав, цели по
+    # дистанции, цель по времени. У смешанного будет и первое, и второе.
+    content = []
+    if exercises_count:
+        content.append(exercises_label(exercises_count))
+    # all() по prefetch'у: частей нет — значит цели по дистанции не задавали.
+    content += [f"{part.distance_display} км" for part in workout.cardio_parts.all()]
     if workout.target_duration_min:
-        targets.append(workout.target_duration_display)
-    parts.extend(targets or ["пусто"])
+        content.append(workout.target_duration_display)
+    # «Пусто» — только когда содержания нет вовсе: наготовить планов пачкой и
+    # заполнить по дороге законно.
+    parts.extend(content or ["пусто"])
     return " · ".join(parts)
 
 
@@ -376,11 +394,14 @@ def live_workout_or_404(request, pk):
     подготовка — это и есть добавление упражнений и правка весов.
     """
     return get_object_or_404(
-        Workout.objects.filter(user=request.user, sport__category=Sport.Category.STRENGTH)
+        Workout.objects.filter(STRENGTH_WORKOUT, user=request.user)
         .unfinished()
         # user — для отдыха по умолчанию и подсказок, иначе он тянется отдельным
         # запросом; location — для строки места в шапке, тем же запросом
-        .select_related("sport", "user", "location"),
+        .select_related("sport", "user", "location")
+        # Условие по подходам джойнит sets — без distinct тренировка с тремя
+        # подходами пришла бы тремя строками.
+        .distinct(),
         pk=pk,
     )
 
@@ -433,6 +454,26 @@ def live_region_response(request, workout, *, oob=False, restart_timer=False, er
             request=request,
         )
     return HttpResponse(html)
+
+
+def owns_sets(workout):
+    """Есть ли у тренировки силовая часть — то есть хотя бы один подход.
+
+    Дискриминатор навигации: экран тренировки выбирается содержимым, а не
+    категорией её вида спорта. С подходами дом тренировки — живой режим и итог,
+    без них — форма кардио. У смешанной подходы есть, и ответ однозначен.
+
+    Запросом, а не свойством модели: свойство читало бы подходы у каждой
+    карточки ленты и делало бы её N+1 — урок muscle_groups. Там, где строки уже
+    выбраны с аннотацией exercises_count, надо смотреть на неё.
+    """
+    return workout.sets.exists()
+
+
+# Силовая по виду спорта ИЛИ по содержимому: у смешанной тренировки вид спорта
+# силовой, но и у кардио-тренировки, в которую дописали подходы, живой режим
+# обязан работать.
+STRENGTH_WORKOUT = Q(sport__category=Sport.Category.STRENGTH) | Q(sets__isnull=False)
 
 
 def parse_day(raw):
@@ -601,10 +642,14 @@ class LiveWorkoutView(LoginRequiredMixin, View):
 
     def get(self, request, pk):
         workout = get_object_or_404(
-            Workout.objects.filter(user=request.user).select_related("sport", "user", "location"),
+            Workout.objects.filter(user=request.user)
+            .select_related("sport", "user", "location")
+            # Кардио-части блока «Кардио» — одним запросом вместе с их видами
+            # спорта, иначе каждая строка спрашивала бы свой.
+            .prefetch_related(cardio_parts_prefetch()),
             pk=pk,
         )
-        if not workout.sport.is_strength:
+        if not workout.sport.is_strength and not owns_sets(workout):
             raise Http404("Живой режим есть только у силовых тренировок")
         if workout.is_finished:
             return redirect("workout_summary", pk=workout.pk)
@@ -975,6 +1020,83 @@ class WorkoutLocationView(LoginRequiredMixin, View):
         return render(request, "workouts/_location_value.html", {"workout": workout, "oob": True})
 
 
+class WorkoutCardioPartView(LoginRequiredMixin, View):
+    """Кардио-часть тренировки: модалка на GET, сохранение и удаление на POST.
+
+    Схема та же, что у WorkoutLocationView, и тренировка так же берётся любая
+    своя в любом состоянии: дописать заминку к уже записанной тренировке нужно
+    по тому же доводу, по которому там же правится место — экрана правки
+    силовой в проекте нет.
+
+    Ответ — HX-Redirect, а не OOB-фрагмент: на экране меняются два разных куска,
+    список частей и плитка итогов. Тот же выбор, что у WorkoutTimeView.
+    """
+
+    def get_workout(self):
+        return get_object_or_404(
+            Workout.objects.filter(user=self.request.user).select_related("sport"),
+            pk=self.kwargs["pk"],
+        )
+
+    def get_part(self, workout):
+        """Правимая часть либо None — тогда это создание новой.
+
+        Часть ищется среди частей ЭТОЙ тренировки: чужая по прямому id даёт 404
+        и так, но лишний фильтр делает невозможной и подстановку своей части от
+        другой тренировки.
+        """
+        part_pk = self.kwargs.get("part_pk")
+        if part_pk is None:
+            return None
+        return get_object_or_404(workout.cardio_parts, pk=part_pk)
+
+    def render_modal(self, request, workout, form, part):
+        return render(
+            request,
+            "workouts/_cardio_part_modal.html",
+            {
+                "workout": workout,
+                "form": form,
+                "part": part,
+                "sports": form.fields["sport"].queryset,
+                "selected_sport_id": form["sport"].value(),
+            },
+        )
+
+    def get(self, request, pk, part_pk=None):
+        workout = self.get_workout()
+        part = self.get_part(workout)
+        form = CardioPartForm(user=request.user, workout=workout, instance=part)
+        return self.render_modal(request, workout, form, part)
+
+    def post(self, request, pk, part_pk=None):
+        workout = self.get_workout()
+        part = self.get_part(workout)
+        if part is not None and request.POST.get("delete"):
+            part.delete()
+            return self.done(request, workout, "Кардио убрано.")
+
+        form = CardioPartForm(request.POST, user=request.user, workout=workout, instance=part)
+        if not form.is_valid():
+            return self.render_modal(request, workout, form, part)
+        form.save()
+        return self.done(request, workout, "Кардио сохранено." if part else "Кардио добавлено.")
+
+    @staticmethod
+    def done(request, workout, message):
+        messages.success(request, message)
+        # Куда вернуться, решает содержимое тренировки — то же правило, что и у
+        # маршрутизации экранов: с подходами дом это живой режим или итог, без
+        # них — форма кардио.
+        if not workout.sets.exists():
+            url = reverse("workout_edit", args=[workout.pk])
+        elif workout.is_finished:
+            url = reverse("workout_summary", args=[workout.pk])
+        else:
+            url = reverse("workout_live", args=[workout.pk])
+        return HttpResponse(headers={"HX-Redirect": url})
+
+
 class WorkoutPlannedForView(LoginRequiredMixin, View):
     """День, на который подготовлен черновик: модалка на GET, сохранение на POST.
 
@@ -1044,9 +1166,7 @@ class WorkoutBackdateView(LoginRequiredMixin, View):
         # Только свой силовой черновик. У кардио тренировка вводится формой
         # целиком, у идущей есть «Завершить», у записанной — правка времени.
         return get_object_or_404(
-            Workout.objects.filter(
-                user=self.request.user, sport__category=Sport.Category.STRENGTH
-            ).planned(),
+            Workout.objects.filter(STRENGTH_WORKOUT, user=self.request.user).planned().distinct(),
             pk=self.kwargs["pk"],
         )
 
@@ -1122,7 +1242,9 @@ class WorkoutTimeView(LoginRequiredMixin, View):
             Workout.objects.filter(user=self.request.user).finished().select_related("sport"),
             pk=self.kwargs["pk"],
         )
-        if not workout.sport.is_strength:
+        # Дискриминатор — подходы, а не категория: у чистого кардио дата
+        # правится своей формой, а у смешанной — здесь, вместе с силовой.
+        if not owns_sets(workout):
             raise Http404("У кардио свой экран правки")
         return workout
 
@@ -1172,8 +1294,8 @@ class WorkoutFinishView(LoginRequiredMixin, View):
             Workout.objects.filter(user=self.request.user).select_related("sport"),
             pk=self.kwargs["pk"],
         )
-        if not workout.sport.is_strength:
-            raise Http404("Завершение есть только у силовых тренировок")
+        # Шлагбаума по категории здесь больше нет: завершать можно любую идущую
+        # тренировку — и смешанную, и ту, где силовой оказалась только заминка.
         if workout.is_planned:
             # Нечего завершать: время не шло. Заодно защищает elapsed_min от NULL.
             raise Http404("Тренировка ещё не начата")
@@ -1204,13 +1326,18 @@ class WorkoutFinishView(LoginRequiredMixin, View):
         # Упражнение, которое так и не сделали, уходит вместе с плановыми
         # подходами — и его заметка тоже.
         services.drop_orphan_notes(workout)
-        if not workout.sets.exists():
+        # Кардио-части считаются содержимым наравне с подходами: иначе
+        # завершение тренировки, где успели только пробежку, стёрло бы её.
+        if not workout.sets.exists() and not workout.cardio_parts.exists():
             workout.delete()
-            messages.info(request, "Тренировка не записана: нет выполненных подходов.")
+            messages.info(request, "Тренировка не записана: нет ни подходов, ни кардио.")
             return redirect("workout_history")
         workout.duration_min = max(1, min(MAX_DURATION_HOURS * 60, workout.elapsed_min))
         workout.save(update_fields=["duration_min"])
         messages.success(request, "Тренировка записана.")
+        if not workout.sets.exists():
+            # Подходов нет — дом такой тренировки форма кардио, а не итог.
+            return redirect("workout_edit", pk=workout.pk)
         return redirect("workout_summary", pk=workout.pk)
 
 
@@ -1223,18 +1350,28 @@ class WorkoutSummaryView(LoginRequiredMixin, View):
             # а метрика итога должна совпадать с карточкой в ленте.
             Workout.objects.filter(user=request.user)
             .annotate(**stats.WORKLOAD_ANNOTATIONS)
-            .select_related("sport", "location"),
+            .select_related("sport", "location")
+            .prefetch_related(cardio_parts_prefetch()),
             pk=pk,
         )
-        if not workout.sport.is_strength:
-            raise Http404("У кардио свой экран правки")
         if not workout.is_finished:
+            # Черновик и идущая живут на живом экране — он же решит, силовая
+            # это или нет. Проверка идёт первой: у черновика подходов может не
+            # быть вовсе, и по содержимому он уехал бы не туда.
             return redirect("workout_live", pk=workout.pk)
+        groups = services.exercise_groups(workout)
+        if not groups:
+            # Подходов нет — дом такой тренировки форма кардио. Смотрим на уже
+            # загруженные группы, а не спрашиваем sets.exists() отдельно: экран
+            # всё равно их читает, и лишний запрос был бы данью формулировке.
+            #
+            # Не 404, а редирект: адрес итога становится безопасным для любой
+            # записанной тренировки, и старые ссылки на кардио не ломаются.
+            return redirect("workout_edit", pk=workout.pk)
         # Заголовок итога — та же подпись, что в ленте. Отдельный запрос на одну
         # тренировку: правило подписи дороже держать в одном месте, чем выводить
         # её тут заново из уже загруженных групп.
         stats.attach_muscle_groups(request.user, [workout])
-        groups = services.exercise_groups(workout)
         for group in groups:
             group["total"] = services.exercise_total(group["sets"])
         return render(
@@ -1257,9 +1394,13 @@ class WorkoutRepeatView(LoginRequiredMixin, View):
 
     def post(self, request, pk):
         source = get_object_or_404(
-            Workout.objects.filter(user=request.user, sport__category=Sport.Category.STRENGTH)
+            # Повторяют то, что можно повторить набором упражнений, — то есть
+            # тренировку с подходами. Кардио-части при этом не копируются: они
+            # результат, а не план, ровно как веса и место.
+            Workout.objects.filter(user=request.user, sets__isnull=False)
             .finished()
-            .select_related("sport"),
+            .select_related("sport")
+            .distinct(),
             pk=pk,
         )
         active = Workout.objects.filter(user=request.user).live().first()
@@ -1738,7 +1879,15 @@ class MySportsView(LoginRequiredMixin, ListView):
             .annotate(
                 workouts_count=Count(
                     "workouts", distinct=True, filter=Q(workouts__duration_min__isnull=False)
-                )
+                ),
+                # Вид спорта, которым была только кардио-часть внутри силовой,
+                # иначе выглядел бы неиспользованным — а удалиться не смог бы:
+                # PROTECT держит его этой самой частью.
+                parts_count=Count(
+                    "cardio_parts",
+                    distinct=True,
+                    filter=Q(cardio_parts__workout__duration_min__isnull=False),
+                ),
             )
             .order_by("name")
         )
@@ -1746,7 +1895,7 @@ class MySportsView(LoginRequiredMixin, ListView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         for sport in context["sports"]:
-            sport.usage_label = usage_label(sport.workouts_count)
+            sport.usage_label = usage_label(sport.workouts_count + sport.parts_count)
         return context
 
 

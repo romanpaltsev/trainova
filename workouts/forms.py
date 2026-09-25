@@ -331,6 +331,82 @@ class CardioWorkoutForm(forms.Form):
         return workout
 
 
+class CardioPartForm(forms.ModelForm):
+    """Кардио-часть тренировки: вид спорта, дистанция, время, пульс.
+
+    Отдельная форма, а не режим CardioWorkoutForm: та собирает тренировку
+    целиком (дату, место, длительность занятия), а часть — это кусок внутри уже
+    существующей тренировки, и спрашивать у неё дату второй раз было бы враньём.
+
+    Всё, кроме вида спорта, необязательно: «двадцать минут на дорожке, не
+    мерил» — законная часть, и заставлять придумывать числа незачем.
+    """
+
+    duration_hours, duration_minutes = duration_fields()
+
+    class Meta:
+        model = CardioPart
+        fields = ("sport", "distance_km", "avg_heart_rate")
+        error_messages = {
+            "sport": {
+                "required": "Выберите вид спорта.",
+                "invalid_choice": "Такого вида спорта у вас нет.",
+            },
+            "distance_km": {"invalid": "Дистанция — это число, например 7,2."},
+            "avg_heart_rate": {"invalid": "Пульс — это целое число."},
+        }
+        widgets = {
+            "sport": forms.RadioSelect,
+            "distance_km": forms.NumberInput(
+                attrs={"class": "form-control", "inputmode": "decimal", "step": "0.01"}
+            ),
+            "avg_heart_rate": forms.NumberInput(
+                attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "напр. 142"}
+            ),
+        }
+
+    def __init__(self, *args, user, workout, **kwargs):
+        self.user = user
+        self.workout = workout
+        super().__init__(*args, **kwargs)
+        # Священное правило: только глобальные виды спорта и свои, только кардио.
+        self.fields["sport"].queryset = Sport.objects.visible_to(user).filter(
+            category=Sport.Category.CARDIO
+        )
+        self.fields["sport"].empty_label = None
+        self.fields["distance_km"].required = False
+        if self.instance.pk:
+            hours, minutes = divmod(self.instance.duration_min or 0, 60)
+            self.initial.setdefault("duration_hours", hours or None)
+            self.initial.setdefault("duration_minutes", minutes or None)
+
+    def clean_distance_km(self):
+        distance = self.cleaned_data.get("distance_km")
+        if distance is not None and distance <= 0:
+            raise forms.ValidationError("Дистанция должна быть больше нуля.")
+        return distance
+
+    def clean(self):
+        cleaned = super().clean()
+        if "duration_hours" in cleaned and "duration_minutes" in cleaned:
+            # Длительность части необязательна: у пробежки без часов законно
+            # знать только километры. Верхняя граница остаётся общей.
+            error = clean_duration(cleaned, required=False)
+            if error:
+                self.add_error(*error)
+        return cleaned
+
+    def save(self, commit=True):
+        part = super().save(commit=False)
+        part.workout = self.workout
+        # Ноль значит «не указывал»: у части это NULL, и тогда скорость с темпом
+        # просто не считаются — врать про них хуже, чем промолчать.
+        part.duration_min = self.cleaned_data.get("duration_min") or None
+        if commit:
+            part.save()
+        return part
+
+
 class StrengthTimeForm(forms.Form):
     """Когда была силовая тренировка и сколько длилась.
 

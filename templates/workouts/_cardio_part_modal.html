@@ -1,0 +1,78 @@
+{% comment %}
+  Кардио-часть тренировки: вид спорта, дистанция, время, пульс. Одна модалка на
+  добавление и на правку — поля и проверки совпадают, а вторая копия разошлась
+  бы с первой на первой же правке.
+
+  Ответ на успешный POST — HX-Redirect, а не OOB-фрагмент: на экране меняются
+  два разных куска, список частей и плитка итогов. Тот же выбор, что у модалки
+  даты.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="cardio-part-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="cardio-part-title">
+        {% if part %}Кардио{% else %}Добавить кардио{% endif %}
+      </h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    {% for message in form.non_field_errors %}
+      <div class="app-alert app-alert-danger" role="alert">{{ message }}</div>
+    {% endfor %}
+
+    <form hx-post="{% if part %}{% url 'workout_cardio_part_edit' workout.pk part.pk %}{% else %}{% url 'workout_cardio_part' workout.pk %}{% endif %}"
+          hx-target="#modal" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="mb-3">
+        <span class="form-label d-block">Вид спорта</span>
+        {% comment %}
+          Чипы без кнопки «+ Свой»: она открывает свою модалку в том же #modal
+          и стёрла бы эту вместе с набранным. Новый вид спорта заводится в форме
+          кардио-тренировки, как и раньше.
+        {% endcomment %}
+        {% include "workouts/_sport_chips.html" with sports=sports selected_id=selected_sport_id hide_add=True %}
+        {% for error in form.sport.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+
+      <div class="app-field-grid">
+        <div>
+          <label class="form-label" for="{{ form.distance_km.id_for_label }}">
+            Дистанция, км <span class="text-muted-app">· необязательно</span>
+          </label>
+          {{ form.distance_km }}
+          {% for error in form.distance_km.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.avg_heart_rate.id_for_label }}">
+            Пульс <span class="text-muted-app">· необязательно</span>
+          </label>
+          {{ form.avg_heart_rate }}
+          {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
+      </div>
+
+      {% comment %}
+        Время части — не длительность тренировки: по нему считаются скорость и
+        темп. Без него они просто не показываются, и это честнее, чем делить на
+        время всего занятия.
+      {% endcomment %}
+      <div class="mb-3">
+        {% include "workouts/_duration_fields.html" with label="Время кардио" optional=True %}
+      </div>
+
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-accent flex-fill">
+          {% if part %}Сохранить{% else %}Добавить{% endif %}
+        </button>
+        {% if part %}
+          <button type="submit" class="btn btn-danger-quiet" name="delete" value="1">Убрать</button>
+        {% else %}
+          <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>

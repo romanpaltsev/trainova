@@ -59,6 +59,9 @@ def test_repeat_prefills_from_latest_workout_not_from_source(client, user):
 def test_repeat_with_active_workout_redirects_to_it(client, user):
     client.force_login(user)
     source = WorkoutFactory(user=user)
+    # Повторяют то, что можно повторить набором упражнений: без подходов
+    # тренировка до этой проверки просто не доходит.
+    StrengthSetFactory(workout=source, set_number=1)
     active = WorkoutFactory(user=user, duration_min=None)
 
     response = client.post(reverse("workout_repeat", args=[source.pk]))

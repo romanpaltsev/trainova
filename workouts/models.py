@@ -1086,6 +1086,18 @@ class CardioPart(models.Model):
         return decimal_display(value)
 
     @property
+    def duration_display(self):
+        """Время части как 0:22 — тот же формат, что у длительности тренировки.
+
+        Пустое возвращает None, а не прочерк: строка части собирается из
+        кусков, и прочерк посреди «Бег · 5 км · — · 5:00» читался бы как ошибка.
+        """
+        if self.duration_min is None:
+            return None
+        hours, minutes = divmod(self.duration_min, 60)
+        return f"{hours}:{minutes:02d}"
+
+    @property
     def speed_kmh(self):
         """Средняя скорость, км/ч."""
         if not self.duration_min or not self.distance:
