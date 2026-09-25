@@ -8,6 +8,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.utils import timezone
 
 from workouts.models import (
@@ -84,17 +85,30 @@ def location_for_name(user, name):
             return Location.objects.create(owner=user, name=name, is_default=False)
 
 
-def exercise_for_name(user, name, *, measurement=None, muscle_group=""):
+def exercise_for_name(user, name, *, measurement=None, muscle_group="", equipment=""):
     """Видимое упражнение с таким названием или новое личное.
 
     Совпадение имени значит «это оно», а не ошибку дубля: посреди тренировки
     ввод знакомого названия добавляет его, а импорт таблицы не плодит двойников.
-    Единица и группа мышц применяются только к новой записи — переопределить
-    измерение чужого (в том числе глобального) упражнения вводом его названия
-    нельзя.
+    Единица, группа мышц и снаряд применяются только к новой записи —
+    переопределить измерение чужого (в том числе глобального) упражнения вводом
+    его названия нельзя.
     """
     name = collapse_spaces(name)
-    existing = Exercise.objects.visible_to(user).filter(name__iexact=name).first()
+
+    def visible_with_this_name():
+        # Своё побеждает глобальное: у человека может оказаться личная запись с
+        # тем же именем, что у глобальной (база это разрешает — владелец
+        # разный), и выбор не должен зависеть от того, в каком порядке их
+        # вернул Postgres.
+        return (
+            Exercise.objects.visible_to(user)
+            .filter(name__iexact=name)
+            .order_by(F("owner").desc(nulls_last=True))
+            .first()
+        )
+
+    existing = visible_with_this_name()
     if existing is not None:
         return existing
     try:
@@ -106,9 +120,10 @@ def exercise_for_name(user, name, *, measurement=None, muscle_group=""):
                 name=name,
                 measurement=measurement or Exercise.Measurement.WEIGHT_REPS,
                 muscle_group=muscle_group,
+                equipment=equipment,
             )
     except IntegrityError:
-        return Exercise.objects.visible_to(user).get(name__iexact=name)
+        return visible_with_this_name()
 
 
 def sport_for_name(user, name, *, category):

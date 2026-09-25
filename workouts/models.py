@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from typing import NamedTuple
 
 from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -38,6 +39,11 @@ REST_DELTAS = {"-15", "15"}
 NOTE_MAX_LENGTH = 500
 # Длина группы мышц — та же, что у поля Exercise.muscle_group.
 MUSCLE_GROUP_MAX_LENGTH = 60
+# Длина названия упражнения: константа, а не литерал в поле, — её спрашивают форма
+# переименования и шаблон, чтобы обрезать ввод там же, где это делает база.
+EXERCISE_NAME_MAX_LENGTH = 80
+# Снаряд короче группы мышц: «Штанга», «Своё тело» — это уже с запасом на своё.
+EQUIPMENT_MAX_LENGTH = 30
 
 
 def clamp_rest_seconds(seconds):
@@ -167,8 +173,12 @@ class Exercise(CatalogItem):
         TIME = "time", "Время"
         TIME_WEIGHT = "time_weight", "Время + вес"
 
-    name = models.CharField("название", max_length=80)
-    muscle_group = models.CharField("группа мышц", max_length=60, blank=True)
+    name = models.CharField("название", max_length=EXERCISE_NAME_MAX_LENGTH)
+    muscle_group = models.CharField("группа мышц", max_length=MUSCLE_GROUP_MAX_LENGTH, blank=True)
+    # Вторая ось справочника: она и различает «жим штанги лёжа» от «жима гантелей».
+    # Свободный текст, а не choices, по той же причине, что и у группы мышц: набор
+    # снарядов у каждого зала свой, а в личных упражнениях он вообще произвольный.
+    equipment = models.CharField("снаряд", max_length=EQUIPMENT_MAX_LENGTH, blank=True)
     measurement = models.CharField(
         "измерение",
         max_length=12,
@@ -198,20 +208,39 @@ class Exercise(CatalogItem):
         ]
 
 
-def muscle_groups_for(user):
-    """Группы мышц, уже использованные в видимых пользователю упражнениях.
+class Facets(NamedTuple):
+    """Оси справочника: по ним строятся чипы фильтров и быстрого создания."""
 
-    Список строится из данных, а не из choices: набор групп у каждого свой.
-    order_by обязателен — Meta.ordering по name подмешал бы name в SELECT
-    и distinct перестал бы означать «разные группы».
+    muscle_groups: list
+    equipment: list
+
+
+def facets_for(user):
+    """Группы мышц и снаряды видимых упражнений — одним запросом.
+
+    Списки строятся из данных, а не из choices: набор и групп, и снарядов у
+    каждого свой. Обе оси берём парами в одном запросе, а не двумя: каталог
+    показывает оба ряда чипов, а его бюджет — семь запросов, и восьмой сломал
+    бы тест. Пар при этом на порядок меньше, чем упражнений.
+
+    order_by обязателен — Meta.ordering по name подмешал бы name в SELECT,
+    и distinct перестал бы означать «разные пары».
     """
-    return list(
+    pairs = (
         Exercise.objects.visible_to(user)
-        .exclude(muscle_group="")
-        .order_by("muscle_group")
-        .values_list("muscle_group", flat=True)
+        .order_by("muscle_group", "equipment")
+        .values_list("muscle_group", "equipment")
         .distinct()
     )
+    groups, equipment = set(), set()
+    for group, item in pairs:
+        if group:
+            groups.add(group)
+        if item:
+            equipment.add(item)
+    # casefold, а не порядок кодов: «гантели» в своём написании иначе уехали бы
+    # в конец списка чипов, за все записи с заглавной.
+    return Facets(sorted(groups, key=str.casefold), sorted(equipment, key=str.casefold))
 
 
 def collapse_spaces(text):
@@ -223,7 +252,7 @@ def collapse_spaces(text):
     return " ".join(text.split())
 
 
-def normalize_muscle_group(text, known):
+def normalize_facet(text, known):
     """Привести написание к уже существующему: иначе появятся «Грудь» и «грудь»."""
     text = collapse_spaces(text)
     lowered = text.lower()
@@ -233,14 +262,22 @@ def normalize_muscle_group(text, known):
     return text
 
 
-def chosen_muscle_group(data, known):
-    """Группа мышц из присланной формы: своё поле перебивает выбранный чип.
+def chosen_facet(data, known, *, field, max_length):
+    """Значение фасета из присланной формы: своё поле перебивает выбранный чип.
 
-    Одно правило на два места (быстрое создание и правка на странице упражнения)
-    и без опоры на порядок полей в форме: имена у чипа и поля разные.
+    Одно правило на обе оси и на оба места ввода (быстрое создание и правка на
+    странице упражнения), без опоры на порядок полей: имена у чипа и поля разные.
     """
-    text = data.get("muscle_group_own") or data.get("muscle_group") or ""
-    return normalize_muscle_group(text[:MUSCLE_GROUP_MAX_LENGTH], known)
+    text = data.get(f"{field}_own") or data.get(field) or ""
+    return normalize_facet(text[:max_length], known)
+
+
+def chosen_muscle_group(data, known):
+    return chosen_facet(data, known, field="muscle_group", max_length=MUSCLE_GROUP_MAX_LENGTH)
+
+
+def chosen_equipment(data, known):
+    return chosen_facet(data, known, field="equipment", max_length=EQUIPMENT_MAX_LENGTH)
 
 
 # Какие поля подхода осмысленны для каждой единицы — и в каком порядке они стоят

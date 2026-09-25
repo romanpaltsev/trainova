@@ -59,8 +59,8 @@ from workouts.models import (
     clamp_rest_seconds,
     collapse_spaces,
     decimal_display,
+    facets_for,
     metric_display,
-    muscle_groups_for,
     parse_field_value,
     parse_weight_step,
     rest_display,
@@ -732,7 +732,7 @@ class LiveExerciseView(LoginRequiredMixin, View):
             ),
             # Только при предложении создать: на поиске список групп не нужен,
             # и лишний запрос на каждую набранную букву тоже.
-            "muscle_groups": muscle_groups_for(request.user) if offer_create else [],
+            "muscle_groups": facets_for(request.user).muscle_groups if offer_create else [],
             "selected_muscle_group": group.strip(),
             "muscle_group_max_length": MUSCLE_GROUP_MAX_LENGTH,
         }
@@ -1610,7 +1610,7 @@ class ExerciseDetailView(LoginRequiredMixin, View):
                 "metric_label": metric_label,
                 "can_edit_measurement": exercise.owner_id == request.user.pk,
                 **weight_step_context(exercise),
-                "muscle_groups": muscle_groups_for(request.user),
+                "muscle_groups": facets_for(request.user).muscle_groups,
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "stats_line": stats_line,
                 # Разрез по местам считается в Python по уже загруженным
@@ -1759,14 +1759,15 @@ class ExerciseMuscleGroupView(LoginRequiredMixin, View):
     def post(self, request, pk):
         # Глобальное упражнение правит только админ, чужое личное — никто.
         exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
-        exercise.muscle_group = chosen_muscle_group(request.POST, muscle_groups_for(request.user))
+        known = facets_for(request.user).muscle_groups
+        exercise.muscle_group = chosen_muscle_group(request.POST, known)
         exercise.save(update_fields=["muscle_group"])
         return render(
             request,
             "workouts/_muscle_group_choice.html",
             {
                 "exercise": exercise,
-                "muscle_groups": muscle_groups_for(request.user),
+                "muscle_groups": facets_for(request.user).muscle_groups,
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "can_edit_measurement": True,
                 "saved": True,
@@ -1851,7 +1852,7 @@ class ExerciseListView(LoginRequiredMixin, ListView):
     def known_groups(self):
         """Группы мышц из данных. Кешируем: их спрашивают и фильтр, и чипы."""
         if not hasattr(self, "_known_groups"):
-            self._known_groups = muscle_groups_for(self.request.user)
+            self._known_groups = facets_for(self.request.user).muscle_groups
         return self._known_groups
 
     def chosen_group(self):

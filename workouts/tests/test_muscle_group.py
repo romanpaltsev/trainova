@@ -7,7 +7,7 @@
 import pytest
 from django.urls import reverse
 
-from workouts.models import Exercise, muscle_groups_for, normalize_muscle_group
+from workouts.models import Exercise, facets_for, normalize_facet
 from workouts.tests.factories import ExerciseFactory, WorkoutFactory
 
 pytestmark = pytest.mark.django_db
@@ -37,16 +37,16 @@ def test_groups_come_from_visible_exercises_only(user, other_user):
     ExerciseFactory(name="Чужое", owner=other_user, muscle_group="Чужая группа")
     ExerciseFactory(name="Без группы", owner=user, muscle_group="")
 
-    assert muscle_groups_for(user) == ["Грудь", "Предплечья"]
+    assert facets_for(user).muscle_groups == ["Грудь", "Предплечья"]
 
 
 def test_normalization_keeps_the_accepted_spelling():
     known = ["Грудь", "Ноги"]
 
-    assert normalize_muscle_group("  грудь ", known) == "Грудь"
-    assert normalize_muscle_group("ГРУДЬ", known) == "Грудь"
+    assert normalize_facet("  грудь ", known) == "Грудь"
+    assert normalize_facet("ГРУДЬ", known) == "Грудь"
     # Новая группа остаётся как написали, лишние пробелы схлопываются.
-    assert normalize_muscle_group("  задняя   дельта ", known) == "задняя дельта"
+    assert normalize_facet("  задняя   дельта ", known) == "задняя дельта"
 
 
 # ---------- Создание упражнения ----------

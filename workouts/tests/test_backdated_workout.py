@@ -193,16 +193,20 @@ def test_future_date_is_rejected(client, user, strength):
     assert workout.is_planned
 
 
-def test_today_with_a_future_time_is_rejected(client, user, strength):
-    """Проверяется собранный момент: сегодняшнее число с 23:00 утром — будущее."""
+def test_today_with_a_future_time_is_rejected(client, user, strength, monkeypatch):
+    """Проверяется собранный момент: сегодняшнее число с 23:00 утром — будущее.
+
+    «Сейчас» заморожено на десять утра намеренно: вариант «настоящее время
+    плюс пара часов» после десяти вечера уезжал на следующие сутки, и тест
+    проверял уже не эту ветку, а обычную дату в будущем.
+    """
     workout = draft(user, strength)
     StrengthSetFactory(workout=workout, done=False)
     client.force_login(user)
 
-    moment = timezone.localtime() + timedelta(hours=2)
-    response = backdate(
-        client, workout, date=timezone.localdate().isoformat(), time=moment.strftime("%H:%M")
-    )
+    morning = timezone.localtime().replace(hour=10, minute=0, second=0, microsecond=0)
+    monkeypatch.setattr(timezone, "now", lambda: morning)
+    response = backdate(client, workout, date=morning.date().isoformat(), time="23:00")
 
     workout.refresh_from_db()
     assert "будущем" in str(response.context["form"].errors["date"])

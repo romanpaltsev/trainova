@@ -13,7 +13,7 @@ from workouts.models import (
     Workout,
     chosen_muscle_group,
     collapse_spaces,
-    muscle_groups_for,
+    facets_for,
 )
 
 MAX_DURATION_HOURS = 24
@@ -516,7 +516,7 @@ class ExerciseQuickForm(forms.ModelForm):
 
     def clean_muscle_group(self):
         """Группа мышц необязательна; выбор чипа и своё поле сводит одно правило."""
-        return chosen_muscle_group(self.data, muscle_groups_for(self.user))
+        return chosen_muscle_group(self.data, facets_for(self.user).muscle_groups)
 
     def clean_name(self):
         return self.cleaned_data["name"].strip()
