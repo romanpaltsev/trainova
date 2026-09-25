@@ -1,0 +1,41 @@
+{% comment %}
+  Переименование своего упражнения. Ответ на успешный POST — тело страницы
+  упражнения, которое свапает само себя (hx-swap-oob), поэтому в #modal попадает
+  пустой остаток и модалка закрывается сама. Тот же приём у _location_rename_modal.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="exercise-rename-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="exercise-rename-title">Переименовать упражнение</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <p class="text-secondary-app">
+      Новое название встанет во всю историю: подходы, рекорд и график останутся на месте.
+    </p>
+
+    <form hx-post="{% url 'exercise_rename' exercise.pk %}"
+          hx-target="#modal" hx-swap="innerHTML">
+      {% csrf_token %}
+      {% comment %}
+        Режим отрисовки едет вместе с формой: запрос из модалки всегда
+        HTMX-запрос, и отличить страницу от панели по заголовку нельзя, а
+        ответ обязан вернуть ту же шапку — со стрелкой «Назад» или без неё.
+      {% endcomment %}
+      {% if in_panel %}<input type="hidden" name="panel" value="1">{% endif %}
+      <label class="form-label" for="exercise-new-name">Название</label>
+      <input type="text" name="name" id="exercise-new-name" class="form-control"
+             maxlength="{{ exercise_max_length }}" value="{{ exercise.name }}"
+             autocomplete="off" autofocus>
+      {% if error %}<div class="invalid-feedback d-block">{{ error }}</div>{% endif %}
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,36 @@
+{% comment %}
+  Блок «Снаряд» на странице упражнения — вторая ось справочника и зеркало блока
+  «Группа мышц»: у своих упражнений чипы уже принятых значений плюс поле для
+  своего, у глобальных приглушённая строка (их правит только админ).
+{% endcomment %}
+<div id="equipment-choice" class="app-profile-block">
+  <div class="app-profile-block-title">Снаряд</div>
+  {% if can_edit_measurement %}
+    <form hx-post="{% url 'exercise_equipment' exercise.pk %}"
+          hx-target="#equipment-choice" hx-swap="outerHTML"
+          x-data="{ own: '' }">
+      <div class="app-chips" role="group" aria-label="Снаряд">
+        {% for equipment in equipment_list %}
+          <input type="radio" name="equipment" id="equipment-{{ forloop.counter }}"
+                 value="{{ equipment }}" class="app-chip-input"
+                 {% if exercise.equipment == equipment %}checked{% endif %}
+                 @change="own = ''; $el.form.requestSubmit()">
+          <label class="app-chip" for="equipment-{{ forloop.counter }}">{{ equipment }}</label>
+        {% endfor %}
+        <input type="text" class="form-control app-group-input" name="equipment_own"
+               maxlength="{{ equipment_max_length }}" placeholder="свой"
+               aria-label="Свой снаряд" x-model="own"
+               @keydown.enter.prevent="$el.form.requestSubmit()">
+      </div>
+      {% if equipment_saved %}
+        <p class="app-queue-hint mt-2 mb-0">
+          {% if exercise.equipment %}Сохранено.{% else %}Снаряд убран.{% endif %}
+        </p>
+      {% endif %}
+    </form>
+  {% else %}
+    <p class="app-queue-hint mb-0">
+      {% if exercise.equipment %}{{ exercise.equipment }}{% else %}не указан{% endif %}
+    </p>
+  {% endif %}
+</div>

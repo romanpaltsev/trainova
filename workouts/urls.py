@@ -23,6 +23,16 @@ urlpatterns = [
         views.ExerciseMuscleGroupView.as_view(),
         name="exercise_muscle_group",
     ),
+    path(
+        "exercises/<int:pk>/equipment/",
+        views.ExerciseEquipmentView.as_view(),
+        name="exercise_equipment",
+    ),
+    path(
+        "exercises/<int:pk>/rename/",
+        views.ExerciseRenameView.as_view(),
+        name="exercise_rename",
+    ),
     path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
     path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
     path("profile/locations/", views.MyLocationsView.as_view(), name="my_locations"),

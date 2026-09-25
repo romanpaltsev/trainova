@@ -1,0 +1,20 @@
+{% comment %}
+  Заголовок упражнения. У своего это кнопка переименования с карандашом — тот же
+  приём, что у строки места: опечатка правится один раз и чинится по всей
+  истории. Глобальное упражнение остаётся текстом: его имя меняет миграция.
+
+  Отдельным файлом, потому что заголовок страницы и заголовок панели
+  мастер-детали — две разные разметки, а название в них одно.
+{% endcomment %}
+<h1 class="app-page-title mb-0">
+  {% if can_edit_measurement %}
+    <button type="button" class="app-title-edit"
+            hx-get="{% url 'exercise_rename' exercise.pk %}{% if in_panel %}?panel=1{% endif %}"
+            hx-target="#modal" hx-swap="innerHTML"
+            aria-label="Переименовать {{ exercise.name }}">
+      {{ exercise.name }}{% include "includes/pencil.html" %}
+    </button>
+  {% else %}
+    {{ exercise.name }}
+  {% endif %}
+</h1>

@@ -7,11 +7,18 @@
   Коллизий id (measure-*, step-*, group-*, exercise-chart) быть не может: модалка
   живого режима использует префикс new-, а второй копии тела на странице не бывает.
 {% endcomment %}
-<div class="app-exercise" data-url="{% url 'exercise_detail' exercise.pk %}"
+{% comment %}
+  id и hx-swap-oob: переименование отвечает этим же телом, и оно свапает само
+  себя — и на отдельной странице, и внутри панели мастер-детали, — а в #modal
+  попадает пустой остаток, поэтому модалка закрывается сама. Приём тот же, что
+  у _location_rows.html.
+{% endcomment %}
+<div class="app-exercise" id="exercise-body"{% if oob %} hx-swap-oob="outerHTML"{% endif %}
+     data-url="{% url 'exercise_detail' exercise.pk %}"
      data-title="{{ exercise.name }} · Дневник тренировок">
   {% if in_panel %}
     <div class="app-exercise-head">
-      <h1 class="app-page-title mb-0">{{ exercise.name }}</h1>
+      {% include "workouts/_exercise_title.html" %}
       <div class="text-secondary-app">{{ stats_line }}</div>
     </div>
   {% else %}
@@ -24,7 +31,7 @@
         </svg>
       </a>
       <div>
-        <h1 class="app-page-title mb-0">{{ exercise.name }}</h1>
+        {% include "workouts/_exercise_title.html" %}
         <div class="text-secondary-app">{{ stats_line }}</div>
       </div>
     </div>
@@ -38,6 +45,7 @@
     {% include "workouts/_measurement_choice.html" %}
     {% include "workouts/_weight_step_choice.html" %}
     {% include "workouts/_muscle_group_choice.html" %}
+    {% include "workouts/_equipment_choice.html" %}
   </div>
 
   {% if chart.values|length == 1 %}

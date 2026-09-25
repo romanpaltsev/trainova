@@ -33,6 +33,8 @@ from workouts.forms import (
 )
 from workouts.models import (
     DEFAULT_WEIGHT_STEP,
+    EQUIPMENT_MAX_LENGTH,
+    EXERCISE_NAME_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
     MAX_WEIGHT_KG,
     MEASUREMENT_FIELDS,
@@ -55,6 +57,7 @@ from workouts.models import (
     StrengthSet,
     Workout,
     cardio_parts_prefetch,
+    chosen_equipment,
     chosen_muscle_group,
     clamp_rest_seconds,
     collapse_spaces,
@@ -1561,6 +1564,63 @@ class DashboardWeekView(LoginRequiredMixin, View):
         )
 
 
+def exercise_detail_context(request, exercise, *, in_panel):
+    """Контекст страницы упражнения.
+
+    Отдельной функцией, а не методом вьюхи: тот же контекст собирает
+    переименование — оно отвечает перерисованным телом страницы, и второй,
+    сокращённой копии этой сборки быть не должно.
+    """
+    progress = stats.exercise_progress(request.user, exercise)
+    count = len(progress)
+    metric_label = METRIC_LABELS[exercise.measurement]
+    if count:
+        record = max(group["max_value"] for group in progress)
+        workouts_word = ru_plural(count, "тренировка", "тренировки", "тренировок")
+        stats_line = f"{count} {workouts_word}"
+        if record:
+            stats_line += f" · рекорд {metric_display(exercise.measurement, record)}"
+    else:
+        stats_line = "ещё не было в тренировках"
+    facets = facets_for(request.user)
+    return {
+        "exercise": exercise,
+        "history": list(reversed(progress)),
+        "chart": {
+            "labels": [group["label"] for group in progress],
+            "values": [group["max_value"] for group in progress],
+            "colorKey": "strength",
+            # Время подписывается как 1:30, поэтому формат отдельно от единицы.
+            "unit": METRIC_UNITS[exercise.measurement],
+            "format": "time" if exercise.measurement in TIME_MEASUREMENTS else "",
+        },
+        "chart_title": f"Максимум: {metric_label}",
+        "metric_label": metric_label,
+        "can_edit_measurement": exercise.owner_id == request.user.pk,
+        **weight_step_context(exercise),
+        # Обе оси приезжают одним запросом, поэтому второй блок чипов бюджету
+        # страницы (девять запросов) ничего не стоил.
+        "muscle_groups": facets.muscle_groups,
+        "max_length": MUSCLE_GROUP_MAX_LENGTH,
+        **equipment_context(exercise, facets),
+        "stats_line": stats_line,
+        # Разрез по местам считается в Python по уже загруженным
+        # группам — ни одного нового запроса, бюджет страницы цел.
+        "by_location": stats.progress_by_location(exercise, progress),
+        "in_panel": in_panel,
+        "nav_active": "exercises",
+    }
+
+
+def equipment_context(exercise, facets, *, saved=False):
+    """Контекст блока «Снаряд»: он же приходит и на странице, и после правки."""
+    return {
+        "equipment_list": facets.equipment,
+        "equipment_max_length": EQUIPMENT_MAX_LENGTH,
+        "equipment_saved": saved,
+    }
+
+
 class ExerciseDetailView(LoginRequiredMixin, View):
     """Страница упражнения: график метрики и история подходов.
 
@@ -1570,17 +1630,6 @@ class ExerciseDetailView(LoginRequiredMixin, View):
 
     def get(self, request, pk):
         exercise = visible_exercise_with_step(request.user, pk)
-        progress = stats.exercise_progress(request.user, exercise)
-        count = len(progress)
-        metric_label = METRIC_LABELS[exercise.measurement]
-        if count:
-            record = max(group["max_value"] for group in progress)
-            workouts_word = ru_plural(count, "тренировка", "тренировки", "тренировок")
-            stats_line = f"{count} {workouts_word}"
-            if record:
-                stats_line += f" · рекорд {metric_display(exercise.measurement, record)}"
-        else:
-            stats_line = "ещё не было в тренировках"
         # Панель мастер-детали и отдельная страница — один и тот же контент:
         # HTMX-запрос получает только тело, обычный — тело внутри базы. Тот же
         # приём, что у WorkoutHistoryView. Отдельного URL нет намеренно: иначе
@@ -1593,32 +1642,7 @@ class ExerciseDetailView(LoginRequiredMixin, View):
             "workouts/_exercise_detail_body.html" if in_panel else "workouts/exercise_detail.html"
         )
         return render(
-            request,
-            template,
-            {
-                "exercise": exercise,
-                "history": list(reversed(progress)),
-                "chart": {
-                    "labels": [group["label"] for group in progress],
-                    "values": [group["max_value"] for group in progress],
-                    "colorKey": "strength",
-                    # Время подписывается как 1:30, поэтому формат отдельно от единицы.
-                    "unit": METRIC_UNITS[exercise.measurement],
-                    "format": "time" if exercise.measurement in TIME_MEASUREMENTS else "",
-                },
-                "chart_title": f"Максимум: {metric_label}",
-                "metric_label": metric_label,
-                "can_edit_measurement": exercise.owner_id == request.user.pk,
-                **weight_step_context(exercise),
-                "muscle_groups": facets_for(request.user).muscle_groups,
-                "max_length": MUSCLE_GROUP_MAX_LENGTH,
-                "stats_line": stats_line,
-                # Разрез по местам считается в Python по уже загруженным
-                # группам — ни одного нового запроса, бюджет страницы цел.
-                "by_location": stats.progress_by_location(exercise, progress),
-                "in_panel": in_panel,
-                "nav_active": "exercises",
-            },
+            request, template, exercise_detail_context(request, exercise, in_panel=in_panel)
         )
 
 
@@ -1759,9 +1783,13 @@ class ExerciseMuscleGroupView(LoginRequiredMixin, View):
     def post(self, request, pk):
         # Глобальное упражнение правит только админ, чужое личное — никто.
         exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
-        known = facets_for(request.user).muscle_groups
-        exercise.muscle_group = chosen_muscle_group(request.POST, known)
+        exercise.muscle_group = chosen_muscle_group(
+            request.POST, facets_for(request.user).muscle_groups
+        )
         exercise.save(update_fields=["muscle_group"])
+        # Список спрашиваем ещё раз уже после сохранения: только что введённая
+        # своя группа обязана появиться среди чипов, иначе она пропала бы из
+        # выбора до перезагрузки страницы.
         return render(
             request,
             "workouts/_muscle_group_choice.html",
@@ -1771,6 +1799,85 @@ class ExerciseMuscleGroupView(LoginRequiredMixin, View):
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "can_edit_measurement": True,
                 "saved": True,
+            },
+        )
+
+
+class ExerciseEquipmentView(LoginRequiredMixin, View):
+    """Снаряд своего упражнения — вторая ось справочника, зеркало группы мышц."""
+
+    def post(self, request, pk):
+        # Глобальное упражнение правит только админ, чужое личное — никто.
+        exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
+        exercise.equipment = chosen_equipment(request.POST, facets_for(request.user).equipment)
+        exercise.save(update_fields=["equipment"])
+        return render(
+            request,
+            "workouts/_equipment_choice.html",
+            {
+                "exercise": exercise,
+                "can_edit_measurement": True,
+                **equipment_context(exercise, facets_for(request.user), saved=True),
+            },
+        )
+
+
+class ExerciseRenameView(LoginRequiredMixin, View):
+    """Переименование своего упражнения: опечатка правится один раз на всю историю.
+
+    Зеркало LocationRenameView — и по той же причине: это та же строка БД,
+    поэтому подходы, рекорды и график остаются на месте. Глобальные упражнения
+    так не правятся: их переименование это дело миграции, там оно обратимо.
+    """
+
+    def get_object(self):
+        # Глобальное и чужое по прямому URL — 404.
+        return get_object_or_404(
+            Exercise.objects.filter(owner=self.request.user), pk=self.kwargs["pk"]
+        )
+
+    def get(self, request, pk):
+        return self.render_modal(self.get_object(), in_panel=bool(request.GET.get("panel")))
+
+    def post(self, request, pk):
+        exercise = self.get_object()
+        # Режим отрисовки приезжает из формы: запрос из модалки всегда
+        # HTMX-запрос, и HX-Request здесь уже ничего не различает.
+        in_panel = bool(request.POST.get("panel"))
+        name = collapse_spaces(request.POST.get("name", ""))[:EXERCISE_NAME_MAX_LENGTH]
+        if not name:
+            return self.render_modal(exercise, error="Введите название.", in_panel=in_panel)
+        # Занятость считаем по всему видимому справочнику, а не только по своим:
+        # переименование в имя глобального упражнения дало бы в списке две
+        # одинаковые строки, и различить их было бы нечем.
+        taken = (
+            Exercise.objects.visible_to(request.user)
+            .filter(name__iexact=name)
+            .exclude(pk=exercise.pk)
+            .exists()
+        )
+        if taken:
+            return self.render_modal(
+                exercise, error="Упражнение с таким названием уже есть.", in_panel=in_panel
+            )
+        exercise.name = name
+        exercise.save(update_fields=["name"])
+        # Отвечаем перерисованным телом страницы: оно свапает само себя
+        # (hx-target="#exercise-panel" на мобильном — весь экран), поэтому в
+        # #modal попадает пустой остаток и модалка закрывается сама.
+        exercise = visible_exercise_with_step(request.user, exercise.pk)
+        context = exercise_detail_context(request, exercise, in_panel=in_panel) | {"oob": True}
+        return render(request, "workouts/_exercise_detail_body.html", context)
+
+    def render_modal(self, exercise, *, error="", in_panel=False):
+        return render(
+            self.request,
+            "workouts/_exercise_rename_modal.html",
+            {
+                "exercise": exercise,
+                "exercise_max_length": EXERCISE_NAME_MAX_LENGTH,
+                "error": error,
+                "in_panel": in_panel,
             },
         )
 

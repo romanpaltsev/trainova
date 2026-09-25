@@ -63,6 +63,31 @@
       });
   }
 
+  // Переименование отвечает телом страницы, которое свапает само себя (OOB), —
+  // и на отдельной странице, и внутри панели. Пересборка графика обязательна:
+  // Chart.js держит старый canvas, а тот после свопа уже выброшен из документа.
+  function afterBodySwap(body) {
+    renderChart();
+    if (body.dataset.title) document.title = body.dataset.title;
+    const title = body.querySelector(".app-page-title");
+    if (!body.dataset.url || !title) return;
+    // Список слева целиком не перерисовываем: достаточно строки и плитки,
+    // которые ссылаются на это упражнение. Иначе имя в списке разошлось бы с
+    // заголовком до перезагрузки страницы.
+    const name = title.textContent.trim();
+    document.querySelectorAll(LINK).forEach(function (link) {
+      if (link.getAttribute("href") !== body.dataset.url) return;
+      const label = link.querySelector(".app-trained-name, .app-row-name");
+      if (label) label.textContent = name;
+    });
+  }
+
+  document.body.addEventListener("htmx:oobAfterSwap", function (event) {
+    if (event.detail.target && event.detail.target.id === "exercise-body") {
+      afterBodySwap(event.detail.target);
+    }
+  });
+
   function showEmpty() {
     panel.innerHTML = emptyPanel;
     if (chart) {
