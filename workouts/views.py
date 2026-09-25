@@ -1793,6 +1793,9 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         group = self.chosen_group()
         if group:
             queryset = queryset.filter(muscle_group__iexact=group)
+        equipment = self.chosen_equipment()
+        if equipment:
+            queryset = queryset.filter(equipment__iexact=equipment)
         # Счётчик использований нужен и подписи строки, и делению на «я тренирую»
         # / «остальное». Подпись говорит «в N тренировках», поэтому считаем
         # записанные: плановые подходы черновика тренировками ещё не стали.
@@ -1834,8 +1837,18 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         context["mine_only"] = bool(self.request.GET.get("mine"))
         context["groups"] = groups
         context["muscle_groups"] = self.known_groups()
+        context["equipment_list"] = self.facets().equipment
         context["group_filter"] = self.chosen_group()
-        filtered = bool(context["query"] or context["mine_only"] or context["group_filter"])
+        context["equipment_filter"] = self.chosen_equipment()
+        filtered = bool(
+            context["query"]
+            or context["mine_only"]
+            or context["group_filter"]
+            # Снаряд обязан попасть в этот флаг наравне с остальными фильтрами:
+            # иначе при выбранном чипе снаряда плитки «Я тренирую» остались бы на
+            # экране и показывали бы не то, что в списке ниже.
+            or context["equipment_filter"]
+        )
         # Плитки — только на «чистом» экране. При поиске нужен один список
         # результатов, а не два места, по которым они раскиданы.
         context["trained"] = [] if filtered else trained_first(context["exercises"])
@@ -1849,22 +1862,31 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         context["shows_group_titles"] = len(groups) > 1 or not context["group_filter"]
         return context
 
+    def facets(self):
+        """Обе оси справочника. Кешируем: их спрашивают и фильтры, и оба ряда чипов."""
+        if not hasattr(self, "_facets"):
+            self._facets = facets_for(self.request.user)
+        return self._facets
+
     def known_groups(self):
-        """Группы мышц из данных. Кешируем: их спрашивают и фильтр, и чипы."""
-        if not hasattr(self, "_known_groups"):
-            self._known_groups = facets_for(self.request.user).muscle_groups
-        return self._known_groups
+        return self.facets().muscle_groups
 
-    def chosen_group(self):
-        """Выбранная группа мышц — ровно в том написании, что лежит в данных.
+    def chosen(self, param, known):
+        """Значение фильтра — ровно в том написании, что лежит в данных.
 
-        Сравнение регистронезависимое, а неизвестная группа просто игнорируется:
+        Сравнение регистронезависимое, а неизвестное значение просто игнорируется:
         чипы приходят из данных, и в открытой вкладке они могли устареть.
         """
-        wanted = self.request.GET.get("group", "").strip().lower()
+        wanted = self.request.GET.get(param, "").strip().lower()
         if not wanted:
             return ""
-        return next((group for group in self.known_groups() if group.lower() == wanted), "")
+        return next((value for value in known if value.lower() == wanted), "")
+
+    def chosen_group(self):
+        return self.chosen("group", self.known_groups())
+
+    def chosen_equipment(self):
+        return self.chosen("equipment", self.facets().equipment)
 
 
 class MySportsView(LoginRequiredMixin, ListView):

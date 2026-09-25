@@ -6,7 +6,7 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from workouts.models import Sport
+from workouts.models import Exercise, Sport
 from workouts.tests.factories import (
     CardioPartFactory,
     ExerciseFactory,
@@ -124,6 +124,20 @@ def test_catalog_query_budget(client, user, django_assert_max_num_queries):
     client.force_login(user)
     with django_assert_max_num_queries(7):
         client.get(reverse("exercise_list"))
+
+
+def test_catalog_query_budget_with_both_facets(client, user, django_assert_max_num_queries):
+    """Обе оси чипов берутся одним запросом парами — иначе здесь был бы восьмой.
+
+    Фильтры активны намеренно: и чипы, и оба фильтра спрашивают один и тот же
+    список, и кеш facets() обязан это выдержать.
+    """
+    bench = fill_history(user)
+    Exercise.objects.filter(pk=bench.pk).update(equipment="Штанга")
+
+    client.force_login(user)
+    with django_assert_max_num_queries(7):
+        client.get(reverse("exercise_list"), {"equipment": "Штанга", "group": bench.muscle_group})
 
 
 @pytest.mark.parametrize("queued", [1, 6], ids=["one-exercise", "six-exercises"])

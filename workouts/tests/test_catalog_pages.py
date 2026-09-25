@@ -405,6 +405,120 @@ def test_active_group_chip_removes_the_filter(client, user):
     assert "group=" not in chip_links(html)[2]
 
 
+# ---------- Снаряд: вторая ось фильтров ----------
+
+
+def equipment_chip_links(html):
+    """Адреса чипов второго ряда — он начинается там, где кончается первый."""
+    block = html[html.index('app-chips app-filters" aria-label="Снаряд') :]
+    return [link.replace("&amp;", "&") for link in re.findall(r'href="([^"]*)"', block)]
+
+
+def test_equipment_chips_come_from_data_and_hide_other_users(client, user, other_user):
+    """Священное правило: снаряд чужого личного упражнения в чипы не попадает."""
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга")
+    ExerciseFactory(name="Гребля", muscle_group="Спина", equipment="Каяк", owner=other_user)
+    ExerciseFactory(name="Без снаряда", muscle_group="Грудь", equipment="")
+
+    chips = client.get(reverse("exercise_list")).context["equipment_list"]
+
+    assert chips == ["Штанга"]
+
+
+def test_equipment_filter_narrows_the_list(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга")
+    ExerciseFactory(name="Жим гантелей лёжа", muscle_group="Грудь", equipment="Гантели")
+
+    response = client.get(reverse("exercise_list"), {"equipment": "Гантели"})
+
+    assert [e.name for e in response.context["exercises"]] == ["Жим гантелей лёжа"]
+    assert response.context["equipment_filter"] == "Гантели"
+
+
+def test_equipment_filter_is_case_insensitive_but_keeps_stored_spelling(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга")
+
+    response = client.get(reverse("exercise_list"), {"equipment": "штанга"})
+
+    assert response.context["equipment_filter"] == "Штанга"
+    assert len(response.context["exercises"]) == 1
+
+
+def test_unknown_equipment_is_ignored_not_404(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга")
+
+    response = client.get(reverse("exercise_list"), {"equipment": "Ядро"})
+
+    assert response.status_code == 200
+    assert response.context["equipment_filter"] == ""
+    assert len(response.context["exercises"]) == 1
+
+
+def test_equipment_filter_combines_with_group_mine_and_search(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим гантелей лёжа", muscle_group="Грудь", equipment="Гантели", owner=user)
+    ExerciseFactory(name="Жим гантелей сидя", muscle_group="Плечи", equipment="Гантели", owner=user)
+    ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга", owner=user)
+    ExerciseFactory(name="Жим гантелей лёжа узко", muscle_group="Грудь", equipment="Гантели")
+
+    response = client.get(
+        reverse("exercise_list"),
+        {"equipment": "Гантели", "group": "Грудь", "mine": "1", "q": "жим"},
+    )
+
+    assert [e.name for e in response.context["exercises"]] == ["Жим гантелей лёжа"]
+
+
+def test_equipment_chip_keeps_the_other_filters(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга")
+
+    html = client.get(reverse("exercise_list"), {"group": "Грудь", "q": "жим"}).content.decode()
+
+    chip = equipment_chip_links(html)[0]
+    assert chip.startswith(reverse("exercise_list"))
+    assert "group=%D0%93%D1%80%D1%83%D0%B4%D1%8C" in chip
+    assert "q=%D0%B6%D0%B8%D0%BC" in chip
+    assert "equipment=%D0%A8%D1%82%D0%B0%D0%BD%D0%B3%D0%B0" in chip
+
+
+def test_active_equipment_chip_removes_the_filter(client, user):
+    client.force_login(user)
+    ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга")
+
+    html = client.get(reverse("exercise_list"), {"equipment": "Штанга"}).content.decode()
+
+    assert "equipment=" not in equipment_chip_links(html)[0]
+
+
+def test_equipment_row_disappears_without_data(client, user):
+    """Пустая строка чипов была бы дырой на экране: ряда просто нет."""
+    client.force_login(user)
+    ExerciseFactory(name="Без снаряда", muscle_group="Грудь", equipment="")
+
+    html = client.get(reverse("exercise_list")).content.decode()
+
+    assert 'aria-label="Снаряд"' not in html
+
+
+def test_equipment_filter_hides_the_trained_tiles(client, user):
+    """При активном фильтре нужен один список результатов, а не два места."""
+    client.force_login(user)
+    bench = ExerciseFactory(name="Жим штанги лёжа", muscle_group="Грудь", equipment="Штанга")
+    workout = WorkoutFactory(user=user)
+    StrengthSetFactory(workout=workout, exercise=bench, set_number=1)
+
+    plain = client.get(reverse("exercise_list"))
+    filtered = client.get(reverse("exercise_list"), {"equipment": "Штанга"})
+
+    assert plain.context["trained"]
+    assert filtered.context["trained"] == []
+
+
 def test_dense_rows_are_scoped_to_the_catalog(client, user):
     """Плотные строки — вариант каталога. В профиле и «Моих видах спорта» строки
     остаются отдельными карточками, и общий .app-row трогать нельзя."""

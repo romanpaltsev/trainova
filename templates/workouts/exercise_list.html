@@ -15,22 +15,38 @@
 <h1 class="app-page-title">Упражнения</h1>
 
 {% comment %}
-  Чипы одной прокручиваемой строкой: «Все/Мои» — одна ось, группы мышц — вторая.
+  Две оси фильтров, каждая — своя прокручиваемая строка: сверху «Все/Мои» и
+  группы мышц, снизу снаряды. Обёртка .app-filter-axes та же, что у истории.
   {% querystring %} правит один параметр и сохраняет остальные, поэтому выбор
-  группы не сбрасывает поиск, а повторный тап по активному чипу его снимает.
+  снаряда не сбрасывает ни поиск, ни группу, а повторный тап по активному чипу
+  его снимает.
 
   Адрес указан явно, как и в форме поиска: на десктопе после выбора упражнения
   адрес страницы — /exercises/5/, и относительный «?group=…» увёл бы на деталь.
 {% endcomment %}
-<div class="app-chips app-filters">
-  <a class="app-chip {% if not mine_only %}is-active{% endif %}"
-     href="{% url 'exercise_list' %}{% querystring mine=None %}">Все</a>
-  <a class="app-chip {% if mine_only %}is-active{% endif %}"
-     href="{% url 'exercise_list' %}{% querystring mine=1 %}">Мои</a>
-  {% for group in muscle_groups %}
-    <a class="app-chip {% if group_filter == group %}is-active{% endif %}"
-       href="{% url 'exercise_list' %}{% if group_filter == group %}{% querystring group=None %}{% else %}{% querystring group=group %}{% endif %}">{{ group }}</a>
-  {% endfor %}
+<div class="app-filter-axes">
+  <div class="app-chips app-filters">
+    <a class="app-chip {% if not mine_only %}is-active{% endif %}"
+       href="{% url 'exercise_list' %}{% querystring mine=None %}">Все</a>
+    <a class="app-chip {% if mine_only %}is-active{% endif %}"
+       href="{% url 'exercise_list' %}{% querystring mine=1 %}">Мои</a>
+    {% for group in muscle_groups %}
+      <a class="app-chip {% if group_filter == group %}is-active{% endif %}"
+         href="{% url 'exercise_list' %}{% if group_filter == group %}{% querystring group=None %}{% else %}{% querystring group=group %}{% endif %}">{{ group }}</a>
+    {% endfor %}
+  </div>
+  {% comment %}
+    Ряд снарядов появляется, только если снаряд у упражнений вообще проставлен:
+    на базе, где сид ещё не отработал, пустая строка чипов была бы дырой.
+  {% endcomment %}
+  {% if equipment_list %}
+    <div class="app-chips app-filters" aria-label="Снаряд">
+      {% for equipment in equipment_list %}
+        <a class="app-chip {% if equipment_filter == equipment %}is-active{% endif %}"
+           href="{% url 'exercise_list' %}{% if equipment_filter == equipment %}{% querystring equipment=None %}{% else %}{% querystring equipment=equipment %}{% endif %}">{{ equipment }}</a>
+      {% endfor %}
+    </div>
+  {% endif %}
 </div>
 
 {% comment %}
@@ -40,6 +56,7 @@
 <form method="get" action="{% url 'exercise_list' %}" class="app-search" role="search">
   {% if mine_only %}<input type="hidden" name="mine" value="1">{% endif %}
   {% if group_filter %}<input type="hidden" name="group" value="{{ group_filter }}">{% endif %}
+  {% if equipment_filter %}<input type="hidden" name="equipment" value="{{ equipment_filter }}">{% endif %}
   <input type="search" name="q" value="{{ query }}" class="form-control"
          placeholder="Найти упражнение" autocomplete="off" aria-label="Найти упражнение">
 </form>
@@ -127,7 +144,7 @@
     {% endfor %}
   </div>
 {% empty %}
-  {% if query or group_filter %}
+  {% if query or group_filter or equipment_filter %}
     {% include "includes/empty_state.html" with text="По этому запросу упражнений нет." %}
   {% elif mine_only %}
     {% include "includes/empty_state.html" with title="Своих упражнений пока нет" text="Они появляются, когда в живом режиме вы добавляете упражнение с новым названием." cta_label="Все упражнения" cta_url=request.path %}
