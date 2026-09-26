@@ -99,6 +99,12 @@
     </section>
   {% endif %}
 
+  {% comment %}
+    Заголовок и карточки — одной секцией, как «По местам»: .app-exercise —
+    флекс-колонка с зазором между блоками, и порознь заголовок отъехал бы от
+    своего списка на тот же зазор, что отделяет соседние блоки.
+  {% endcomment %}
+  <section class="app-exercise-history">
   <h2 class="app-section-title">История подходов</h2>
   <div class="app-cards-2">
   {% for group in history %}
@@ -131,6 +137,7 @@
     {% include "includes/empty_state.html" with text="Этого упражнения ещё не было в тренировках. Добавьте его в живом режиме силовой тренировки." extra_class="app-empty-slim" %}
   {% endfor %}
   </div>
+  </section>
 
   {{ chart|json_script:"exercise-chart-data" }}
 </div>

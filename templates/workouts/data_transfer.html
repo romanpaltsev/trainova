@@ -15,24 +15,24 @@
   <h1 class="app-page-title mb-0">Экспорт и импорт</h1>
 </div>
 
-<section class="app-card">
-  <h2 class="app-section-title">Выгрузить историю</h2>
+<section class="app-card app-panel">
+  <h2 class="app-profile-block-title">Выгрузить историю</h2>
   {% if workouts_count %}
-    <p class="app-queue-hint mt-1 mb-3">
+    <p class="app-queue-hint mb-3">
       В дневнике {{ workouts_count }} {{ workouts_label }} — выгрузится вся записанная история,
       по строке на подход. Файл открывается в Excel и в Google Таблицах.
     </p>
     <a class="btn btn-accent w-100" href="{% url 'workout_export' %}" download>Скачать .xlsx</a>
   {% else %}
-    <p class="app-queue-hint mt-1 mb-0">
+    <p class="app-queue-hint mb-0">
       Пока выгружать нечего: запишите первую тренировку, и она появится в файле.
     </p>
   {% endif %}
 </section>
 
-<section class="app-card mt-3">
-  <h2 class="app-section-title">Загрузить из файла</h2>
-  <p class="app-queue-hint mt-1 mb-3">
+<section class="app-card app-panel mt-3">
+  <h2 class="app-profile-block-title">Загрузить из файла</h2>
+  <p class="app-queue-hint mb-3">
     Подойдёт файл, выгруженный отсюда же, и своя таблица с такой же шапкой.
     Строка — подход: дата, вид спорта, упражнение, вес и повторы либо удержание
     в виде 1:30; у кардио упражнение пустое, а заполнены дистанция и пульс.

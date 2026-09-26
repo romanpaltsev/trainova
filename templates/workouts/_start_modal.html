@@ -20,8 +20,13 @@
     </div>
 
     {% if live %}
-      <a class="btn btn-accent w-100 mb-2" href="{% url 'workout_live' live.pk %}">
-        Продолжить тренировку · идёт {{ live.elapsed_min }} мин
+      {% comment %}
+        Время — второй строкой: одной строкой подпись на 375px переносилась
+        посреди «23 мин», и число отрывалось от единицы.
+      {% endcomment %}
+      <a class="btn btn-accent w-100 mb-3 app-btn-resume" href="{% url 'workout_live' live.pk %}">
+        Продолжить тренировку
+        <span class="app-btn-sub">идёт {{ live.elapsed_min }}&nbsp;мин</span>
       </a>
     {% endif %}
 

@@ -71,6 +71,27 @@
       {% endif %}
     </section>
     <div id="week-detail" class="app-week-detail"></div>
+    {% comment %}
+      Подготовленное — в основной колонке, под графиком. В боковой колонке оно
+      было четвёртой карточкой: на десктопе колонка вырастала вдвое выше
+      графика, и под ним оставалась пустота на полэкрана. На телефоне порядок
+      тот же, что и был: график, «Подготовлено», «Последние», рекорды.
+      Класс app-latest — ради оформления строк и карточки на 1200px, ни строчки
+      нового CSS для этого не нужно. Пустого состояния нет: у нового
+      пользователя на дашборде и так три подсказки.
+    {% endcomment %}
+    {% if planned %}
+      <section class="app-latest app-planned">
+        <div class="app-dash-section-head">
+          <h2 class="app-section-title mb-0">Подготовлено</h2>
+        </div>
+        <div class="app-latest-list">
+          {% for draft in planned %}
+            {% include "workouts/_dashboard_plan_row.html" %}
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
   </div>
 
   <aside class="app-dash-side">
@@ -120,26 +141,6 @@
           <h2 class="app-section-title mb-0">Личные рекорды</h2>
         </div>
         {% include "includes/empty_state.html" with text="Рекорды появятся после первой силовой тренировки." %}
-      </section>
-    {% endif %}
-
-    {% comment %}
-      Подготовленное стоит над «последними»: это то, что предстоит, а не то, что
-      было. Класс app-latest берём тот же — на мобильном он поднимает блок над
-      рекордами, на 1200px даёт карточное оформление, и ни строчки нового CSS
-      для этого не нужно. Пустого состояния нет: у нового пользователя на
-      дашборде и так три подсказки.
-    {% endcomment %}
-    {% if planned %}
-      <section class="app-latest app-planned">
-        <div class="app-dash-section-head">
-          <h2 class="app-section-title mb-0">Подготовлено</h2>
-        </div>
-        <div class="app-latest-list">
-          {% for draft in planned %}
-            {% include "workouts/_dashboard_plan_row.html" %}
-          {% endfor %}
-        </div>
       </section>
     {% endif %}
 

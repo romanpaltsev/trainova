@@ -3,21 +3,29 @@
   партиал на живой экран и на итог — это тот же список, и разойтись им незачем.
 
   Кнопка есть всегда, даже когда частей нет: это единственная точка входа для
-  человека, который ещё ничего не добавлял.
+  человека, который ещё ничего не добавлял. Но без частей это не карточка с
+  заголовком над пустотой, а пунктирная плитка — та же, что «+ Упражнение»:
+  оба действия значат «добавить в тренировку» и должны выглядеть одинаково.
+
+  with — чтобы queryset вычислился один раз: и проверка, и цикл берут его кеш
+  (а при cardio_parts_prefetch() — кеш prefetch), лишнего запроса нет.
 {% endcomment %}
+{% with parts=workout.cardio_parts.all %}
+{% if parts %}
 <section class="app-card app-cardio-parts">
   <div class="app-live-exercise-head">
     <h2 class="app-live-exercise-name">Кардио</h2>
   </div>
-  {% for part in workout.cardio_parts.all %}
+  {% for part in parts %}
     <button type="button" class="app-cardio-part"
             hx-get="{% url 'workout_cardio_part_edit' workout.pk part.pk %}"
             hx-target="#modal" hx-swap="innerHTML">
       <span class="app-sport-dot" style="--dot: var(--app-sport-{{ part.sport.color_key }})"></span>
       <span class="app-cardio-part-name">{{ part.sport.name }}</span>
+      {% comment %}Разделитель ставится только между значениями: без дистанции строка начиналась бы с «·».{% endcomment %}
       <span class="app-cardio-part-meta num">
         {% if part.distance_km %}{{ part.distance_display }} км{% endif %}
-        {% if part.duration_display %} · {{ part.duration_display }}{% endif %}
+        {% if part.duration_display %}{% if part.distance_km %} · {% endif %}{{ part.duration_display }}{% endif %}
         {% if part.metric_display and part.distance_km %} · {{ part.metric_display }}{% endif %}
       </span>
       {% include "includes/pencil.html" %}
@@ -29,3 +37,11 @@
     + Кардио
   </button>
 </section>
+{% else %}
+<button type="button" class="app-live-add-tile app-cardio-add-tile"
+        hx-get="{% url 'workout_cardio_part' workout.pk %}"
+        hx-target="#modal" hx-swap="innerHTML">
+  + Кардио
+</button>
+{% endif %}
+{% endwith %}

@@ -16,13 +16,18 @@ body {
 .text-secondary-app { color: var(--app-text-secondary); }
 .text-muted-app { color: var(--app-text-muted); }
 
-/* Карточка — базовая поверхность интерфейса */
+/* Карточка — базовая поверхность интерфейса. Отступов у неё нет намеренно:
+   их задаёт роль карточки (.app-stat, .app-workout…), а для простой карточки
+   «заголовок, текст, кнопка» есть .app-panel. Голая .app-card без роли —
+   это текст, прилипший к рамке. */
 .app-card {
   background-color: var(--app-card);
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius-card);
   box-shadow: var(--app-shadow-card);
 }
+
+.app-panel { padding: var(--app-space-4) var(--app-card-inset); }
 
 /* ---------- Шапка ---------- */
 
@@ -117,7 +122,7 @@ body {
 
 .app-page-title {
   font-weight: 800;
-  font-size: 1.75rem;
+  font-size: var(--app-title-size);
   letter-spacing: -0.02em;
   margin-bottom: 1rem;
 }
@@ -192,14 +197,22 @@ body {
 
 /* ---------- Экраны: заголовок с кнопкой назад ---------- */
 
+/* Стрелка стоит на строке заголовка, а не посередине блока «заголовок +
+   подзаголовок»: с центровкой она съезжала между названием и датой. Сдвиг —
+   половина разницы между высотой строки заголовка (line-height 1.2 у h1) и
+   кнопкой 44px; у однострочной головы результат тот же, что и с центровкой. */
 .app-screen-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.25rem;
   margin-bottom: 1rem;
 }
 
-.app-screen-head .app-icon-btn { margin-left: -0.625rem; }
+.app-screen-head .app-icon-btn {
+  flex: 0 0 auto;
+  margin-top: calc((var(--app-title-size) * 1.2 - var(--app-tap-target)) / 2);
+  margin-left: -0.625rem;
+}
 
 /* ---------- Чипы ---------- */
 
@@ -266,9 +279,15 @@ body {
   color: var(--app-text-secondary);
 }
 
+/* Прокручиваемый ряд уходит под край экрана, а не обрезается жёсткой линией за
+   16px до него: отрицательные поля выводят полосу на ширину вьюпорта, а
+   padding и scroll-padding возвращают первый чип на вертикаль страницы. */
 .app-filters {
   margin-bottom: 1rem;
+  margin-inline: calc(-1 * var(--app-gutter));
+  padding-inline: var(--app-gutter);
   padding-bottom: 0.25rem;
+  scroll-padding-inline: var(--app-gutter);
   overflow-x: auto;
   flex-wrap: nowrap;
 }
@@ -323,17 +342,16 @@ body {
 
 /* ---------- Поля в две колонки и длительность ---------- */
 
+/* Поля пары выравниваются по низу ячейки. На 375px «Средний пульс ·
+   необязательно» переносится на вторую строку, и с выравниванием по верху поле
+   пульса стояло на 20px ниже соседнего поля дистанции. Раньше так было сделано
+   только в модалке, но узкие колонки есть и на странице. */
 .app-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
   gap: 0.75rem 0.75rem;
   margin-bottom: 1rem;
-}
-
-/* В модалке колонки узкие, и «· необязательно» уводит подпись на вторую строку.
-   Поля от этого вставали на разной высоте — выравниваем их по низу ячейки. */
-.app-modal .app-field-grid {
-  align-items: end;
 }
 
 .app-duration {
@@ -342,7 +360,23 @@ body {
   gap: 0.375rem;
 }
 
-.app-duration input { text-align: center; }
+/* Поле «ч»/«мин» узкое (57px в половине колонки на 375px), а Chrome держит у
+   type=number место под стрелки: «00» обрезалось до «0». Стрелки здесь не
+   нужны — число набирают с цифровой клавиатуры, — поэтому убираем их и
+   отдаём цифрам часть бокового отступа. */
+.app-duration input {
+  padding-inline: var(--app-space-2);
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.app-duration input::-webkit-inner-spin-button,
+.app-duration input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
 .app-duration-unit { color: var(--app-text-secondary); font-size: 0.875rem; }
 
 .app-computed {
@@ -375,7 +409,7 @@ body {
   gap: var(--app-space-2);
   /* Те же отступы и тот же ритм, что у карточки упражнения: это соседние
      блоки одного экрана, и разъезжаться им незачем. */
-  padding: 1rem;
+  padding: var(--app-space-4) var(--app-card-inset);
   margin-bottom: 1rem;
 }
 
@@ -457,7 +491,7 @@ body {
 
 .app-workout {
   display: block;
-  padding: 1rem;
+  padding: var(--app-space-4) var(--app-card-inset);
   margin-bottom: 0.75rem;
   color: var(--app-text);
   text-decoration: none;
@@ -547,7 +581,7 @@ body {
 /* Компактный вариант: заглушка графика в панели упражнения не должна занимать
    пол-экрана — она сообщает о нехватке данных, а не приглашает к действию. */
 .app-empty-slim {
-  padding: var(--app-space-3) var(--app-space-4);
+  padding: var(--app-space-3) var(--app-card-inset);
   text-align: start;
 }
 
@@ -654,6 +688,16 @@ body {
   min-height: var(--app-tap-target);
   border-radius: var(--app-radius-pill);
   font-weight: 700;
+}
+
+/* Кнопка-ссылка: у <button> браузер сам ставит текст по центру высоты, у <a>
+   текст прижимается к верхнему padding, и при min-height 44px «Открыть» стояла
+   на 3px выше соседней «Повторить». Только a.btn — у <button> с этим всё в
+   порядке, а display у них переключают свои классы (.app-header-cta). */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-accent {
@@ -782,7 +826,7 @@ body {
 }
 
 .app-rest {
-  padding: 1rem 1.25rem;
+  padding: var(--app-space-4) var(--app-card-inset);
   margin-bottom: 1rem;
 }
 
@@ -850,7 +894,7 @@ body {
 }
 
 .app-live-exercise {
-  padding: 1rem;
+  padding: var(--app-space-4) var(--app-card-inset);
   margin-bottom: 1rem;
 }
 
@@ -1037,6 +1081,20 @@ body {
   font-size: 1.125rem;
 }
 
+/* Кнопка с подписью второй строкой («Продолжить тренировку» / «идёт 23 мин»).
+   Высота та же, что у главной кнопки живого экрана. */
+.app-btn-resume {
+  flex-direction: column;
+  gap: 0.125rem;
+  min-height: 56px;
+  line-height: 1.2;
+}
+
+.app-btn-sub {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
 /* Заметка упражнения: строка-кнопка под подсказкой «прошлый раз».
    Своя заметка читается как текст, пустая — как действие. */
 .app-note-btn {
@@ -1086,7 +1144,7 @@ body {
   align-items: center;
   gap: 0.75rem;
   width: 100%;
-  padding: 0.875rem 1rem;
+  padding: 0.875rem var(--app-card-inset);
   margin-bottom: 0.75rem;
   color: var(--app-text);
   text-align: left;
@@ -1309,6 +1367,57 @@ body {
 
 .app-trained-date { color: var(--app-text-muted); }
 
+/* ---------- Страница упражнения ---------- */
+
+/* Ритм между блоками задаёт колонка, а не поля блоков: раньше у карточки
+   графика своего отступа не было вовсе, и на 1200px она вставала вплотную к
+   настройкам, а на телефоне — к заголовку «По местам». Блоки меняют порядок
+   (order на 1200px), и поле «снизу» у одного из них всегда оказывалось не там. */
+.app-exercise {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-4);
+}
+
+.app-exercise > .app-screen-head,
+.app-by-location .app-rows { margin-bottom: 0; }
+
+/* Настройки — одной карточкой на всех ширинах. На телефоне блоки стояли без
+   подложки, но с её отступами: текст съезжал на 20px от вертикали страницы,
+   а между блоками зияло по 44px пустоты. Внутри карточки блоки разделены
+   линией, как строки списка. */
+.app-settings-row {
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-card);
+  background-color: var(--app-card);
+  box-shadow: var(--app-shadow-card);
+}
+
+.app-settings-row > .app-profile-block { margin-bottom: 0; }
+
+.app-settings-row > .app-profile-block + .app-profile-block {
+  border-top: 1px solid var(--app-line);
+}
+
+/* Блок без чипов — значение только для чтения (у упражнений из общего
+   справочника): строкой «название — значение», как в настройках телефона.
+   Столбиком три таких блока занимали полэкрана и уводили график за кромку. */
+.app-settings-row > .app-profile-block:not(:has(.app-chips)) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: var(--app-space-3);
+}
+
+.app-settings-row > .app-profile-block:not(:has(.app-chips)) > .app-profile-block-title {
+  margin-bottom: 0;
+}
+
+/* Поле «свой»/«своя» размером с пару чипов: во всю ширину карточки оно
+   читалось как отдельная форма, а на 1200px ещё и задавало ширину колонки. */
+.app-settings-row .app-group-input { width: 9rem; }
+
 /* ---------- Дашборд ---------- */
 
 .app-dash-head {
@@ -1332,7 +1441,7 @@ body {
   gap: 0.75rem;
 }
 
-.app-stat { padding: 1rem 1.25rem; }
+.app-stat { padding: var(--app-space-4) var(--app-card-inset); }
 .app-stat.is-desktop { display: none; }
 
 .app-stat-label {
@@ -1363,7 +1472,11 @@ body {
 .app-stat-delta.is-down { color: var(--app-text-secondary); }
 .app-stat-delta.is-flat { color: var(--app-text-muted); }
 
-.app-chart-card { padding: 1.25rem 1rem 0.75rem; }
+/* Текст шапки встаёт на общий отступ карточки (у шапки и легенды свои 4px),
+   а полотно графика — на 4px шире: подписям осей это место нужнее. */
+.app-chart-card {
+  padding: var(--app-space-5) calc(var(--app-card-inset) - var(--app-space-1)) var(--app-space-3);
+}
 
 .app-chart-head {
   display: flex;
@@ -1406,14 +1519,21 @@ body {
   margin-top: 0.5rem;
 }
 
+/* Основная колонка: график, панель недели и «Подготовлено». Ритм — зазором
+   колонки, как у .app-dash: пустая панель недели (:empty) не оставляет дыры. */
+.app-dash-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
 .app-week-detail {
-  margin-top: 1rem;
   /* Прокрутка htmx show:top не должна увозить панель под липкую шапку */
   scroll-margin-top: calc(var(--app-header-height) + 0.5rem);
 }
 
 .app-week-detail:empty { display: none; }
-.app-week-detail-card { padding: 1rem; }
+.app-week-detail-card { padding: var(--app-space-4) var(--app-card-inset); }
 
 .app-week-detail-head {
   display: flex;
@@ -1450,7 +1570,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.875rem 1rem;
+  padding: 0.875rem var(--app-card-inset);
   margin-bottom: 0.75rem;
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius-card);
@@ -1493,7 +1613,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  padding: 1rem 1.25rem;
+  padding: var(--app-space-4) var(--app-card-inset);
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius-card);
   background-color: var(--app-card);
@@ -1518,7 +1638,7 @@ body {
 /* Карточка-прожектор топ-упражнения — только десктоп */
 .app-spotlight {
   display: none;
-  padding: 1.25rem;
+  padding: var(--app-space-5) var(--app-card-inset);
   color: var(--app-text);
   text-decoration: none;
 }
@@ -1561,7 +1681,7 @@ body {
   display: flex;
   align-items: center;
   gap: 1rem;
-  padding: 1.25rem;
+  padding: var(--app-card-inset);
   margin-bottom: 1.5rem;
 }
 
@@ -1590,7 +1710,7 @@ body {
 }
 
 .app-profile-block {
-  padding: 1rem 1.25rem;
+  padding: var(--app-space-4) var(--app-card-inset);
   margin-bottom: 0.75rem;
 }
 
@@ -1632,7 +1752,7 @@ body {
   gap: 0.75rem;
   width: 100%;
   min-height: 56px;
-  padding: 0.875rem 1rem;
+  padding: 0.875rem var(--app-card-inset);
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius-card);
   background-color: var(--app-card);
@@ -1647,6 +1767,13 @@ body {
   flex: 0 0 auto;
   display: inline-flex;
   color: var(--app-text-secondary);
+}
+
+/* Гантель-логотип рисуется 24px, остальные иконки строк — 20px, и название
+   «Моих упражнений» стояло на 4px правее соседей. Размер задаёт колонка. */
+.app-row-icon svg {
+  width: 20px;
+  height: 20px;
 }
 
 .app-row-text {
@@ -1837,7 +1964,7 @@ body {
 }
 
 .app-news {
-  padding: 1rem 1.25rem;
+  padding: var(--app-space-4) var(--app-card-inset);
   margin-bottom: 0.75rem;
 }
 
@@ -1853,8 +1980,10 @@ body {
   font-size: 0.9375rem;
 }
 
+/* 8px до текста, как в макете: с 4px вторая строка длинного заголовка
+   слипалась с первой строкой новости. */
 .app-news-title {
-  margin: 0 0 0.25rem;
+  margin: 0 0 var(--app-space-2);
   font-size: 1.125rem;
   font-weight: 800;
   letter-spacing: -0.01em;
@@ -2140,21 +2269,28 @@ body {
   .app-filters {
     flex-wrap: wrap;
     overflow-x: visible;
+    margin-inline: 0;
+    padding-inline: 0;
     padding-bottom: 0;
   }
+  /* Здесь ряды переносятся, и шаг между осями (8px) совпадал с шагом между
+     перенесёнными строками одной оси: группы мышц сливались со снарядами. */
+  .app-filter-axes .app-filters { margin-bottom: var(--app-space-4); }
   .app-empty {
     max-width: var(--app-measure-form);
     margin-inline: auto;
     padding: var(--app-space-12) var(--app-space-8);
   }
 
-  /* Подсказка живёт внутри колонки списка, а не в центре страницы: пустое
+  /* Компактная подсказка живёт внутри колонки, а не в центре страницы: пустое
      состояние всей страницы (мера 34rem, отступ 3rem) заняло бы здесь первый
-     экран. Порядок важен — .app-empty выше имеет ту же специфичность, и на этой
-     ловушке уже споткнулся .app-empty-slim. */
-  .app-catalog-hint {
+     экран. Порядок важен — .app-empty выше имеет ту же специфичность и без
+     повтора здесь перебивал .app-empty-slim: заглушка графика на десктопе
+     становилась узким блоком по центру с отступом в 3rem. */
+  .app-empty-slim {
     max-width: none;
-    padding: var(--app-space-3) var(--app-space-4);
+    margin-inline: 0;
+    padding: var(--app-space-3) var(--app-card-inset);
     text-align: start;
   }
 
@@ -2203,7 +2339,6 @@ body {
   .app-main-catalog { --app-measure: var(--app-measure-form); }
   /* До 1200px двухколоночные экраны живут одной колонкой. */
   .app-main-dual { --app-measure: var(--app-measure-form); }
-  .app-page-title { font-size: 2rem; }
 }
 
 @media (min-width: 1200px) {
@@ -2296,6 +2431,14 @@ body {
     scroll-margin-top: calc(var(--app-header-height) + var(--app-space-4));
   }
 
+  /* Приглашение «выберите упражнение» занимает колонку целиком, как займёт её
+     панель: мерой страницы (34rem по центру) оно висело узким островом
+     посреди пустой правой половины экрана. */
+  .app-catalog-detail > .app-empty {
+    max-width: none;
+    margin-inline: 0;
+  }
+
   /* Выбранное упражнение. Раньше здесь менялся border-color, но у плотной строки
      рамки нет по построению (border: 0), и от выделения оставался один чуть более
      светлый фон.
@@ -2330,7 +2473,8 @@ body {
     box-shadow: inset 0 0 0 1px var(--app-accent);
   }
 
-  /* Настройки упражнения — одной карточкой, сетка 2×2 по содержимому.
+  /* Настройки упражнения — сетка 2×2 по содержимому внутри карточки. Сама
+     карточка (фон, рамка) задана для всех ширин выше; здесь только раскладка.
      Растянутые колонки (1fr) разъезжались по всей ширине панели с пустотами
      между блоками, а чипы шага веса всё равно переносились.
 
@@ -2339,26 +2483,33 @@ body {
      чипов шага веса встанут в одну строку. Пропущенный блок (у планки шага
      веса нет) пустую колонку не оставляет: max-content пустого трека — ноль.
 
-     Блоков стало четыре («Снаряд» — вторая ось справочника), и колонок ровно
-     две: при трёх четвёртый блок уезжал во второй ряд в одиночку, а 2×2
-     заполняет оба ряда целиком. Прежний довод против второго ряда («Группа
-     мышц» отделялась от верхнего блока дырой в высоту чипов) снят
-     align-items: start — ряд больше не растягивает блоки по своей высоте.
+     Блоков четыре («Снаряд» — вторая ось справочника), и колонок ровно две:
+     при трёх четвёртый блок уезжал во второй ряд в одиночку, а 2×2 заполняет
+     оба ряда целиком. align-items: start — ряд не растягивает блоки по своей
+     высоте.
 
-     Карточка по содержимому: .app-exercise — flex-колонка, поэтому достаточно
-     align-self, и правило «не возвращать max-width компонентам» не нарушено. */
+     Карточка во всю ширину колонки, а колонки внутри — по содержимому: раньше
+     карточка сжималась до содержимого (align-self: start) и стояла на 50px уже
+     графика над ней, и правый край экрана становился рваным. Отступ между
+     рядами дают сами блоки (их padding), поэтому зазора между рядами нет:
+     с ним второй ряд отъезжал на 48px от первого. */
   .app-settings-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, max-content));
-    align-self: start;
-    gap: var(--app-space-4) var(--app-space-6);
+    column-gap: var(--app-space-6);
     align-items: start;
-    margin-bottom: var(--app-space-4);
-    padding: var(--app-space-3);
-    border: 1px solid var(--app-line);
-    border-radius: var(--app-radius-card);
-    background-color: var(--app-card);
-    box-shadow: var(--app-shadow-card);
+  }
+
+  /* В сетке блоки стоят рядом, а не друг под другом: линия-разделитель списка
+     здесь была бы чертой над правой колонкой. Строка «название — значение»
+     тоже только для столбика: в сетке у соседнего блока заголовок над чипами,
+     и оба блока ряда должны читаться одинаково. */
+  .app-settings-row > .app-profile-block + .app-profile-block { border-top: 0; }
+
+  .app-settings-row > .app-profile-block:not(:has(.app-chips)) { display: block; }
+
+  .app-settings-row > .app-profile-block:not(:has(.app-chips)) > .app-profile-block-title {
+    margin-bottom: 0.625rem;
   }
 
   /* Пять чипов шага веса требовали 297px при колонке в 280px и переносили «5»
@@ -2366,12 +2517,6 @@ body {
      высота тап-таргета (44px) не меняется. */
   .app-settings-row .app-chip {
     padding-inline: var(--app-space-3);
-  }
-
-  /* Поле «свой»/«своя» тянется на всю ширину блока, и при колонках по содержимому
-     именно оно задавало ширину карточки — 486px вместо нужных чипам 257px. */
-  .app-settings-row .app-group-input {
-    width: 9rem;
   }
 
   /* Липкой становится шапка панели, а не панель целиком: у упражнения с двумя
@@ -2387,18 +2532,13 @@ body {
     top: calc(var(--app-header-height) + var(--app-space-4));
     z-index: 1;
     padding-block: var(--app-space-2);
-    margin-bottom: var(--app-space-2);
     background-color: var(--app-bg);
   }
 
   /* График — сразу под заголовком: он и есть причина открыть упражнение, а блок
      настроек с чипами шага веса занимает почти весь первый экран. На мобильном
-     порядок в разметке остаётся прежним, здесь его меняет order. */
-  .app-exercise {
-    display: flex;
-    flex-direction: column;
-  }
-
+     порядок в разметке остаётся прежним, здесь его меняет order (.app-exercise —
+     flex-колонка на всех ширинах, см. «Страница упражнения»). */
   .app-exercise > .app-exercise-head,
   .app-exercise > .app-screen-head { order: 0; }
   .app-exercise > .app-chart-card,
@@ -2408,8 +2548,7 @@ body {
      заголовком и списком по отдельности: без order они уехали бы к шапке, а
      заголовок остался бы рядом с «Историей подходов». */
   .app-exercise > .app-by-location { order: 3; }
-  .app-exercise > .app-section-title { order: 4; }
-  .app-exercise > .app-cards-2 { order: 5; }
+  .app-exercise > .app-exercise-history { order: 4; }
 
   /* График в панели крупнее: он и есть причина открыть упражнение */
   .app-exercise .app-chart-body { height: 360px; }
@@ -2420,21 +2559,32 @@ body {
      колонка остаётся 34rem: на степперах держится главный сценарий, и расползание
      им только вредит. #exercises отдаёт свой бокс через display: contents —
      его id и класс переезжают вместе со свопом, а пустому div терять нечего. */
+  /* Ряды заданы явно. С автоматическими рядами колонки были связаны: «Дальше»
+     и текущее упражнение делили один ряд, и «Выполнено» справа начиналось
+     только под высокой карточкой степперов — под «+ Упражнение» зияло 400px
+     пустоты, а кардио уезжало влево под степперы. Теперь правая колонка идёт
+     сплошным столбиком в своих рядах (4–6), а текущее упражнение занимает
+     ряды 4–7: последний ряд 1fr забирает его лишнюю высоту, и ряды правой
+     колонки остаются по своему содержимому. Пустой ряд (нет отдыха у
+     черновика, нет выполненных) схлопывается в ноль: row-gap здесь нет. */
   .app-live-screen {
     display: grid;
     grid-template-columns: minmax(0, var(--app-measure-form)) minmax(0, 22rem);
+    grid-template-rows: repeat(6, auto) 1fr;
     column-gap: var(--app-space-8);
     justify-content: center;
     align-items: start;
   }
 
-.app-live-head { grid-column: 1 / -1; }
+  .app-live-offline { grid-column: 1 / -1; grid-row: 1; }
+  .app-live-head { grid-column: 1 / -1; grid-row: 2; }
 
   /* Таймер отдыха остаётся на виду: без липкости он уезжал вверх, пока
      прокручиваешь к нужному упражнению. z-index — потому что карточка текущего
      упражнения идёт в разметке позже и иначе рисовалась бы поверх. */
   .app-live-screen .app-rest {
     grid-column: 1 / -1;
+    grid-row: 3;
     position: sticky;
     top: calc(var(--app-header-height) + var(--app-space-4));
     z-index: 2;
@@ -2442,9 +2592,14 @@ body {
 
   #exercises { display: contents; }
 
-  .app-live-now { grid-column: 1; }
-  .app-live-plan,
-  .app-live-done { grid-column: 2; }
+  .app-live-now { grid-column: 1; grid-row: 4 / -1; }
+  .app-live-plan { grid-column: 2; grid-row: 4; }
+  .app-live-done { grid-column: 2; grid-row: 5; }
+
+  /* Кардио — справа, под планом и выполненным: «+ Кардио» стоит рядом с
+     «+ Упражнение», а не под степперами в рабочей колонке. */
+  .app-live-screen > .app-cardio-parts,
+  .app-live-screen > .app-cardio-add-tile { grid-column: 2; grid-row: 6; }
 
   /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
   .app-dash {
@@ -2470,11 +2625,23 @@ body {
   /* Рекорды и последние — единые карточки со строками, как в макете */
   .app-records,
   .app-latest {
-    padding: 1rem 1.25rem;
+    padding: var(--app-space-4) var(--app-card-inset);
     border: 1px solid var(--app-line);
     border-radius: var(--app-radius-card);
     background-color: var(--app-card);
     box-shadow: var(--app-shadow-card);
+  }
+
+  /* Заголовки карточек колонки — тем же стилем, что «Часы по неделям» и имя
+     в прожекторе, как в эталоне. Серый подзаголовок раздела годится там, где он
+     стоит над списком (телефон), а внутри карточки он спорил с заголовком
+     графика рядом: два разных «заголовка карточки» на одном экране. */
+  .app-records .app-section-title,
+  .app-latest .app-section-title {
+    color: var(--app-text);
+    font-size: 1.125rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
   }
 
   .app-records-list { display: block; }
@@ -2617,7 +2784,7 @@ body {
        Классы перечислены явно, а не через `> *`: мобильное правило
        `.app-workout-meta > .app-place` весит два класса и перебило бы селектор
        с универсальным — место осталось бы флекс-боксом и уехало на свою строку
-       вместе с заметкой. Та же ловушка, что у .app-catalog-hint и .app-empty. */
+       вместе с заметкой. Та же ловушка, что у .app-empty-slim и .app-empty. */
     .app-workout-meta > .app-place,
     .app-workout-meta > .app-workout-note {
       display: inline;
@@ -2636,9 +2803,13 @@ body {
       margin-top: 0;
     }
 
+    /* К правому краю колонки действий: ширину колонки задают «Повторить» и
+       «Открыть» силовых строк, и шеврон кардио висел в её начале, посреди
+       карточки, а не у кромки, где его ищет глаз. */
     .app-workout > .app-pick-chevron {
       display: block;
       grid-column: 7;
+      justify-self: end;
       margin-left: 0;
     }
   }
