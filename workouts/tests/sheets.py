@@ -1,4 +1,4 @@
-"""Хелперы тестов обмена данными: книга в памяти и снимок истории.
+"""Хелперы тестов обмена данными: книга в памяти, снимки истории и справочника.
 
 Отдельный модуль, а не conftest: им пользуются и тесты импорта, и круговой
 тест, а имя файла без префикса test_ pytest не подберёт как тест.
@@ -10,20 +10,22 @@ from django.utils import timezone
 from openpyxl import Workbook
 
 from workouts import excel
-from workouts.models import Workout, cardio_parts_prefetch
-
-KEYS = [column.key for column in excel.COLUMNS]
-TITLES = [column.title for column in excel.COLUMNS]
+from workouts.models import Exercise, ExerciseSettings, Workout, cardio_parts_prefetch
 
 
-def build_sheet(rows, *, header=None, sheet_title=excel.SHEET_TITLE):
-    """Книга из словарей по ключам COLUMNS → поток, готовый для import_workbook."""
+def build_sheet(rows, *, header=None, sheet_title=excel.SHEET_TITLE, columns=excel.COLUMNS):
+    """Книга из словарей по ключам колонок → поток, готовый для import_workbook.
+
+    columns — формат книги: по умолчанию история, для справочника упражнений
+    передаётся exercise_excel.COLUMNS. header — своя шапка (заголовками), когда
+    нужно проверить недостающую или переставленную колонку.
+    """
     book = Workbook()
     sheet = book.active
     sheet.title = sheet_title
-    titles = TITLES if header is None else header
+    titles = [column.title for column in columns] if header is None else header
     sheet.append(titles)
-    keys = KEYS if header is None else [_key_for(title) for title in header]
+    keys = [_key_for(title, columns) for title in titles]
     for row in rows:
         sheet.append([row.get(key) for key in keys])
     buffer = io.BytesIO()
@@ -32,8 +34,8 @@ def build_sheet(rows, *, header=None, sheet_title=excel.SHEET_TITLE):
     return buffer
 
 
-def _key_for(title):
-    for column in excel.COLUMNS:
+def _key_for(title, columns):
+    for column in columns:
         if column.title == title:
             return column.key
     return title
@@ -81,3 +83,20 @@ def dump(user):
             }
         )
     return snapshot
+
+
+def dump_exercises(user):
+    """Снимок справочника пользователя: его упражнения, видимые общие и шаги веса.
+
+    Для кругового теста и для изоляции: загрузка нетронутого файла не должна
+    менять здесь ничего, а загрузка чужого — ничего у другого пользователя.
+    """
+    exercises = sorted(
+        Exercise.objects.visible_to(user).values_list(
+            "pk", "owner_id", "name", "muscle_group", "equipment", "measurement"
+        )
+    )
+    steps = sorted(
+        ExerciseSettings.objects.filter(user=user).values_list("exercise_id", "weight_step")
+    )
+    return {"exercises": exercises, "steps": steps}

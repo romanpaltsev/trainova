@@ -15,50 +15,77 @@
   <h1 class="app-page-title mb-0">Экспорт и импорт</h1>
 </div>
 
-<section class="app-card app-panel">
-  <h2 class="app-profile-block-title">Выгрузить историю</h2>
-  {% if workouts_count %}
+{% comment %}
+  Две группы — история и справочник, в каждой выгрузка, загрузка и отчёт о ней.
+  Отчёт стоит в своей группе: иначе после загрузки справочника непонятно, к
+  какому файлу он относится.
+{% endcomment %}
+<section class="app-transfer-group" aria-labelledby="history-title">
+  <h2 class="app-section-title" id="history-title">История тренировок</h2>
+
+  <div class="app-card app-panel">
+    <h3 class="app-profile-block-title">Выгрузить историю</h3>
+    {% if workouts_count %}
+      <p class="app-queue-hint mb-3">
+        В дневнике {{ workouts_count }} {{ workouts_label }} — выгрузится вся записанная история,
+        по строке на подход. Файл открывается в Excel и в Google Таблицах.
+      </p>
+      <a class="btn btn-accent w-100" href="{% url 'workout_export' %}" download>Скачать .xlsx</a>
+    {% else %}
+      <p class="app-queue-hint mb-0">
+        Пока выгружать нечего: запишите первую тренировку, и она появится в файле.
+      </p>
+    {% endif %}
+  </div>
+
+  <div class="app-card app-panel">
+    <h3 class="app-profile-block-title">Загрузить историю</h3>
     <p class="app-queue-hint mb-3">
-      В дневнике {{ workouts_count }} {{ workouts_label }} — выгрузится вся записанная история,
-      по строке на подход. Файл открывается в Excel и в Google Таблицах.
+      Подойдёт файл, выгруженный отсюда же, и своя таблица с такой же шапкой.
+      Строка — подход: дата, вид спорта, упражнение, вес и повторы либо удержание
+      в виде 1:30; у кардио упражнение пустое, а заполнены дистанция и пульс.
+      Длительность нужна у каждой тренировки.
     </p>
-    <a class="btn btn-accent w-100" href="{% url 'workout_export' %}" download>Скачать .xlsx</a>
-  {% else %}
-    <p class="app-queue-hint mb-0">
-      Пока выгружать нечего: запишите первую тренировку, и она появится в файле.
-    </p>
-  {% endif %}
+    {% if error %}<div class="app-alert app-alert-danger" role="alert">{{ error }}</div>{% endif %}
+    {% url 'data_transfer' as history_action %}
+    {% include "workouts/_upload_form.html" with form=form action=history_action %}
+  </div>
+
+  {% if report %}{% include "workouts/_import_report.html" %}{% endif %}
 </section>
 
-<section class="app-card app-panel mt-3">
-  <h2 class="app-profile-block-title">Загрузить из файла</h2>
-  <p class="app-queue-hint mb-3">
-    Подойдёт файл, выгруженный отсюда же, и своя таблица с такой же шапкой.
-    Строка — подход: дата, вид спорта, упражнение, вес и повторы либо удержание
-    в виде 1:30; у кардио упражнение пустое, а заполнены дистанция и пульс.
-    Длительность нужна у каждой тренировки.
-  </p>
+<section class="app-transfer-group" aria-labelledby="exercises-title">
+  <h2 class="app-section-title" id="exercises-title">Справочник упражнений</h2>
 
-  {% if error %}<div class="app-alert app-alert-danger" role="alert">{{ error }}</div>{% endif %}
+  <div class="app-card app-panel">
+    <h3 class="app-profile-block-title">Выгрузить справочник</h3>
+    <p class="app-queue-hint mb-3">
+      Все упражнения — общие и ваши — одной таблицей: название, группа мышц,
+      снаряд, измерение и шаг веса. Поправьте сразу много и загрузите обратно.
+    </p>
+    <a class="btn btn-accent w-100" href="{% url 'exercise_export' %}" download>Скачать .xlsx</a>
+  </div>
 
   {% comment %}
-    Обычный POST без HTMX: экран холодный, загрузка длинная, а отчёт меняет всю
-    страницу целиком. Alpine здесь только гасит двойной тап по кнопке.
+    id — якорь формы: после загрузки экран встаёт сюда, а не в начало страницы,
+    и ошибка файла или отчёт сразу на виду, в том числе на телефоне.
   {% endcomment %}
-  <form method="post" enctype="multipart/form-data" x-data="{ sending: false }"
-        @submit="sending = true">
-    {% csrf_token %}
-    <div class="mb-3">
-      <label class="form-label" for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
-      {{ form.file }}
-      {% for message in form.file.errors %}
-        <div class="invalid-feedback d-block">{{ message }}</div>
-      {% endfor %}
-    </div>
-    <button type="submit" class="btn btn-accent w-100" :disabled="sending"
-            x-text="sending ? 'Загружаем…' : 'Загрузить'">Загрузить</button>
-  </form>
-</section>
+  <div class="app-card app-panel app-transfer-anchor" id="exercise-upload">
+    <h3 class="app-profile-block-title">Загрузить справочник</h3>
+    <p class="app-queue-hint mb-3">
+      Свои упражнения меняются целиком: название, группа мышц, снаряд, измерение.
+      У общих — только ваш шаг веса. Новые строки станут вашими упражнениями, а
+      строки, удалённые из таблицы, ничего не удаляют.
+    </p>
+    {% if exercise_error %}
+      <div class="app-alert app-alert-danger" role="alert">{{ exercise_error }}</div>
+    {% endif %}
+    {% url 'exercise_import' as exercise_action %}
+    {% include "workouts/_upload_form.html" with form=exercise_form action=exercise_action|add:"#exercise-upload" %}
+  </div>
 
-{% if report %}{% include "workouts/_import_report.html" %}{% endif %}
+  {% if exercise_report %}
+    {% include "workouts/_exercise_import_report.html" with report=exercise_report %}
+  {% endif %}
+</section>
 {% endblock %}

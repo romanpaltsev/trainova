@@ -32,23 +32,19 @@ from workouts.models import (
 # client_max_body_size 4m у nginx: так человек увидит наше сообщение, а не
 # страницу 413 от прокси.
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
-# Сообщений об ошибках храним первые двести, считаем все: список на три тысячи
-# строк читать всё равно никто не станет.
-ERRORS_KEPT = 200
 # Та же граница, что у форм (MAX_DURATION_HOURS): тренировка в 30 часов — опечатка.
 MAX_DURATION_MIN = 24 * 60
 
 
 @dataclass
-class ImportReport:
-    """Что получилось: числа для итога и списки для разбора полётов."""
+class ImportReport(excel.ReportLog):
+    """Что получилось: числа для итога и списки для разбора полётов.
+
+    Ошибки и предупреждения — в общем журнале excel.ReportLog."""
 
     workouts: int = 0
     sets: int = 0
     skipped: int = 0
-    error_count: int = 0
-    errors: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
     created_sports: list[str] = field(default_factory=list)
     created_exercises: list[str] = field(default_factory=list)
     created_locations: list[str] = field(default_factory=list)
@@ -56,19 +52,6 @@ class ImportReport:
     @property
     def created_anything(self):
         return bool(self.created_sports or self.created_exercises or self.created_locations)
-
-    @property
-    def hidden_errors(self):
-        return max(0, self.error_count - len(self.errors))
-
-    def add_error(self, number, message):
-        self.error_count += 1
-        if len(self.errors) < ERRORS_KEPT:
-            self.errors.append(f"Строка {number}: {message}")
-
-    def add_warning(self, message):
-        if message not in self.warnings and len(self.warnings) < ERRORS_KEPT:
-            self.warnings.append(message)
 
 
 class Catalog:

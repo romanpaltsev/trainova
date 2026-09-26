@@ -46,12 +46,17 @@ def test_weight_accepts_comma_and_dot(client, user, text):
     assert response.content.decode() == "82,5"
 
 
-def test_weight_above_limit_is_clamped(client, user):
-    """Человек написал 1000 — получит 999,99, а не ошибку на пустом месте."""
+@pytest.mark.parametrize("text", ["1000", "1e30"], ids=["тысяча", "экспонента"])
+def test_weight_above_limit_is_clamped(client, user, text):
+    """Человек написал 1000 — получит 999,99, а не ошибку на пустом месте.
+
+    «1e30» — тот же случай: округление такого числа не влезает в точность
+    Decimal, и без предварительной границы это была пятисотка.
+    """
     row = StrengthSetFactory(workout=active(user), set_number=1, weight_kg=70, done=False)
 
     client.force_login(user)
-    set_value(client, row, "weight_kg", "1000")
+    set_value(client, row, "weight_kg", text)
 
     row.refresh_from_db()
     assert row.weight_kg == Decimal("999.99")
@@ -63,6 +68,8 @@ def test_weight_above_limit_is_clamped(client, user):
         pytest.param("abc", "Вес — это число", id="буквы"),
         pytest.param("-5", "отрицательным", id="минус"),
         pytest.param("", "Введите значение", id="пусто"),
+        pytest.param("nan", "Вес — это число", id="nan"),
+        pytest.param("inf", "Вес — это число", id="бесконечность"),
     ],
 )
 def test_bad_weight_is_rejected_with_a_readable_message(client, user, text, message):

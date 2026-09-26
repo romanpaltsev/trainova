@@ -1,0 +1,22 @@
+{% comment %}
+  Форма загрузки книги .xlsx. Одна разметка на обе книги — историю и
+  справочник: адрес (action) у каждой свой, поэтому перепутать их нельзя.
+  action обязателен и у истории: после загрузки справочника страница живёт на
+  другом адресе, и форма без action отправилась бы туда.
+
+  Обычный POST без HTMX: экран холодный, загрузка длинная, а отчёт меняет всю
+  страницу целиком. Alpine здесь только гасит двойной тап по кнопке.
+{% endcomment %}
+<form method="post" action="{{ action }}" enctype="multipart/form-data"
+      x-data="{ sending: false }" @submit="sending = true">
+  {% csrf_token %}
+  <div class="mb-3">
+    <label class="form-label" for="{{ form.file.id_for_label }}">{{ form.file.label }}</label>
+    {{ form.file }}
+    {% for message in form.file.errors %}
+      <div class="invalid-feedback d-block">{{ message }}</div>
+    {% endfor %}
+  </div>
+  <button type="submit" class="btn btn-accent w-100" :disabled="sending"
+          x-text="sending ? 'Загружаем…' : 'Загрузить'">Загрузить</button>
+</form>

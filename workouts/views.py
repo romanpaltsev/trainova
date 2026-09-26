@@ -21,7 +21,7 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
-from workouts import excel, excel_import, services, stats
+from workouts import excel, excel_import, exercise_excel, services, stats
 from workouts.forms import (
     MAX_DURATION_HOURS,
     CardioPartForm,
@@ -29,7 +29,7 @@ from workouts.forms import (
     ExerciseQuickForm,
     SportForm,
     StrengthTimeForm,
-    WorkoutImportForm,
+    XlsxUploadForm,
 )
 from workouts.models import (
     DEFAULT_WEIGHT_STEP,
@@ -62,6 +62,7 @@ from workouts.models import (
     clamp_rest_seconds,
     collapse_spaces,
     decimal_display,
+    exercise_usage,
     facets_for,
     metric_display,
     parse_field_value,
@@ -1927,12 +1928,10 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         # Счётчик использований нужен и подписи строки, и делению на «я тренирую»
         # / «остальное». Подпись говорит «в N тренировках», поэтому считаем
         # записанные: плановые подходы черновика тренировками ещё не стали.
-        # Условие одно на оба агрегата: две скопированные руками копии со временем
-        # разъедутся, а дата обязана совпадать с тем, что посчитал счётчик.
-        mine = Q(
-            sets__workout__user=self.request.user,
-            sets__workout__duration_min__isnull=False,
-        )
+        # Условие одно на оба агрегата (и на выгрузку справочника): две
+        # скопированные руками копии со временем разъедутся, а дата обязана
+        # совпадать с тем, что посчитал счётчик.
+        mine = exercise_usage(self.request.user)
         # Оба агрегата идут по одному пути sets__workout, поэтому джойн один и тот
         # же, условия уезжают в FILTER (WHERE ...), строки не размножаются и
         # DISTINCT внутри COUNT не задет — запрос по-прежнему один. Бюджет каталога
@@ -2350,11 +2349,17 @@ class ChangelogView(LoginRequiredMixin, View):
         )
 
 
+# Префикс формы справочника: у двух форм загрузки на одной странице иначе был бы
+# общий id поля, и подпись одной открывала бы выбор файла в другой.
+EXERCISE_FORM_PREFIX = "exercises"
+
+
 class DataTransferView(LoginRequiredMixin, View):
-    """Экран обмена данными: выгрузка истории в файл и загрузка из файла."""
+    """Экран обмена данными: история тренировок и справочник упражнений —
+    выгрузка в файл и загрузка из файла. POST здесь — загрузка истории."""
 
     def get(self, request):
-        return self.page(request, WorkoutImportForm())
+        return self.page(request)
 
     def post(self, request):
         """Загрузка книги. Ответ — та же страница с отчётом, без редиректа.
@@ -2363,17 +2368,17 @@ class DataTransferView(LoginRequiredMixin, View):
         повторная отправка формы по F5 безвредна: тренировки, которые уже есть,
         уйдут в «пропущено».
         """
-        form = WorkoutImportForm(request.POST, request.FILES)
+        form = XlsxUploadForm(request.POST, request.FILES)
         if not form.is_valid():
-            return self.page(request, form)
+            return self.page(request, form=form)
         try:
             report = excel_import.import_workbook(request.user, form.cleaned_data["file"])
         except excel.WorkbookError as error:
-            return self.page(request, WorkoutImportForm(), error=str(error))
-        return self.page(request, WorkoutImportForm(), report=report)
+            return self.page(request, error=str(error))
+        return self.page(request, report=report)
 
-    def page(self, request, form, **extra):
-        context = self.page_context(request, form=form, **extra)
+    def page(self, request, **extra):
+        context = self.page_context(request, **extra)
         return render(request, "workouts/data_transfer.html", context)
 
     def page_context(self, request, **extra):
@@ -2382,7 +2387,32 @@ class DataTransferView(LoginRequiredMixin, View):
             "nav_active": "profile",
             "workouts_count": count,
             "workouts_label": ru_plural(count, "тренировка", "тренировки", "тренировок"),
+            "form": XlsxUploadForm(),
+            "exercise_form": XlsxUploadForm(prefix=EXERCISE_FORM_PREFIX),
         } | extra
+
+
+class ExerciseImportView(DataTransferView):
+    """Загрузка справочника упражнений.
+
+    Отдельный адрес, а не скрытое поле в общей форме: подменой параметра нельзя
+    загрузить справочник как историю и наоборот (приём cardio_prepare). Ответ —
+    та же страница обмена с отчётом, как у истории; повтор по F5 безвреден —
+    совпадающее не пишется. GET сюда не ходит: формы здесь нет, есть страница.
+    """
+
+    def get(self, request):
+        return redirect("data_transfer")
+
+    def post(self, request):
+        form = XlsxUploadForm(request.POST, request.FILES, prefix=EXERCISE_FORM_PREFIX)
+        if not form.is_valid():
+            return self.page(request, exercise_form=form)
+        try:
+            report = exercise_excel.import_workbook(request.user, form.cleaned_data["file"])
+        except excel.WorkbookError as error:
+            return self.page(request, exercise_error=str(error))
+        return self.page(request, exercise_report=report)
 
 
 class WorkoutExportView(LoginRequiredMixin, View):
@@ -2402,5 +2432,24 @@ class WorkoutExportView(LoginRequiredMixin, View):
             buffer,
             as_attachment=True,
             filename=excel.export_filename(timezone.localdate()),
+            content_type=excel.CONTENT_TYPE,
+        )
+
+
+class ExerciseExportView(LoginRequiredMixin, View):
+    """Выгрузка справочника упражнений одним файлом .xlsx: общие и свои.
+
+    Отдельный файл, а не лист в книге истории: у справочника свой смысл строки,
+    а колонки истории — договор, который ломать нельзя.
+    """
+
+    def get(self, request):
+        buffer = io.BytesIO()
+        exercise_excel.build_workbook(request.user).save(buffer)
+        buffer.seek(0)
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=exercise_excel.export_filename(timezone.localdate()),
             content_type=excel.CONTENT_TYPE,
         )

@@ -2079,6 +2079,25 @@ a.btn {
 
 /* ---------- Экспорт и импорт ---------- */
 
+/* Две группы страницы — история и справочник. Ритм задаёт группа: заголовок,
+   панели и отчёт стоят через один шаг, а между группами — заметный зазор, чтобы
+   было видно, где кончается одна книга и начинается другая. */
+.app-transfer-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.app-transfer-group > .app-section-title { margin-bottom: 0; }
+
+.app-transfer-group + .app-transfer-group { margin-top: var(--app-space-8); }
+
+/* Панель, к которой прокручивает якорь после загрузки справочника: шапка сайта
+   липкая и накрыла бы её заголовок. */
+.app-transfer-anchor {
+  scroll-margin-top: calc(var(--app-header-height) + var(--app-space-3));
+}
+
 .app-import-summary {
   margin: 0;
   padding-left: 0;

@@ -208,13 +208,14 @@ def _workout_rows(workout, sets, notes):
     return rows
 
 
-def build_workbook(user):
-    """Книга целиком: лист с историей и лист с подсказкой."""
-    book = Workbook()
-    sheet = book.active
-    sheet.title = SHEET_TITLE
+def write_table(sheet, columns, rows):
+    """Лист-таблица: шапка из колонок и строки словарями по их ключам.
 
-    for index, column in enumerate(COLUMNS, start=1):
+    Общий для обеих книг — истории и справочника упражнений: оформление шапки и
+    правило «текст пишется текстом» должны быть одинаковыми, а не двумя копиями.
+    Колонка без формата (или «@») пишется текстом, с форматом — числом.
+    """
+    for index, column in enumerate(columns, start=1):
         cell = sheet.cell(row=1, column=index)
         _text(cell, column.title)
         cell.font = Font(bold=True)
@@ -222,8 +223,8 @@ def build_workbook(user):
         cell.alignment = Alignment(vertical="center", wrap_text=True)
         sheet.column_dimensions[get_column_letter(index)].width = column.width
 
-    for number, values in enumerate(sheet_rows(user), start=2):
-        for index, column in enumerate(COLUMNS, start=1):
+    for number, values in enumerate(rows, start=2):
+        for index, column in enumerate(columns, start=1):
             value = values.get(column.key)
             if value is None or value == "":
                 continue
@@ -238,15 +239,27 @@ def build_workbook(user):
     # Шапка закреплена и с автофильтром: в истории за год строк тысячи, и без
     # этого файл неудобен уже на второй минуте.
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = f"A1:{get_column_letter(len(COLUMNS))}{max(sheet.max_row, 1)}"
+    sheet.auto_filter.ref = f"A1:{get_column_letter(len(columns))}{max(sheet.max_row, 1)}"
 
+
+def write_help(book, lines):
+    """Лист «Как заполнять»: первая строка — заголовок, дальше абзацы по строке."""
     help_sheet = book.create_sheet(HELP_SHEET_TITLE)
     help_sheet.column_dimensions["A"].width = 90
-    for number, line in enumerate(HELP_LINES, start=1):
+    for number, line in enumerate(lines, start=1):
         cell = help_sheet.cell(row=number, column=1)
         _text(cell, line)
         if number == 1:
             cell.font = Font(bold=True)
+
+
+def build_workbook(user):
+    """Книга целиком: лист с историей и лист с подсказкой."""
+    book = Workbook()
+    sheet = book.active
+    sheet.title = SHEET_TITLE
+    write_table(sheet, COLUMNS, sheet_rows(user))
+    write_help(book, HELP_LINES)
     return book
 
 
@@ -266,6 +279,37 @@ MAX_ROWS = 20_000
 
 class WorkbookError(Exception):
     """Книгу нельзя прочитать целиком; args[0] — текст для человека."""
+
+
+# Сколько ошибок и предупреждений показываем. Остальные только считаются: список
+# на тысячу строк никто не прочтёт, а страница с ним грузилась бы вечность.
+ERRORS_KEPT = 200
+
+
+@dataclass
+class ReportLog:
+    """Журнал загрузки: ошибки по строкам и предупреждения.
+
+    Общий для отчётов обеих книг — истории и справочника: «Строка N: …» и
+    предел показанного должны выглядеть одинаково, где бы ни случились.
+    """
+
+    error_count: int = 0
+    errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def hidden_errors(self):
+        return max(0, self.error_count - len(self.errors))
+
+    def add_error(self, number, message):
+        self.error_count += 1
+        if len(self.errors) < ERRORS_KEPT:
+            self.errors.append(f"Строка {number}: {message}")
+
+    def add_warning(self, message):
+        if message not in self.warnings and len(self.warnings) < ERRORS_KEPT:
+            self.warnings.append(message)
 
 
 @dataclass
@@ -300,7 +344,7 @@ class SheetRow:
         return not self.exercise
 
 
-def _cell_text(value):
+def cell_text(value):
     if value is None:
         return ""
     if isinstance(value, str):
@@ -315,7 +359,7 @@ def _cell_date(value):
         return value.date()
     if isinstance(value, date):
         return value
-    text = _cell_text(value)
+    text = cell_text(value)
     if not text:
         return None
     for pattern in ("%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y"):
@@ -334,7 +378,7 @@ def _cell_time(value):
     if isinstance(value, timedelta):
         total = int(value.total_seconds()) % 86400
         return time(total // 3600, total % 3600 // 60)
-    text = _cell_text(value)
+    text = cell_text(value)
     if not text:
         return None
     for pattern in ("%H:%M", "%H:%M:%S"):
@@ -364,7 +408,7 @@ def _cell_seconds(value):
         return min(MAX_DURATION_SEC, int(value.total_seconds()))
     if isinstance(value, (int, float, Decimal)):
         return min(MAX_DURATION_SEC, max(0, int(value)))
-    return parse_field_value("duration_sec", _cell_text(value))
+    return parse_field_value("duration_sec", cell_text(value))
 
 
 def _cell_weight(value):
@@ -372,70 +416,104 @@ def _cell_weight(value):
         return Decimal(0)
     if isinstance(value, (int, float, Decimal)):
         return parse_field_value("weight_kg", str(value))
-    return parse_field_value("weight_kg", _cell_text(value))
+    return parse_field_value("weight_kg", cell_text(value))
 
 
 def _cell_int(value, *, what):
     if value is None or value == "":
         return None
-    if isinstance(value, (int, float, Decimal)):
-        return int(value)
-    text = _cell_text(value).replace(",", ".")
+    # «inf» и 1e999 дают OverflowError, «nan» — ValueError с английским текстом;
+    # и то и другое должно стать человеческой ошибкой строки, а не пятисоткой.
     try:
-        return int(float(text))
-    except ValueError as error:
+        if isinstance(value, (int, float, Decimal)):
+            return int(value)
+        return int(float(cell_text(value).replace(",", ".")))
+    except (ValueError, OverflowError) as error:
         raise ValueError(f"{what} — это целое число.") from error
 
 
 def _cell_decimal(value, *, what):
     if value is None or value == "":
         return None
-    text = _cell_text(value).replace(",", ".") if not isinstance(value, str) else value
+    text = cell_text(value).replace(",", ".") if not isinstance(value, str) else value
     try:
-        return Decimal(str(text).replace(",", ".")).quantize(Decimal("0.01"))
+        number = Decimal(str(text).replace(",", ".")).quantize(Decimal("0.01"))
     except (InvalidOperation, ValueError) as error:
         raise ValueError(f"{what} — это число, например 7,2.") from error
+    # «nan» Decimal округляет без возражений, а numeric в Postgres его примет —
+    # в дистанции тренировки оказалось бы «не число».
+    if not number.is_finite():
+        raise ValueError(f"{what} — это число, например 7,2.")
+    return number
 
 
-def _header_index(titles):
+def header_index(titles, *, columns, required_titles):
     """Колонки ищутся по заголовку, а не по позиции.
 
     Так в файл можно дописать свой столбец или переставить их местами, и он
     всё равно загрузится: человек, ведущий таблицу годами, скорее переименует
-    шапку, чем подгонит порядок под наш.
+    шапку, чем подгонит порядок под наш. Колонки, которой в файле нет, в индексе
+    нет тоже (None) — разбор строки решает, что это значит.
     """
     index = {}
     for position, title in enumerate(titles):
-        name = _cell_text(title).lower()
+        name = cell_text(title).lower()
         if name and name not in index:
             index[name] = position
-    missing = [title for title in REQUIRED_TITLES if title.lower() not in index]
+    missing = [title for title in required_titles if title.lower() not in index]
     if missing:
         raise WorkbookError("В первой строке не хватает колонок: " + ", ".join(missing) + ".")
-    return {column.key: index.get(column.title.lower()) for column in COLUMNS}
+    return {column.key: index.get(column.title.lower()) for column in columns}
 
 
-def read_sheet(stream, *, max_rows=None):
-    """Строки книги без записи в базу. Кидает WorkbookError, если читать нечего."""
-    # Лимит разрешается при вызове, а не в сигнатуре: иначе значение защёлкнулось
-    # бы на импорте модуля, и подменить его (в тестах или настройкой) было бы нечем.
-    max_rows = MAX_ROWS if max_rows is None else max_rows
+def cell_getter(values, index):
+    """Ячейка строки по ключу колонки; None — если колонки нет или строка короче."""
+
+    def cell(key):
+        position = index.get(key)
+        if position is None or position >= len(values):
+            return None
+        return values[position]
+
+    return cell
+
+
+NOT_A_WORKBOOK = (
+    "Не получилось открыть файл. Нужен .xlsx — сохраните таблицу из Excel "
+    "как «Книга Excel (.xlsx)»."
+)
+
+
+def read_rows(
+    stream, *, sheet_title, columns, required_titles, parse_row, max_rows, check_titles=None
+):
+    """Строки книги без записи в базу. Кидает WorkbookError, если читать нечего.
+
+    Общий для обеих книг: открыть из памяти, найти лист и шапку, пропустить пустые
+    строки, соблюсти лимит. Что значит строка, решает parse_row(number, values,
+    index) — номер в нём настоящий, как его видит человек в Excel. check_titles —
+    проверка шапки сверх обязательных колонок: так справочник узнаёт по шапке
+    файл с историей, который его обязательную колонку тоже содержит.
+    """
     try:
         book = load_workbook(stream, read_only=True, data_only=True)
     except Exception as error:
         # Битый zip, .xls, csv, картинка — исключений тут зоопарк, а ответ один:
         # это не та книга. Падать пятисоткой на кривом файле нельзя.
-        raise WorkbookError(
-            "Не получилось открыть файл. Нужен .xlsx — сохраните таблицу из Excel "
-            "как «Книга Excel (.xlsx)»."
-        ) from error
+        raise WorkbookError(NOT_A_WORKBOOK) from error
     try:
-        sheet = book[SHEET_TITLE] if SHEET_TITLE in book.sheetnames else book.worksheets[0]
-        lines = sheet.iter_rows(values_only=True)
         try:
-            index = _header_index(next(lines))
+            sheet = book[sheet_title] if sheet_title in book.sheetnames else book.worksheets[0]
+        except IndexError as error:
+            raise WorkbookError(NOT_A_WORKBOOK) from error
+        lines = _safe_lines(sheet.iter_rows(values_only=True))
+        try:
+            titles = next(lines)
         except StopIteration as error:
             raise WorkbookError("Файл пустой: в нём нет даже шапки.") from error
+        if check_titles is not None:
+            check_titles(titles)
+        index = header_index(titles, columns=columns, required_titles=required_titles)
         rows = []
         for number, values in enumerate(lines, start=2):
             if all(value is None or value == "" for value in values):
@@ -445,20 +523,47 @@ def read_sheet(stream, *, max_rows=None):
                     f"Слишком много строк: больше {max_rows} за раз не примем. "
                     "Разделите таблицу на части."
                 )
-            rows.append(_sheet_row(number, values, index))
+            rows.append(parse_row(number, values, index))
         return rows
     finally:
         book.close()
 
 
+def _safe_lines(lines):
+    """Строки листа, где сбой чтения — это WorkbookError, а не пятисотка.
+
+    В режиме read_only openpyxl разбирает лист лениво: битый XML внутри книги
+    всплывает не при открытии, а на очередной строке. Ловим только чтение —
+    ошибки разбора строки в parse_row сюда не попадают и не маскируются.
+    """
+    while True:
+        try:
+            values = next(lines)
+        except StopIteration:
+            return
+        except Exception as error:
+            raise WorkbookError(NOT_A_WORKBOOK) from error
+        yield values
+
+
+def read_sheet(stream, *, max_rows=None):
+    """Строки книги с историей. Кидает WorkbookError, если читать нечего."""
+    # Лимит разрешается при вызове, а не в сигнатуре: иначе значение защёлкнулось
+    # бы на импорте модуля, и подменить его (в тестах или настройкой) было бы нечем.
+    max_rows = MAX_ROWS if max_rows is None else max_rows
+    return read_rows(
+        stream,
+        sheet_title=SHEET_TITLE,
+        columns=COLUMNS,
+        required_titles=REQUIRED_TITLES,
+        parse_row=_sheet_row,
+        max_rows=max_rows,
+    )
+
+
 def _sheet_row(number, values, index):
     row = SheetRow(number=number)
-
-    def cell(key):
-        position = index.get(key)
-        if position is None or position >= len(values):
-            return None
-        return values[position]
+    cell = cell_getter(values, index)
 
     def read(key, parser, target):
         try:
@@ -468,15 +573,15 @@ def _sheet_row(number, values, index):
 
     read("date", _cell_date, "date")
     read("start", _cell_time, "start_time")
-    row.sport = _cell_text(cell("sport"))
-    row.location = _cell_text(cell("location"))
-    row.exercise = _cell_text(cell("exercise"))
+    row.sport = cell_text(cell("sport"))
+    row.location = cell_text(cell("location"))
+    row.exercise = cell_text(cell("exercise"))
     read("weight", _cell_weight, "weight_kg")
     read("reps", lambda value: _cell_int(value, what="Повторы") or 0, "reps")
     read("hold", _cell_seconds, "duration_sec")
     read("distance", lambda value: _cell_decimal(value, what="Дистанция"), "distance_km")
     read("pulse", lambda value: _cell_int(value, what="Пульс"), "avg_heart_rate")
     read("duration", lambda value: _cell_int(value, what="Длительность"), "duration_min")
-    row.workout_note = _cell_text(cell("workout_note"))
-    row.exercise_note = _cell_text(cell("exercise_note"))
+    row.workout_note = cell_text(cell("workout_note"))
+    row.exercise_note = cell_text(cell("exercise_note"))
     return row

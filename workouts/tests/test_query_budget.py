@@ -1,16 +1,21 @@
 """Границы числа запросов: число не должно расти вместе с данными."""
 
+import io
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 
+from workouts import exercise_excel
 from workouts.models import Exercise, Sport
 from workouts.tests.factories import (
     CardioPartFactory,
     ExerciseFactory,
     ExerciseNoteFactory,
+    ExerciseSettingsFactory,
     LocationFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -308,3 +313,39 @@ def test_data_transfer_page_query_budget(client, user, django_assert_max_num_que
 
     with django_assert_max_num_queries(5):
         client.get(reverse("data_transfer"))
+
+
+def own_catalog(user, count):
+    """Свои упражнения с личным шагом веса — у каждого строка настроек."""
+    for number in range(count):
+        exercise = ExerciseFactory(owner=user, name=f"Своё {number}")
+        ExerciseSettingsFactory(user=user, exercise=exercise, weight_step=Decimal("1"))
+
+
+@pytest.mark.parametrize("count", [2, 12])
+def test_exercise_export_query_budget(client, user, django_assert_max_num_queries, count):
+    """Выгрузка справочника: два запроса на данные — упражнения со счётчиком
+    тренировок и шаги веса, — сколько бы упражнений ни было."""
+    own_catalog(user, count)
+    client.force_login(user)
+
+    # Шесть: сессия, пользователь, транзакция запроса — и два на данные.
+    with django_assert_max_num_queries(6):
+        response = client.get(reverse("exercise_export"))
+        b"".join(response.streaming_content)
+
+
+@pytest.mark.parametrize("count", [2, 12])
+def test_unchanged_exercise_import_query_budget(client, user, django_assert_max_num_queries, count):
+    """Повторная загрузка нетронутой выгрузки: строки сверяются в памяти, запись не
+    идёт ни одна — поэтому число запросов одно и при двух упражнениях, и при двенадцати."""
+    own_catalog(user, count)
+    buffer = io.BytesIO()
+    exercise_excel.build_workbook(user).save(buffer)
+    upload = SimpleUploadedFile("справочник.xlsx", buffer.getvalue())
+    client.force_login(user)
+
+    # Семь: сессия, пользователь, транзакция запроса, два на справочник и шаги
+    # и один — счётчик тренировок в ответной странице.
+    with django_assert_max_num_queries(7):
+        client.post(reverse("exercise_import"), {"exercises-file": upload})

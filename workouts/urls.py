@@ -56,6 +56,12 @@ urlpatterns = [
     # иногда игнорируют Content-Disposition и сохраняют файл по адресу.
     path("profile/data/", views.DataTransferView.as_view(), name="data_transfer"),
     path("profile/data/export.xlsx", views.WorkoutExportView.as_view(), name="workout_export"),
+    path(
+        "profile/data/exercises.xlsx",
+        views.ExerciseExportView.as_view(),
+        name="exercise_export",
+    ),
+    path("profile/data/exercises/", views.ExerciseImportView.as_view(), name="exercise_import"),
     path("changelog/", views.ChangelogView.as_view(), name="changelog"),
     path("history/", views.WorkoutHistoryView.as_view(), name="workout_history"),
     path("workouts/cardio/new/", views.CardioWorkoutFormView.as_view(), name="cardio_create"),

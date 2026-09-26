@@ -232,15 +232,30 @@ def facets_for(user):
         .values_list("muscle_group", "equipment")
         .distinct()
     )
+    return facets_from_pairs(pairs)
+
+
+def facets_from_pairs(pairs):
+    """Обе оси из пар (группа, снаряд) — без запроса.
+
+    Отдельно от facets_for затем, чтобы загрузка справочника брала написания из
+    уже прочитанных упражнений: второй запрос за теми же строками был бы лишним.
+    """
     groups, equipment = set(), set()
     for group, item in pairs:
         if group:
             groups.add(group)
         if item:
             equipment.add(item)
+
     # casefold, а не порядок кодов: «гантели» в своём написании иначе уехали бы
-    # в конец списка чипов, за все записи с заглавной.
-    return Facets(sorted(groups, key=str.casefold), sorted(equipment, key=str.casefold))
+    # в конец списка чипов, за все записи с заглавной. Второй ключ — само
+    # написание: при «Грудь» и «грудь» порядок множества зависит от хеша и
+    # менялся бы от процесса к процессу, а normalize_facet берёт первое.
+    def order(name):
+        return (name.casefold(), name)
+
+    return Facets(sorted(groups, key=order), sorted(equipment, key=order))
 
 
 def collapse_spaces(text):
@@ -379,6 +394,10 @@ def parse_weight_step(text):
         step = Decimal(cleaned).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except InvalidOperation as error:
         raise ValueError("Шаг — это число, например 0,5.") from error
+    # «nan» Decimal принимает и округляет как ни в чём не бывало, а сравнение с
+    # ним ниже бросает InvalidOperation — это была бы пятисотка, а не подсказка.
+    if not step.is_finite():
+        raise ValueError("Шаг — это число, например 0,5.")
     if step < WEIGHT_STEP_MIN or step > WEIGHT_STEP_MAX:
         raise ValueError(
             f"Шаг — от {decimal_display(WEIGHT_STEP_MIN)} до {decimal_display(WEIGHT_STEP_MAX)} кг."
@@ -403,9 +422,15 @@ def parse_field_value(field, text):
             value = Decimal(text)
         except InvalidOperation as error:
             raise ValueError("Вес — это число, например 82,5.") from error
+        # «nan» и «inf» Decimal принимает, но сравнение с первым и округление
+        # второго бросают InvalidOperation — пятисотка вместо подсказки.
+        if not value.is_finite():
+            raise ValueError("Вес — это число, например 82,5.")
         if value < 0:
             raise ValueError("Вес не может быть отрицательным.")
-        # Округляем до сотых: max_digits=5 у поля не примет больше.
+        # Сначала грубая граница, потом округление: quantize у «1e30» не влезает
+        # в точность Decimal. Округляем до сотых: max_digits=5 у поля не примет больше.
+        value = min(value, MAX_WEIGHT_KG + 1)
         return min(MAX_WEIGHT_KG, value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
     try:
         value = int(text)
@@ -973,6 +998,16 @@ def exercise_order_key(first_done_at, first_set_id):
     упражнению на разных экранах и разный порядок групп мышц в подписи тренировки.
     """
     return (first_done_at or NEVER_DONE, first_set_id)
+
+
+def exercise_usage(user):
+    """Фильтр агрегатов по упражнению: его подходы в записанных тренировках user.
+
+    Для Count/Max по sets__workout. Одно условие на каталог и на выгрузку
+    справочника: две скопированные руками копии со временем разъедутся, и число
+    тренировок в файле перестанет совпадать с тем, что показывает экран.
+    """
+    return models.Q(sets__workout__user=user, sets__workout__duration_min__isnull=False)
 
 
 def with_weight_step(queryset, user, *, exercise_ref="exercise"):

@@ -1,0 +1,60 @@
+{% comment %}
+  Отчёт о загрузке справочника. Та же карточка и те же списки, что у истории
+  (_import_report.html): два отчёта на одной странице должны читаться одинаково.
+  Переименования показаны парами «было → стало»: отсортируй человек в Excel одну
+  колонку, а не всю таблицу, названия съедут относительно ID — и это видно сразу.
+{% endcomment %}
+<div class="app-card app-panel">
+  <h3 class="app-profile-block-title">Что получилось</h3>
+
+  <ul class="app-import-summary">
+    <li>Добавлено упражнений: <span class="num">{{ report.created|length }}</span></li>
+    {% if report.updated %}<li>Изменено: <span class="num">{{ report.updated }}</span></li>{% endif %}
+    {% if report.steps %}
+      <li>Шаг веса обновлён: <span class="num">{{ report.steps }}</span></li>
+    {% endif %}
+    {% if report.unchanged %}
+      <li>Без изменений: <span class="num">{{ report.unchanged }}</span></li>
+    {% endif %}
+    {% if report.error_count %}
+      <li>Строк не применили: <span class="num">{{ report.error_count }}</span></li>
+    {% endif %}
+  </ul>
+
+  {% if report.created %}
+    <p class="app-queue-hint mt-3 mb-1">Добавлены:</p>
+    <ul class="app-import-list">
+      {% for name in report.created_shown %}<li>{{ name }}</li>{% endfor %}
+    </ul>
+    {% if report.created_hidden %}
+      <p class="app-queue-hint mb-0">…и ещё {{ report.created_hidden }}.</p>
+    {% endif %}
+  {% endif %}
+
+  {% if report.renamed %}
+    <p class="app-queue-hint mt-3 mb-1">Переименованы:</p>
+    <ul class="app-import-list">
+      {% for old, new in report.renamed_shown %}<li>{{ old }} → {{ new }}</li>{% endfor %}
+    </ul>
+    {% if report.renamed_hidden %}
+      <p class="app-queue-hint mb-0">…и ещё {{ report.renamed_hidden }}.</p>
+    {% endif %}
+  {% endif %}
+
+  {% for warning in report.warnings %}
+    <p class="app-queue-hint mt-3 mb-0">{{ warning }}</p>
+  {% endfor %}
+
+  {% if report.errors %}
+    <p class="app-queue-hint mt-3 mb-1">Эти строки не применились:</p>
+    <ul class="app-import-list app-import-errors">
+      {% for error in report.errors %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% if report.hidden_errors %}
+      <p class="app-queue-hint mb-0">…и ещё {{ report.hidden_errors }}.</p>
+    {% endif %}
+    <p class="app-queue-hint mt-2 mb-0">
+      Поправьте их в файле и загрузите его снова — то, что уже применилось, не изменится.
+    </p>
+  {% endif %}
+</div>

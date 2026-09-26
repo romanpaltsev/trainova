@@ -144,8 +144,8 @@ def test_step_is_updated_not_duplicated(client, user):
 
 @pytest.mark.parametrize(
     "value",
-    ["0", "-1", "60", "0,1", "много", ""],
-    ids=["ноль", "минус", "больше макс", "меньше мин", "мусор", "пусто"],
+    ["0", "-1", "60", "0,1", "много", "", "nan", "inf"],
+    ids=["ноль", "минус", "больше макс", "меньше мин", "мусор", "пусто", "nan", "бесконечность"],
 )
 def test_invalid_step_is_rejected_with_message(client, user, value):
     client.force_login(user)
