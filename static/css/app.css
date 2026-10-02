@@ -2447,8 +2447,19 @@ a.btn {
     max-width: var(--app-measure);
     margin-inline: auto;
   }
-  .app-main-dialog { --app-measure: var(--app-measure-narrow); }
-  .app-main-form { --app-measure: var(--app-measure-form); }
+  /* Страницы-диалоги: подтверждения, выход, смена пароля, ошибки и служебные
+     страницы allauth. На ПК — карточка шириной с форму по центру экрана, и по
+     горизонтали, и по вертикали, как окно: узкая колонка у верхнего края
+     широкой страницы выглядела потерянной. width: 100% — авто-поля во
+     flex-колонке иначе сжали бы заголовок до ширины текста. */
+  .app-main-dialog {
+    --app-measure: var(--app-measure-form);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: calc(100dvh - var(--app-header-height));
+  }
+  .app-main-dialog > * { width: 100%; }
 
   /* ---------- Форма кардио и плана: две колонки ----------
 
