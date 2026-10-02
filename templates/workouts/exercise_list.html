@@ -2,8 +2,6 @@
 
 {% block title %}Упражнения · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-catalog{% endblock %}
-
 {% block content %}
 {% comment %}
   На десктопе это мастер-деталь: слева список, справа выбранное упражнение.
@@ -103,9 +101,15 @@
 {% endif %}
 
 {% if shows_blocks %}<h2 class="app-section-title app-catalog-title">Весь справочник</h2>{% endif %}
-{% comment %}Обёртка задаёт область заголовкам групп и крючок на будущее.{% endcomment %}
+{% comment %}
+  Обёртка задаёт область заголовкам групп. Группа — заголовок вместе со
+  строками в своей обёртке app-catalog-group: на ПК справочник идёт колонками,
+  и без неё заголовок отрывался бы от строк в другую колонку. На телефоне
+  обёртка не образует бокса (display: contents).
+{% endcomment %}
 <div class="app-catalog-all">
 {% for group in groups %}
+  <div class="app-catalog-group">
   {% if shows_group_titles %}
     <h3 class="app-group-title">{{ group.title }}</h3>
   {% endif %}
@@ -142,6 +146,7 @@
         {% endif %}
       </div>
     {% endfor %}
+  </div>
   </div>
 {% empty %}
   {% if query or group_filter or equipment_filter %}
