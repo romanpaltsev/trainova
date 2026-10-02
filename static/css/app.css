@@ -1997,6 +1997,9 @@ a.btn {
   margin-bottom: 0.75rem;
 }
 
+/* Обёртка ленты новостей: на телефоне бокса не образует, на ПК — доска. */
+.app-news-list { display: contents; }
+
 .app-news-head {
   display: flex;
   align-items: center;
@@ -2446,7 +2449,6 @@ a.btn {
   }
   .app-main-dialog { --app-measure: var(--app-measure-narrow); }
   .app-main-form { --app-measure: var(--app-measure-form); }
-  .app-main-read { --app-measure: var(--app-measure-read); }
 
   /* ---------- Форма кардио и плана: две колонки ----------
 
@@ -2461,6 +2463,18 @@ a.btn {
     align-items: start;
   }
   .app-form-col { display: block; min-width: 0; }
+
+  /* ---------- «Что нового»: доска карточек ----------
+
+     По рядам, а не колонками: новое слева сверху, дальше по строке —
+     хронология читается от новой к старой. Карточки ряда одной высоты. */
+  .app-news-list {
+    display: grid;
+    grid-template-columns: repeat(var(--app-board-cols), minmax(0, 1fr));
+    gap: var(--app-space-4);
+  }
+  .app-news-list > .app-news { margin-bottom: 0; }
+  .app-news-list > .app-empty { grid-column: 1 / -1; }
 
   /* ---------- Справочники и обмен данными ----------
 
@@ -2856,27 +2870,6 @@ a.btn {
     font-weight: 700;
     line-height: 1.2;
   }
-
-  /* «Что нового» таймлайном: даты выстраиваются в рейку слева, текст держит
-     комфортную для чтения меру. Двухколоночная «газета» здесь не годится —
-     хронология в колонках читается неверно. */
-  .app-news {
-    display: grid;
-    grid-template-columns: 7rem minmax(0, 1fr);
-    column-gap: var(--app-space-6);
-    margin-bottom: var(--app-space-3);
-  }
-
-  .app-news-head {
-    grid-row: 1 / 3;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--app-space-1);
-    margin-bottom: 0;
-  }
-
-  .app-news-title,
-  .app-news-body { grid-column: 2; }
 
   /* ---------- Справочник упражнений: мастер-деталь ---------- */
 

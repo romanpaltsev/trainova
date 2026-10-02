@@ -2,8 +2,6 @@
 
 {% block title %}Что нового · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-read{% endblock %}
-
 {% block content %}
 <div class="app-screen-head">
   <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
@@ -15,6 +13,13 @@
   <h1 class="app-page-title mb-0">Что нового</h1>
 </div>
 
+{% comment %}
+  На ПК новости — доска карточек по рядам: новое слева сверху, дальше по
+  строке. Колонки-«газета» здесь не годятся — хронология читалась бы сверху
+  вниз по первой колонке, а не от новой к старой. На телефоне обёртка
+  не образует бокса.
+{% endcomment %}
+<div class="app-news-list">
 {% for entry in entries %}
   <article class="app-card app-news">
     <div class="app-news-head">
@@ -27,4 +32,5 @@
 {% empty %}
   {% include "includes/empty_state.html" with text="Пока никаких новостей." %}
 {% endfor %}
+</div>
 {% endblock %}
