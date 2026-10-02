@@ -1,7 +1,8 @@
 .git
 .gitignore
 .venv
-.env
+# Все .env*: .env.prod с секретами иначе попадал в слой прод-образа.
+.env*
 __pycache__
 *.py[cod]
 .pytest_cache

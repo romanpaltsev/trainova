@@ -1,10 +1,10 @@
 #!/bin/sh
-# Старт прод-контейнера: миграции, статика, затем gunicorn.
+# Старт прод-контейнера: миграции, затем gunicorn. Статика уже собрана при сборке
+# образа (Dockerfile) — поэтому старт занимает секунды, а не десяток.
 # Контейнер один, поэтому миграции здесь безопасны и деплой — это просто перезапуск.
 set -e
 
 python manage.py migrate --noinput
-python manage.py collectstatic --noinput
 
 exec gunicorn config.wsgi:application \
   --bind 0.0.0.0:8000 \

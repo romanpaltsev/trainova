@@ -156,13 +156,16 @@ jobs:
 
           retry git fetch --prune origin
           git reset --hard origin/main
-          # Миграции и collectstatic выполняет entrypoint при старте контейнера.
+          # Статику собирает сборка образа, пока старая версия ещё работает, а
+          # миграции — entrypoint при старте контейнера.
           # --build тянет базовые образы, поэтому тоже под retry.
           retry ./scripts/prod.sh up -d --build
           # Старые слои на маленьком VDS съедают диск за десяток деплоев.
           docker image prune -f
 
-          for attempt in \$(seq 1 15); do
+          # Раз в секунду: контейнер теперь стартует за пару секунд, и шаг в четыре
+          # добавлял бы ожидание сверх самого старта. Предел прежний — около минуты.
+          for attempt in \$(seq 1 60); do
             # Оба заголовка подделывают то, что обычно добавляет nginx: без Host
             # Django ответит 400 (ALLOWED_HOSTS), без X-Forwarded-Proto — 301 на https,
             # и проверка «позеленела» бы, не убедившись, что страница рендерится.
@@ -172,7 +175,7 @@ jobs:
               echo "приложение отвечает"
               exit 0
             fi
-            sleep 4
+            sleep 1
           done
           echo "приложение не поднялось" >&2
           ./scripts/prod.sh logs --tail 50 web >&2 || true

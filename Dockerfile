@@ -19,8 +19,18 @@ RUN uv sync --frozen --no-install-project
 
 COPY . .
 
+# Статика собирается при сборке, а не при старте контейнера: сборка идёт, пока
+# старый контейнер ещё обслуживает сайт, и простой на деплое сжимается до пары
+# секунд. Битый ассет теперь валит сборку — до остановки работающей версии.
+# collectstatic не ходит ни в базу, ни в почту, поэтому переменные — заглушки.
+RUN DJANGO_SECRET_KEY=collectstatic-only \
+    DATABASE_URL=postgres://build@localhost/build \
+    EMAIL_URL=consolemail:// \
+    DJANGO_STATIC_MANIFEST=True \
+    python manage.py collectstatic --noinput
+
 EXPOSE 8000
 
-# По умолчанию — прод-режим (миграции, статика, gunicorn).
+# По умолчанию — прод-режим (миграции, gunicorn).
 # Dev-compose переопределяет command на runserver, поэтому образ один на оба режима.
 CMD ["/app/deploy/entrypoint.sh"]
