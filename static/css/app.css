@@ -2330,8 +2330,8 @@ a.btn {
     margin-inline: auto;
     /* Безопасную зону сохраняем и здесь: iPhone в standalone-ландшафте шире
        768px, и padding-block затёр бы её вместе с отступом. */
-    padding-block-start: calc(var(--app-space-3) + env(safe-area-inset-top));
-    padding-block-end: var(--app-space-3);
+    padding-block-start: calc(var(--app-header-pad) + env(safe-area-inset-top));
+    padding-block-end: var(--app-header-pad);
   }
   .app-nav { display: flex; }
   .app-header-cta { display: inline-flex; }
@@ -2346,12 +2346,14 @@ a.btn {
   }
   /* Единственное место, где решается «во всю ширину или колонкой по центру».
      Центрируются и заголовки — поэтому h2 профиля больше не разъезжаются
-     с блоками, которые они подписывают. */
-  .app-main > * {
+     с блоками, которые они подписывают. :where обнуляет специфичность: мера
+     страницы — значение по умолчанию, и собственное ограничение компонента
+     (.app-form-actions, .app-empty) побеждает при любом порядке в файле. */
+  :where(.app-main) > * {
     max-width: var(--app-measure);
     margin-inline: auto;
   }
-  .app-main-narrow { --app-measure: var(--app-measure-narrow); }
+  .app-main-dialog { --app-measure: var(--app-measure-narrow); }
   .app-main-form { --app-measure: var(--app-measure-form); }
   .app-main-read { --app-measure: var(--app-measure-read); }
   .app-main-feed { --app-measure: var(--app-measure-read); }
@@ -2361,10 +2363,8 @@ a.btn {
 }
 
 @media (min-width: 1200px) {
-  .app-header {
-    padding-block-start: calc(var(--app-space-4) + env(safe-area-inset-top));
-    padding-block-end: var(--app-space-4);
-  }
+  /* Отступ шапки растёт токеном --app-header-pad (tokens.css): вместе с ним
+     пересчитывается и --app-header-height, от которого встают липкие блоки. */
   .app-main { padding-bottom: var(--app-space-16); }
   /* Мера расширяется вместе с сеткой: профиль и итог тренировки раскладывают
      содержимое в две колонки, поэтому им нужна широкая колонка страницы. */
