@@ -2117,6 +2117,10 @@ a.btn {
 
 .app-transfer-group + .app-transfer-group { margin-top: var(--app-space-8); }
 
+/* Обёртка двух групп «Экспорта и импорта»: на телефоне бокса не образует,
+   на ПК — две колонки (блок 768). */
+.app-transfer { display: contents; }
+
 /* Панель, к которой прокручивает якорь после загрузки справочника: шапка сайта
    липкая и накрыла бы её заголовок. */
 .app-transfer-anchor {
@@ -2439,6 +2443,32 @@ a.btn {
   .app-main-dialog { --app-measure: var(--app-measure-narrow); }
   .app-main-form { --app-measure: var(--app-measure-form); }
   .app-main-read { --app-measure: var(--app-measure-read); }
+
+  /* ---------- Справочники и обмен данными ----------
+
+     Строки «Моих видов спорта» и «Моих мест» — доской: на широкой странице
+     столбик карточек во всю ширину читался растянутым телефоном. Своим
+     классом, а не .app-rows: те же строки живут в профиле и в каталоге.
+     Форма нового места — шириной с форму, слева под доской. «Экспорт и
+     импорт» — история и справочник двумя колонками, кнопки по содержимому. */
+  .app-rows-board {
+    display: grid;
+    grid-template-columns: repeat(var(--app-board-cols), minmax(0, 1fr));
+    gap: var(--app-space-2) var(--app-space-4);
+  }
+  .app-rows-board > .app-empty { grid-column: 1 / -1; }
+  .app-location-add {
+    max-width: var(--app-measure-form);
+    margin-inline: 0;
+  }
+  .app-transfer {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-8);
+    align-items: start;
+  }
+  .app-transfer > .app-transfer-group + .app-transfer-group { margin-top: 0; }
+  .app-transfer .app-btn-fill { width: auto; }
 
   /* ---------- Профиль ----------
 

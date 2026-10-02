@@ -2,8 +2,6 @@
 
 {% block title %}Экспорт и импорт · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-form{% endblock %}
-
 {% block content %}
 <div class="app-screen-head">
   <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
@@ -18,8 +16,10 @@
 {% comment %}
   Две группы — история и справочник, в каждой выгрузка, загрузка и отчёт о ней.
   Отчёт стоит в своей группе: иначе после загрузки справочника непонятно, к
-  какому файлу он относится.
+  какому файлу он относится. На ПК группы стоят двумя колонками (обёртка
+  app-transfer); на телефоне обёртка не образует бокса.
 {% endcomment %}
+<div class="app-transfer">
 <section class="app-transfer-group" aria-labelledby="history-title">
   <h2 class="app-section-title" id="history-title">История тренировок</h2>
 
@@ -30,7 +30,7 @@
         В дневнике {{ workouts_count }} {{ workouts_label }} — выгрузится вся записанная история,
         по строке на подход. Файл открывается в Excel и в Google Таблицах.
       </p>
-      <a class="btn btn-accent w-100" href="{% url 'workout_export' %}" download>Скачать .xlsx</a>
+      <a class="btn btn-accent app-btn-fill" href="{% url 'workout_export' %}" download>Скачать .xlsx</a>
     {% else %}
       <p class="app-queue-hint mb-0">
         Пока выгружать нечего: запишите первую тренировку, и она появится в файле.
@@ -63,7 +63,7 @@
       Все упражнения — общие и ваши — одной таблицей: название, группа мышц,
       снаряд, измерение и шаг веса. Поправьте сразу много и загрузите обратно.
     </p>
-    <a class="btn btn-accent w-100" href="{% url 'exercise_export' %}" download>Скачать .xlsx</a>
+    <a class="btn btn-accent app-btn-fill" href="{% url 'exercise_export' %}" download>Скачать .xlsx</a>
   </div>
 
   {% comment %}
@@ -88,4 +88,5 @@
     {% include "workouts/_exercise_import_report.html" with report=exercise_report %}
   {% endif %}
 </section>
+</div>
 {% endblock %}

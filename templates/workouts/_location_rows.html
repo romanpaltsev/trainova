@@ -7,7 +7,7 @@
   #modal попадает пустой остаток ответа и модалка закрывается сама (приём
   SportCreateView). Звезда бьёт в блок напрямую, ей oob не нужен.
 {% endcomment %}
-<div id="location-rows" class="app-rows"{% if oob %} hx-swap-oob="true"{% endif %}>
+<div id="location-rows" class="app-rows app-rows-board"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% for location in locations %}
     <div class="app-row">
       <span class="app-row-icon">{% include "includes/pin.html" with size=20 only %}</span>
