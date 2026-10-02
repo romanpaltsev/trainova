@@ -2,9 +2,13 @@
 
 {% block title %}Тренировка · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-read{% endblock %}
-
 {% block content %}
+{% comment %}
+  На ПК итог — дашборд во всю ширину: шапка с действиями справа, итоги в ряд,
+  ниже упражнения колонками. На телефоне обёртки app-summary и app-summary-list
+  не образуют боксов (display: contents), и экран остаётся прежним.
+{% endcomment %}
+<div class="app-summary">
 <div class="app-screen-head">
   <a class="app-icon-btn" href="{% url 'workout_history' %}" aria-label="Назад">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -48,10 +52,11 @@
 </section>
 
 {% comment %}
-  Одна колонка сознательно: список упражнений — это последовательность, а
-  двухколоночная сетка заполняется по строкам, и глаз, идущий по левому столбцу,
-  читает 1, 3, 5. Порядок здесь важнее плотности.
+  Список упражнений — последовательность, и сетка по строкам ломала бы её:
+  глаз, идущий по левому столбцу, читал бы 1, 3, 5. Поэтому на ПК колонки
+  CSS columns — они заполняются сверху вниз, и 1, 2, 3 идут по первой.
 {% endcomment %}
+<div class="app-summary-list">
 {% for group in groups %}
   <section class="app-card app-live-exercise">
     <div class="app-live-exercise-head">
@@ -88,12 +93,18 @@
 {% endfor %}
 
 {% include "workouts/_cardio_parts.html" %}
+</div>
 
+{% comment %}
+  app-btn-fill, а не w-100: утилита Bootstrap идёт с !important, а на ПК
+  кнопки встают в шапку итога и должны быть по содержимому.
+{% endcomment %}
 <div class="app-form-actions">
   <form method="post" action="{% url 'workout_repeat' workout.pk %}">
     {% csrf_token %}
-    <button type="submit" class="btn btn-accent w-100">Повторить тренировку</button>
+    <button type="submit" class="btn btn-accent app-btn-fill">Повторить тренировку</button>
   </form>
-  <a class="btn btn-danger-quiet w-100" href="{% url 'workout_delete' workout.pk %}">Удалить тренировку</a>
+  <a class="btn btn-danger-quiet app-btn-fill" href="{% url 'workout_delete' workout.pk %}">Удалить тренировку</a>
+</div>
 </div>
 {% endblock %}

@@ -400,6 +400,15 @@ body {
   margin-top: 1.5rem;
 }
 
+/* Кнопка во всю ширину — классом, а не утилитой w-100: та идёт с !important,
+   и там, где на ПК кнопка встаёт в ряд, её ширину было бы не снять. */
+.app-btn-fill { width: 100%; }
+
+/* Обёртки итога тренировки: на телефоне боксов не образуют, сеткой и
+   колонками становятся на ПК (блок 768). */
+.app-summary,
+.app-summary-list { display: contents; }
+
 /* Кардио-части тренировки: строка на каждую плюс кнопка добавления. Строка —
    тихая кнопка во всю ширину карточки, как .app-live-set: это список, а не
    набор действий, и рамка у каждой строки превратила бы его в частокол. */
@@ -2429,6 +2438,45 @@ a.btn {
   /* До 1200px двухколоночные экраны живут одной колонкой. */
   .app-main-dual { --app-measure: var(--app-measure-form); }
 
+  /* ---------- Итог тренировки ----------
+
+     Дашборд во всю ширину: шапка с действиями справа, итоги в ряд, ниже
+     упражнения и кардио колонками. Колонки — CSS columns, а не сетка: они
+     заполняются сверху вниз, и 1, 2, 3 идут по первой — порядок упражнений,
+     ради которого итог на телефоне одноколоночный, сохраняется. */
+  .app-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "head actions"
+      "totals totals"
+      "list list";
+    column-gap: var(--app-space-6);
+    align-items: start;
+  }
+  .app-summary > .app-screen-head { grid-area: head; }
+  .app-summary > .app-summary-totals { grid-area: totals; }
+  .app-summary > .app-summary-list {
+    grid-area: list;
+    display: block;
+    columns: var(--app-board-cols);
+    column-gap: var(--app-space-4);
+  }
+  .app-summary-list > * { break-inside: avoid; }
+  .app-summary-list > .app-empty { column-span: all; }
+  .app-summary > .app-form-actions {
+    grid-area: actions;
+    flex-direction: row;
+    margin-top: 0;
+    max-width: none;
+  }
+  .app-summary .app-btn-fill { width: auto; }
+  /* Три числа сводки расходятся по ширине равномерно */
+  .app-summary-totals .app-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   /* ---------- Живой режим и черновик: две колонки с 768 ----------
 
      Слева текущее упражнение со степперами, справа стопка: отдых, «Дальше»,
@@ -2500,12 +2548,6 @@ a.btn {
   }
 
   .app-cards-2 > .app-empty { grid-column: 1 / -1; }
-
-  /* Сводка тренировки — во всю ширину, три числа расходятся по ней равномерно */
-  .app-summary-totals .app-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 
   /* «Что нового» таймлайном: даты выстраиваются в рейку слева, текст держит
      комфортную для чтения меру. Двухколоночная «газета» здесь не годится —
