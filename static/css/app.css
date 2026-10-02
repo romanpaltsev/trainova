@@ -2428,6 +2428,44 @@ a.btn {
   .app-main-catalog { --app-measure: var(--app-measure-form); }
   /* До 1200px двухколоночные экраны живут одной колонкой. */
   .app-main-dual { --app-measure: var(--app-measure-form); }
+
+  /* ---------- Живой режим и черновик: две колонки с 768 ----------
+
+     Слева текущее упражнение со степперами, справа стопка: отдых, «Дальше»,
+     «Выполнено», кардио. Ряды заданы явно: с автоматическими колонки были бы
+     связаны общими рядами, и правая стопка начиналась бы только под высокой
+     карточкой степперов. Последний ряд 1fr забирает лишнюю высоту текущего
+     упражнения; пустой ряд (нет отдыха у черновика, нет выполненных)
+     схлопывается в ноль — поэтому row-gap нет, отступы дают сами блоки.
+     #exercises отдаёт свой бокс через display: contents: его id и класс
+     переезжают вместе со свопом, а пустому div терять нечего.
+
+     Липким таймер не делаем: в сетке липкость ограничена ячейкой, а ряд
+     таймера равен его же высоте — двигаться ему некуда. Прежнее «таймер
+     остаётся на виду» так и не работало; теперь таймер стоит наверху своей
+     колонки рядом с текущим упражнением. */
+  .app-live-screen {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(6, auto) 1fr;
+    column-gap: var(--app-space-8);
+    align-items: start;
+  }
+  .app-live-offline { grid-column: 1 / -1; grid-row: 1; }
+  .app-live-head { grid-column: 1 / -1; grid-row: 2; }
+  #exercises { display: contents; }
+  .app-live-now { grid-column: 1; grid-row: 3 / -1; }
+  .app-live-screen > .app-rest { grid-column: 2; grid-row: 3; }
+  .app-live-plan { grid-column: 2; grid-row: 4; }
+  .app-live-done { grid-column: 2; grid-row: 5; }
+  .app-live-screen > .app-cardio-parts,
+  .app-live-screen > .app-cardio-add-tile { grid-column: 2; grid-row: 6; }
+  /* Текущего упражнения нет (новый черновик, всё выполнено) — рабочая колонка
+     пуста, и блоки встают во всю ширину, а не жмутся вправо. */
+  .app-live-screen:not(:has(.app-live-now *))
+    :is(.app-rest, .app-live-plan, .app-live-done, .app-cardio-parts, .app-cardio-add-tile) {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (min-width: 1200px) {
@@ -2640,53 +2678,27 @@ a.btn {
   /* График в панели крупнее: он и есть причина открыть упражнение */
   .app-exercise .app-chart-body { height: 360px; }
 
-  /* ---------- Живой режим и черновик: две колонки ----------
+  /* ---------- Живой режим и черновик на 1200: три зоны ----------
 
-     Слева текущее упражнение со степперами, справа план и выполненное. Рабочая
-     колонка остаётся 34rem: на степперах держится главный сценарий, и расползание
-     им только вредит. #exercises отдаёт свой бокс через display: contents —
-     его id и класс переезжают вместе со свопом, а пустому div терять нечего. */
-  /* Ряды заданы явно. С автоматическими рядами колонки были связаны: «Дальше»
-     и текущее упражнение делили один ряд, и «Выполнено» справа начиналось
-     только под высокой карточкой степперов — под «+ Упражнение» зияло 400px
-     пустоты, а кардио уезжало влево под степперы. Теперь правая колонка идёт
-     сплошным столбиком в своих рядах (4–6), а текущее упражнение занимает
-     ряды 4–7: последний ряд 1fr забирает его лишнюю высоту, и ряды правой
-     колонки остаются по своему содержимому. Пустой ряд (нет отдыха у
-     черновика, нет выполненных) схлопывается в ноль: row-gap здесь нет. */
+     «Сейчас», «Дальше» и колонка из отдыха, «Выполнено» и кардио. Колонки
+     равные: степперы шире ~28rem не становятся удобнее, а таймер сохраняет
+     телефонные пропорции вместо полосы во всю страницу. Базовая сетка — в блоке
+     768; здесь только раскладка колонок. */
   .app-live-screen {
-    display: grid;
-    grid-template-columns: minmax(0, var(--app-measure-form)) minmax(0, 22rem);
-    grid-template-rows: repeat(6, auto) 1fr;
-    column-gap: var(--app-space-8);
-    justify-content: center;
-    align-items: start;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: repeat(5, auto) 1fr;
   }
-
-  .app-live-offline { grid-column: 1 / -1; grid-row: 1; }
-  .app-live-head { grid-column: 1 / -1; grid-row: 2; }
-
-  /* Таймер отдыха остаётся на виду: без липкости он уезжал вверх, пока
-     прокручиваешь к нужному упражнению. z-index — потому что карточка текущего
-     упражнения идёт в разметке позже и иначе рисовалась бы поверх. */
-  .app-live-screen .app-rest {
-    grid-column: 1 / -1;
-    grid-row: 3;
-    position: sticky;
-    top: calc(var(--app-header-height) + var(--app-space-4));
-    z-index: 2;
-  }
-
-  #exercises { display: contents; }
-
-  .app-live-now { grid-column: 1; grid-row: 4 / -1; }
-  .app-live-plan { grid-column: 2; grid-row: 4; }
-  .app-live-done { grid-column: 2; grid-row: 5; }
-
-  /* Кардио — справа, под планом и выполненным: «+ Кардио» стоит рядом с
-     «+ Упражнение», а не под степперами в рабочей колонке. */
+  .app-live-plan { grid-column: 2; grid-row: 3 / -1; }
+  .app-live-screen > .app-rest { grid-column: 3; grid-row: 3; }
+  .app-live-done { grid-column: 3; grid-row: 4; }
   .app-live-screen > .app-cardio-parts,
-  .app-live-screen > .app-cardio-add-tile { grid-column: 2; grid-row: 6; }
+  .app-live-screen > .app-cardio-add-tile { grid-column: 3; grid-row: 5; }
+  /* Без текущего упражнения «Дальше» забирает и рабочую колонку. */
+  .app-live-screen:not(:has(.app-live-now *)) .app-live-plan { grid-column: 1 / span 2; }
+  .app-live-screen:not(:has(.app-live-now *))
+    :is(.app-rest, .app-live-done, .app-cardio-parts, .app-cardio-add-tile) {
+    grid-column: 3;
+  }
 
   /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
   .app-dash {
