@@ -2274,7 +2274,20 @@ a.btn {
   .app-dash-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .app-stat.is-desktop { display: flex; flex-direction: column; }
   .app-chart-body { height: 320px; }
+  /* Окно на ПК — диалог по центру шириной с форму, а не шторка телефона.
+     Потолок по высоте и своя прокрутка: длинный список не уводит заголовок и
+     кнопку за край экрана. Широкий вариант — для окон с двумя колонками. */
   .app-modal-backdrop { align-items: center; }
+  .app-modal {
+    max-width: var(--app-measure-form);
+    max-height: calc(100dvh - 2 * var(--app-space-8));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .app-modal-wide { max-width: var(--app-measure-wide); }
+  /* Ряд кнопок формы ограничен узкой мерой (правило выше) — в окне он должен
+     быть шириной с поля, иначе кнопка короче инпута над ней. */
+  .app-modal .app-form-actions { max-width: none; }
   /* Здесь курсор, а не палец: 44px в голове экрана только раздували бы её, а
      место — не степпер веса. Тот же довод, что у .app-settings-row .app-chip.
      Благодаря этому десктопная голова живого режима и итога не двигается. */
