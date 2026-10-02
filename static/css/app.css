@@ -803,6 +803,10 @@ a.btn {
   right: 0.75rem;
 }
 
+/* Бренд-панель входа: ниже 1200 обёртка не образует бокса, подпись скрыта. */
+.app-auth-aside { display: contents; }
+.app-auth-tagline { display: none; }
+
 /* Поле-ловушка для ботов: невидимо и недоступно с клавиатуры */
 .app-honeypot {
   position: absolute !important;
@@ -2881,6 +2885,45 @@ a.btn {
     font-weight: 700;
     line-height: 1.2;
   }
+
+  /* ---------- Вход и регистрация: бренд-панель ----------
+
+     Слева панель с логотипом и короткой подписью о дневнике, справа форма
+     посередине своей половины. Ряды 1fr auto auto 1fr держат карточку и
+     подвал вместе по центру по вертикали. */
+  .app-auth {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 1fr auto auto 1fr;
+    justify-items: center;
+    padding: 0;
+  }
+  /* stretch по обеим осям: базовое align-items: center у .app-auth центрировал
+     бы панель по вертикали её высотой, а не на всю высоту экрана. */
+  .app-auth-aside {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    justify-self: stretch;
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: var(--app-space-6);
+    padding: var(--app-space-16);
+    border-right: 1px solid var(--app-line);
+    background-color: var(--app-card);
+  }
+  .app-auth-brand { margin: 0; }
+  .app-auth-tagline {
+    display: block;
+    max-width: var(--app-measure-form);
+    margin: 0;
+    color: var(--app-text-secondary);
+    font-size: 1.125rem;
+    line-height: 1.5;
+  }
+  .app-auth-card { grid-column: 2; grid-row: 2; }
+  .app-auth-footer { grid-column: 2; grid-row: 3; }
 
   /* ---------- Справочник упражнений: мастер-деталь ---------- */
 

@@ -5,10 +5,20 @@
 <div class="app-auth position-relative">
   <div class="app-auth-theme">{% include "includes/theme_toggle.html" %}</div>
 
-  <a class="app-logo app-auth-brand" href="{% url 'account_login' %}">
-    {% include "includes/logo.html" %}
-    <span>Дневник тренировок</span>
-  </a>
+  {% comment %}
+    На широком экране (с 1200) логотип с подписью — бренд-панель слева, форма
+    справа. Ниже 1200 обёртка не образует бокса, а подпись скрыта: экран прежний.
+  {% endcomment %}
+  <div class="app-auth-aside">
+    <a class="app-logo app-auth-brand" href="{% url 'account_login' %}">
+      {% include "includes/logo.html" %}
+      <span>Дневник тренировок</span>
+    </a>
+    <p class="app-auth-tagline">
+      Силовые и кардио в одном дневнике: подходы записываются прямо в зале,
+      а рекорды, графики и история собираются сами.
+    </p>
+  </div>
 
   <div class="app-card app-auth-card">
     {% if messages %}
