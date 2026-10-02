@@ -34,11 +34,13 @@ jobs:
           POSTGRES_PASSWORD: trainova
         ports:
           - 5432:5432
+        # Интервал 2s: postgres готов через секунду, а при 10s первая проверка шла
+        # только на десятой, и раннер ждал впустую ~14 с на каждом прогоне.
         options: >-
           --health-cmd "pg_isready -U trainova -d trainova"
-          --health-interval 10s
+          --health-interval 2s
           --health-timeout 5s
-          --health-retries 10
+          --health-retries 30
 
     steps:
       - uses: actions/checkout@v4
