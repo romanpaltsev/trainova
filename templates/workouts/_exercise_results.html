@@ -1,7 +1,10 @@
 {% comment %}
   Результаты поиска упражнений. Выбор отвечает пустым телом (модалка закрывается)
   плюс OOB-обновлением региона упражнений — паттерн SportCreateView.
+  Найденное и подписи к нему — в обёртке app-picker-list: на ПК это левая
+  колонка со своей прокруткой, на телефоне обёртка не образует бокса.
 {% endcomment %}
+<div class="app-picker-list">
 {% for exercise in exercises %}
   <button type="button" class="app-pick-row"
           hx-post="{% url 'live_exercises' workout.pk %}"
@@ -26,6 +29,7 @@
   {% endcomment %}
   <p class="text-secondary-app mb-0">Показаны первые {{ exercises|length }} — уточните запрос.</p>
 {% endif %}
+</div>
 {% if offer_create %}
   {% comment %}
     Название едет hidden-полем: в hx-vals кавычки пользователя сломали бы JSON.

@@ -10,7 +10,12 @@
 <div class="app-modal-backdrop"
      x-data="{mode: 'now', day: '', canStartNow: {{ can_start_now|yesno:'true,false' }}}"
      @keydown.escape.window="$root.remove()">
-  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="start-modal-title">
+  {% comment %}
+    Широкое окно — только когда слева есть что показать: идущая или
+    подготовленные. Иначе половина окна стояла бы пустой.
+  {% endcomment %}
+  <div class="app-card app-modal{% if live or drafts %} app-modal-wide{% endif %}"
+       role="dialog" aria-modal="true" aria-labelledby="start-modal-title">
     <div class="app-modal-head">
       <h2 class="app-modal-title" id="start-modal-title">Новая тренировка</h2>
       <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
@@ -19,6 +24,13 @@
       </button>
     </div>
 
+    {% comment %}
+      На ПК две колонки: слева уже начатое и собранное, справа новая тренировка.
+      На телефоне обёртки не образуют боксов (display: contents), и порядок
+      остаётся прежним: продолжить, подготовленные, режим, виды спорта.
+    {% endcomment %}
+    <div class="app-modal-cols">
+    {% if live or drafts %}<div class="app-modal-col">{% endif %}
     {% if live %}
       {% comment %}
         Время — второй строкой: одной строкой подпись на 375px переносилась
@@ -49,8 +61,14 @@
         {% endfor %}
       </div>
     {% endif %}
+    {% if live or drafts %}</div>{% endif %}
 
-    <div class="app-chips app-chips-split mt-3" role="group" aria-label="Что делаем">
+    <div class="app-modal-col">
+    {% comment %}
+      app-start-mode, а не mt-3: утилита Bootstrap идёт с !important, и в
+      колонке широкого окна отступ над переключателем было бы не снять.
+    {% endcomment %}
+    <div class="app-chips app-chips-split app-start-mode" role="group" aria-label="Что делаем">
       <input type="radio" name="start-mode" id="start-mode-now" value="now"
              class="app-chip-input" x-model="mode" checked>
       <label class="app-chip" for="start-mode-now">Начать сейчас</label>
@@ -123,5 +141,7 @@
       дашборде. Время пойдёт потом: у силовой по кнопке «Начать тренировку»,
       у кардио при записи.
     </p>
+    </div>
+    </div>
   </div>
 </div>

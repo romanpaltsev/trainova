@@ -625,6 +625,16 @@ body {
   letter-spacing: -0.02em;
 }
 
+/* Обёртки колонок широкого окна. На телефоне боксов не образуют — дерево и
+   отступы там прежние; колонками они становятся только на ПК (блок 768). */
+.app-modal-cols,
+.app-modal-col,
+.app-picker-list { display: contents; }
+
+/* Отступ над переключателем «Начать сейчас / Подготовить» — классом, а не
+   утилитой mt-3: та идёт с !important, и в колонке окна её было бы не снять. */
+.app-start-mode { margin-top: var(--app-space-4); }
+
 [x-cloak] { display: none !important; }
 
 /* ---------- Сообщения ---------- */
@@ -2288,6 +2298,51 @@ a.btn {
   /* Ряд кнопок формы ограничен узкой мерой (правило выше) — в окне он должен
      быть шириной с поля, иначе кнопка короче инпута над ней. */
   .app-modal .app-form-actions { max-width: none; }
+
+  /* Окно новой тренировки: слева начатое и подготовленное, справа новая.
+     Первые дети колонок без верхнего отступа — иначе колонки стартуют
+     с разной высоты. */
+  .app-modal-wide .app-modal-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-6);
+    align-items: start;
+  }
+  .app-modal-wide .app-modal-col { display: block; min-width: 0; }
+  .app-modal-wide .app-modal-col > :first-child { margin-top: 0; }
+
+  /* Выбор упражнения: слева найденное со своей прокруткой, справа создание.
+     Пока создавать нечего, найденное занимает обе колонки и раскладывается
+     в две — виден вдвое больший кусок справочника. Если найденного нет,
+     форма создания встаёт во всю ширину. */
+  .app-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-2) var(--app-space-6);
+    align-items: start;
+    max-height: none;
+    overflow: visible;
+  }
+  .app-picker-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--app-space-1);
+    min-width: 0;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  /* Форма создания — колонка целиком. Своё правило .app-pick-list form
+     растворяет формы в строках списка (так живут виды спорта в окне старта),
+     и без display: block подписи и чипы разошлись бы по разным колонкам. */
+  .app-picker > form { display: block; min-width: 0; }
+  .app-picker:not(:has(> form)) > .app-picker-list {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-1) var(--app-space-6);
+    align-content: start;
+  }
+  .app-picker:not(:has(> .app-picker-list > *)) > form { grid-column: 1 / -1; }
   /* Здесь курсор, а не палец: 44px в голове экрана только раздували бы её, а
      место — не степпер веса. Тот же довод, что у .app-settings-row .app-chip.
      Благодаря этому десктопная голова живого режима и итога не двигается. */
