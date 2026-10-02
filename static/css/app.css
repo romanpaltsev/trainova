@@ -2433,10 +2433,116 @@ a.btn {
   .app-main-dialog { --app-measure: var(--app-measure-narrow); }
   .app-main-form { --app-measure: var(--app-measure-form); }
   .app-main-read { --app-measure: var(--app-measure-read); }
-  .app-main-feed { --app-measure: var(--app-measure-read); }
   .app-main-catalog { --app-measure: var(--app-measure-form); }
   /* До 1200px двухколоночные экраны живут одной колонкой. */
   .app-main-dual { --app-measure: var(--app-measure-form); }
+
+  /* ---------- Дашборд на средних экранах ----------
+
+     Плитки и график — во всю ширину; под ними прожектор, а рекорды и последние
+     тренировки — двумя карточками рядом. Карточки со строками, как в макете, —
+     с 768, а не с 1200: на планшете и узком ноутбуке стопка телефонных плиток
+     во всю ширину и делала дашборд «полумобильным». На 1200 боковая часть
+     снова становится колонкой справа от графика. */
+  .app-dash-side {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+  .app-dash-side > .app-spotlight { grid-column: 1 / -1; }
+  .app-dash-side .app-latest { order: 0; }
+  .app-spotlight { display: block; }
+  /* Первый силовой рекорд живёт в прожекторе — плитку прячем */
+  .app-records-item.is-spotlight { display: none; }
+  /* Если он был единственным, прячем и саму карточку: она стала бы пустой */
+  .app-records.is-only-spotlight { display: none; }
+
+  /* Рекорды и последние — единые карточки со строками, как в макете */
+  .app-records,
+  .app-latest {
+    padding: var(--app-space-4) var(--app-card-inset);
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    background-color: var(--app-card);
+    box-shadow: var(--app-shadow-card);
+  }
+
+  /* Заголовки карточек колонки — тем же стилем, что «Часы по неделям» и имя
+     в прожекторе, как в эталоне. Серый подзаголовок раздела годится там, где он
+     стоит над списком (телефон), а внутри карточки он спорил с заголовком
+     графика рядом: два разных «заголовка карточки» на одном экране. */
+  .app-records .app-section-title,
+  .app-latest .app-section-title {
+    color: var(--app-text);
+    font-size: 1.125rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+
+  .app-records-list { display: block; }
+
+  .app-records-item {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.375rem 0;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  /* Название прижато влево, значение и темп/скорость — вправо */
+  .app-records-label { margin-right: auto; }
+
+  .app-records-value {
+    font-size: 1.0625rem;
+    font-weight: 700;
+  }
+
+  .app-records-sub { font-size: 0.8125rem; }
+
+  .app-latest-row {
+    padding: 0.375rem 0;
+    margin-bottom: 0;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .app-latest-row .app-pick-chevron { display: none; }
+
+  .app-latest-text {
+    flex: 1 1 auto;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .app-latest-meta {
+    font-size: 0.875rem;
+    white-space: nowrap;
+  }
+
+  /* ---------- История на средних экранах: доска ----------
+
+     Карточки — в колонки доски, заголовки недель, «Показать ещё» и пустое
+     состояние — во всю строку: недели по-прежнему структурируют ленту.
+     Подгрузка вставляет карточки прямо в сетку. С 1200 (при поддержке
+     subgrid) лента становится таблицей плотных строк — её правила ниже
+     перебивают эти по порядку в файле. */
+  .app-feed {
+    display: grid;
+    grid-template-columns: repeat(var(--app-board-cols), minmax(0, 1fr));
+    gap: var(--app-space-3) var(--app-space-4);
+  }
+  .app-feed > .app-week-title,
+  .app-feed > .btn,
+  .app-feed > .app-empty { grid-column: 1 / -1; }
+  .app-feed > .app-week-title { margin: var(--app-space-2) 0 0; }
+  .app-feed > .app-workout { margin-bottom: 0; }
 
   /* ---------- Итог тренировки ----------
 
@@ -2756,81 +2862,10 @@ a.btn {
   .app-dash-stats { grid-area: stats; }
   .app-dash-main { grid-area: main; }
   .app-dash-side { grid-area: side; }
-  .app-dash-side .app-latest { order: 0; }
-  .app-spotlight { display: block; }
-  /* Первый силовой рекорд живёт в прожекторе — плитку прячем */
-  .app-records-item.is-spotlight { display: none; }
-  /* Если он был единственным, прячем и саму карточку: она стала бы пустой */
-  .app-records.is-only-spotlight { display: none; }
-
-  /* Рекорды и последние — единые карточки со строками, как в макете */
-  .app-records,
-  .app-latest {
-    padding: var(--app-space-4) var(--app-card-inset);
-    border: 1px solid var(--app-line);
-    border-radius: var(--app-radius-card);
-    background-color: var(--app-card);
-    box-shadow: var(--app-shadow-card);
-  }
-
-  /* Заголовки карточек колонки — тем же стилем, что «Часы по неделям» и имя
-     в прожекторе, как в эталоне. Серый подзаголовок раздела годится там, где он
-     стоит над списком (телефон), а внутри карточки он спорил с заголовком
-     графика рядом: два разных «заголовка карточки» на одном экране. */
-  .app-records .app-section-title,
-  .app-latest .app-section-title {
-    color: var(--app-text);
-    font-size: 1.125rem;
-    font-weight: 800;
-    letter-spacing: -0.01em;
-  }
-
-  .app-records-list { display: block; }
-
-  .app-records-item {
-    flex-direction: row;
-    align-items: baseline;
-    gap: 0.5rem;
-    padding: 0.375rem 0;
-    border: 0;
-    border-radius: 0;
-    background-color: transparent;
-    box-shadow: none;
-  }
-
-  /* Название прижато влево, значение и темп/скорость — вправо */
-  .app-records-label { margin-right: auto; }
-
-  .app-records-value {
-    font-size: 1.0625rem;
-    font-weight: 700;
-  }
-
-  .app-records-sub { font-size: 0.8125rem; }
-
-  .app-latest-row {
-    padding: 0.375rem 0;
-    margin-bottom: 0;
-    border: 0;
-    border-radius: 0;
-    background-color: transparent;
-    box-shadow: none;
-  }
-
-  .app-latest-row .app-pick-chevron { display: none; }
-
-  .app-latest-text {
-    flex: 1 1 auto;
-    flex-direction: row;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 0.75rem;
-  }
-
-  .app-latest-meta {
-    font-size: 0.875rem;
-    white-space: nowrap;
-  }
+  /* Колонка справа — снова столбиком (на 768 она сетка из двух колонок).
+     align-items сбрасываем вместе с display: start из блока 768 нужен сетке,
+     а во флекс-столбике он сжал бы карточки до ширины содержимого. */
+  .app-dash-side { display: flex; align-items: stretch; }
 
   /* ---------- История: плотные строки ----------
 
@@ -2841,8 +2876,6 @@ a.btn {
      рамку и поверхность для наведения, а кардио-строка перестала бы быть одной
      ссылкой. Старый браузер без subgrid остаётся на карточках. */
   @supports (grid-template-columns: subgrid) {
-    .app-main-feed { --app-measure: none; }
-
     .app-feed {
       display: grid;
       grid-template-columns:
