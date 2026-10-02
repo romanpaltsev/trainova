@@ -20,6 +20,7 @@ dev = [
     "factory-boy>=3.3",
     "ruff>=0.9",
     "django-debug-toolbar>=7.1.1",
+    "pytest-xdist>=3.8.0",
 ]
 
 [tool.ruff]
@@ -33,4 +34,7 @@ select = ["E", "F", "I", "UP", "B", "DJ"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "config.settings"
 python_files = ["tests.py", "test_*.py"]
-addopts = "--reuse-db"
+# -n 4: набор идёт в четыре процесса (pytest-xdist), у каждого своя тестовая база.
+# Четыре — замеренный предел: дальше время упирается в создание баз, а у раннера
+# GitHub как раз четыре ядра. Для отладки с --pdb или print — запуск с -n0.
+addopts = "--reuse-db -n 4"

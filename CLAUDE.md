@@ -14,7 +14,7 @@
 - Chart.js для графиков
 - PostgreSQL, psycopg 3
 - django-allauth для аутентификации
-- Тесты: pytest + pytest-django + factory_boy. Линт/формат: ruff
+- Тесты: pytest + pytest-django + factory_boy; набор идёт в четыре процесса через pytest-xdist (`-n 4` в addopts, у каждого процесса своя тестовая база; для `--pdb` и `print` — `-n0`). Линт/формат: ruff
 - Docker Compose для разработки: web + postgres + mailpit
 - Секреты через .env (django-environ); .env не коммитится, .env.example всегда актуален
 - UI-основа — Bootstrap 5.3+ (без jQuery); поверх него свой `static/css/tokens.css` с фирменными цветами и переопределением переменных Bootstrap
