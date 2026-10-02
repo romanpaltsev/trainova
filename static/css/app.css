@@ -2439,8 +2439,27 @@ a.btn {
   .app-main-dialog { --app-measure: var(--app-measure-narrow); }
   .app-main-form { --app-measure: var(--app-measure-form); }
   .app-main-read { --app-measure: var(--app-measure-read); }
-  /* До 1200px двухколоночные экраны живут одной колонкой. */
-  .app-main-dual { --app-measure: var(--app-measure-form); }
+
+  /* ---------- Профиль ----------
+
+     Дашборд из карточек: на 768 две колонки, карточка пользователя во всю
+     строку; на 1200 — четыре колонки (ниже, в блоке 1200). align-items: start —
+     иначе короткая секция растянулась бы по высоте соседней. */
+  .app-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "user user"
+      "settings catalogs"
+      "app account";
+    gap: var(--app-space-4) var(--app-space-8);
+    align-items: start;
+  }
+  .app-profile-user { grid-area: user; margin-bottom: 0; }
+  .app-profile-settings { grid-area: settings; }
+  .app-profile-catalogs { grid-area: catalogs; }
+  .app-profile-app { grid-area: app; }
+  .app-profile-account { grid-area: account; }
 
   /* ---------- Справочник упражнений ----------
 
@@ -2733,17 +2752,61 @@ a.btn {
   /* Отступ шапки растёт токеном --app-header-pad (tokens.css): вместе с ним
      пересчитывается и --app-header-height, от которого встают липкие блоки. */
   .app-main { padding-bottom: var(--app-space-16); }
-  /* Мера расширяется вместе с сеткой: профиль и итог тренировки раскладывают
-     содержимое в две колонки, поэтому им нужна широкая колонка страницы. */
-  .app-main-dual { --app-measure: var(--app-measure-dual); }
 
-  /* Профиль: секции в две колонки. align-items: start — иначе короткая секция
-     растянулась бы по высоте соседней. */
+  /* Профиль на 1200: четыре колонки. Верхний ряд — пользователь и три плитки
+     справочников со счётчиками, как плитки дашборда; ниже настройки,
+     приложение и аккаунт. Счётчики уже посчитаны — запросов не прибавляется,
+     а у профиля бюджет 9 из 9. */
   .app-profile-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-areas:
+      "user catalogs catalogs catalogs"
+      "settings settings app account";
+    /* Один зазор на весь верхний ряд: между карточкой пользователя и плитками
+       тот же, что между самими плитками, иначе ряд читается двумя группами. */
+    column-gap: var(--app-space-6);
+  }
+  .app-profile-user,
+  .app-profile-catalogs { align-self: stretch; }
+  /* Заголовок над плитками не нужен: ряд читается как плитки дашборда.
+     Читалкам он остаётся — прячем визуально, как .visually-hidden. */
+  .app-profile-catalogs > .app-section-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .app-profile-catalogs .app-rows {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--app-space-4) var(--app-space-8);
-    align-items: start;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--app-space-6);
+    height: 100%;
+    margin-bottom: 0;
+  }
+  .app-profile-catalogs .app-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon text chevron"
+      "count count count";
+    align-content: space-between;
+    row-gap: var(--app-space-3);
+  }
+  .app-profile-catalogs .app-row-icon { grid-area: icon; }
+  .app-profile-catalogs .app-row-text { grid-area: text; }
+  .app-profile-catalogs .app-pick-chevron { grid-area: chevron; }
+  /* Счётчик — число плитки, тем же размером, что значения дашборда */
+  .app-profile-catalogs .app-row-count {
+    grid-area: count;
+    color: var(--app-text);
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
   }
 
   /* «Что нового» таймлайном: даты выстраиваются в рейку слева, текст держит

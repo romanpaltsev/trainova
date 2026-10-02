@@ -3,36 +3,36 @@
 
 {% block title %}Профиль · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-dual{% endblock %}
-
 {% block content %}
 <h1 class="app-page-title">Профиль</h1>
 
-<section class="app-card app-profile-user">
-  <span class="app-avatar app-avatar-lg" aria-hidden="true">{{ user.initial }}</span>
-  <div>
-    <div class="app-profile-email">{{ user.email }}</div>
-    {% if email_verified %}
-      <div class="app-profile-verified">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20 6L9 17l-5-5"/>
-        </svg>
-        email подтверждён
-      </div>
-    {% else %}
-      <div class="text-muted-app">email не подтверждён</div>
-    {% endif %}
-  </div>
-</section>
-
 {% comment %}
   Секции-обёртки нужны сетке: при плоском DOM (h2, блок, h2, блок)
-  двухколоночная раскладка развела бы заголовок и его блок по разным
-  колонкам. Заодно чинится структура документа — раньше h2 висели без секций.
+  колоночная раскладка развела бы заголовок и его блок по разным колонкам.
+  Карточка пользователя — первый ребёнок сетки: на ПК она стоит в одном ряду
+  с плитками справочников, как плитки дашборда. Порядок в DOM прежний, а на
+  телефоне сетка не стилизована — экран остаётся тем же.
 {% endcomment %}
 <div class="app-profile-grid">
-  <section class="app-profile-section">
+  <section class="app-card app-profile-user">
+    <span class="app-avatar app-avatar-lg" aria-hidden="true">{{ user.initial }}</span>
+    <div>
+      <div class="app-profile-email">{{ user.email }}</div>
+      {% if email_verified %}
+        <div class="app-profile-verified">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          email подтверждён
+        </div>
+      {% else %}
+        <div class="text-muted-app">email не подтверждён</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="app-profile-section app-profile-settings">
     <h2 class="app-section-title">Настройки</h2>
 
     <div class="app-card app-profile-block">
@@ -64,7 +64,7 @@
     </div>
   </section>
 
-  <section class="app-profile-section">
+  <section class="app-profile-section app-profile-catalogs">
     <h2 class="app-section-title">Мои справочники</h2>
 
     <div class="app-rows">
@@ -104,7 +104,7 @@
     </div>
   </section>
 
-  <section class="app-profile-section">
+  <section class="app-profile-section app-profile-app">
     <h2 class="app-section-title">Приложение</h2>
 
     <div class="app-rows">
@@ -142,7 +142,7 @@
     </div>
   </section>
 
-  <section class="app-profile-section">
+  <section class="app-profile-section app-profile-account">
     <h2 class="app-section-title">Аккаунт</h2>
 
     <div class="app-rows">
