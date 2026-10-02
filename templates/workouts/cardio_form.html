@@ -2,7 +2,7 @@
 
 {% block title %}{% if planned %}План тренировки{% elif recording_plan %}Запись тренировки{% elif workout %}Правка тренировки{% else %}Новая тренировка{% endif %} · Дневник тренировок{% endblock %}
 
-{% block main_class %}app-main-form{% endblock %}
+{% block main_class %}app-main-dual{% endblock %}
 
 {% block content %}
 <div class="app-screen-head">
@@ -29,6 +29,14 @@
     </div>
   {% endif %}
 
+  {% comment %}
+    На ПК форма в две колонки: слева что и когда (вид спорта, день или дата
+    со временем, длительность), справа сколько (дистанция с пульсом или
+    цели, расчёт темпа), место и заметка. Ошибки и кнопки — во всю ширину.
+    На телефоне обёртки колонок не образуют боксов (display: contents).
+  {% endcomment %}
+  <div class="app-form-cols">
+  <div class="app-form-col">
   <div class="mb-3">
     <span class="form-label d-block">Вид спорта</span>
     {% include "workouts/_sport_chips.html" with sports=form.fields.sport.queryset selected_id=form.sport.value %}
@@ -75,6 +83,9 @@
     {% include "workouts/_duration_fields.html" with label="Длительность" %}
   </div>
   {% endif %}
+  </div>
+
+  <div class="app-form-col">
 
   {% comment %}
     Пара в две колонки в обоих режимах: при записи «дистанция и пульс», у плана
@@ -126,6 +137,8 @@
   <div class="mb-3">
     <label class="form-label" for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
     {{ form.note }}
+  </div>
+  </div>
   </div>
 
   <div class="app-form-actions">

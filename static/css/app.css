@@ -404,6 +404,10 @@ body {
    и там, где на ПК кнопка встаёт в ряд, её ширину было бы не снять. */
 .app-btn-fill { width: 100%; }
 
+/* Колонки формы кардио: на телефоне боксов не образуют, на ПК — две колонки. */
+.app-form-cols,
+.app-form-col { display: contents; }
+
 /* Обёртки итога тренировки: на телефоне боксов не образуют, сеткой и
    колонками становятся на ПК (блок 768). */
 .app-summary,
@@ -2443,6 +2447,20 @@ a.btn {
   .app-main-dialog { --app-measure: var(--app-measure-narrow); }
   .app-main-form { --app-measure: var(--app-measure-form); }
   .app-main-read { --app-measure: var(--app-measure-read); }
+
+  /* ---------- Форма кардио и плана: две колонки ----------
+
+     Слева что и когда, справа сколько, место и заметка; ошибки и кнопки —
+     во всю ширину под колонками. Страница ставит меру app-main-dual: поле
+     шире формы на телефоне (34rem на колонку) удобнее не становится. */
+  .app-main-dual { --app-measure: var(--app-measure-dual); }
+  .app-form-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--app-space-8);
+    align-items: start;
+  }
+  .app-form-col { display: block; min-width: 0; }
 
   /* ---------- Справочники и обмен данными ----------
 
