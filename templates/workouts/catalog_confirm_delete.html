@@ -14,6 +14,7 @@
     <p class="text-secondary-app">{{ blocked_message }}</p>
     <a class="btn btn-quiet w-100" href="{{ cancel_url }}">Назад</a>
   {% else %}
+    {% if delete_note %}<p class="text-secondary-app mb-1">{{ delete_note }}</p>{% endif %}
     <p class="text-secondary-app">Действие нельзя отменить.</p>
     <form method="post">
       {% csrf_token %}

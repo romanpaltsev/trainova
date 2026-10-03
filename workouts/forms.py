@@ -1,11 +1,15 @@
 """Формы записи тренировок и личных справочников."""
 
 from django import forms
-from django.utils import timezone
+from django.utils import formats, timezone
 
 from workouts import excel, excel_import, services
 from workouts.models import (
+    BODY_METRIC_NAME_MAX_LENGTH,
+    BODY_METRIC_UNIT_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
+    BodyMeasurement,
+    BodyMetric,
     CardioPart,
     Exercise,
     Location,
@@ -15,6 +19,7 @@ from workouts.models import (
     chosen_muscle_group,
     collapse_spaces,
     facets_for,
+    parse_measurement_value,
 )
 
 MAX_DURATION_HOURS = 24
@@ -578,3 +583,125 @@ class XlsxUploadForm(forms.Form):
                 "Нужен файл .xlsx — сохраните таблицу из Excel как «Книга Excel (.xlsx)»."
             )
         return upload
+
+
+class BodyMeasurementForm(forms.Form):
+    """Замер: параметр, значение, день.
+
+    Параметр — из видимых пользователю (общие и свои): чужой id приходит
+    ошибкой поля, а не утечкой. При правке параметр зафиксирован — его нет в
+    полях вовсе, дослать его руками нельзя. Значение разбирает сервер: «82,5» и
+    «82.5» одинаково.
+    """
+
+    metric = forms.ModelChoiceField(
+        queryset=BodyMetric.objects.none(),
+        empty_label=None,
+        widget=forms.RadioSelect,
+        error_messages={
+            "required": "Выберите параметр.",
+            "invalid_choice": "Такого параметра у вас нет.",
+        },
+    )
+    value = forms.CharField(
+        label="Значение",
+        max_length=12,
+        error_messages={"required": "Введите значение, например 82,5."},
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "inputmode": "decimal", "autocomplete": "off"}
+        ),
+    )
+    measured_on = date_field()
+
+    def __init__(self, *args, user, instance=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self.instance = instance
+        self.fields["measured_on"].label = "День"
+        # Будущий день браузер не даст выбрать, а сервер всё равно проверит.
+        self.fields["measured_on"].widget.attrs["max"] = timezone.localdate().isoformat()
+        self.fields["value"].widget.attrs["autofocus"] = True
+        if instance is None:
+            self.fields["metric"].queryset = BodyMetric.objects.visible_to(user)
+        else:
+            del self.fields["metric"]
+
+    def clean_value(self):
+        try:
+            return parse_measurement_value(self.cleaned_data["value"])
+        except ValueError as error:
+            raise forms.ValidationError(str(error)) from None
+
+    def clean_measured_on(self):
+        day = self.cleaned_data["measured_on"]
+        if day > timezone.localdate():
+            raise forms.ValidationError("Дата не может быть в будущем.")
+        return day
+
+    def clean(self):
+        cleaned = super().clean()
+        day = cleaned.get("measured_on")
+        # Перенос замера на день, где у параметра уже есть замер, — ошибка поля:
+        # при добавлении такой ввод — исправление дня, а при правке он молча
+        # затёр бы другой замер.
+        if self.instance is not None and day:
+            taken = BodyMeasurement.objects.filter(
+                user=self.user, metric=self.instance.metric, measured_on=day
+            ).exclude(pk=self.instance.pk)
+            if taken.exists():
+                label = formats.date_format(day, "j E")
+                self.add_error("measured_on", f"За {label} замер уже есть — поправьте его.")
+        return cleaned
+
+
+class BodyMetricForm(forms.Form):
+    """Свой параметр тела: название и единица («Шея», «см»).
+
+    Единица — только подпись: при смене прежние замеры не пересчитываются, о чём
+    модалка и говорит. Дубль общего названия в другом регистре отклоняется —
+    ограничение в базе его не поймает, владельцы разные (тот же довод, что у
+    SportForm).
+    """
+
+    name = forms.CharField(
+        label="Название",
+        max_length=BODY_METRIC_NAME_MAX_LENGTH,
+        error_messages={"required": "Введите название."},
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "placeholder": "напр. Шея", "autocomplete": "off"}
+        ),
+    )
+    unit = forms.CharField(
+        label="Единица",
+        max_length=BODY_METRIC_UNIT_MAX_LENGTH,
+        required=False,
+        widget=forms.TextInput(
+            attrs={"class": "form-control", "placeholder": "напр. см", "autocomplete": "off"}
+        ),
+    )
+
+    def __init__(self, *args, user, instance=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+        self.instance = instance
+
+    def clean_name(self):
+        name = collapse_spaces(self.cleaned_data["name"])
+        if not name:
+            raise forms.ValidationError("Введите название.")
+        duplicate = BodyMetric.objects.visible_to(self.user).filter(name__iexact=name)
+        if self.instance is not None:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise forms.ValidationError("Такой параметр у вас уже есть.")
+        return name
+
+    def clean_unit(self):
+        return collapse_spaces(self.cleaned_data["unit"])
+
+    def save(self):
+        metric = self.instance or BodyMetric(owner=self.user)
+        metric.name = self.cleaned_data["name"]
+        metric.unit = self.cleaned_data["unit"]
+        metric.save()
+        return metric

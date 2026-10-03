@@ -1,0 +1,71 @@
+{% comment %}
+  Замер: параметр (чипы, только при добавлении), значение и день. Единица
+  выбранного параметра стоит в подписи значения — её подменяет Alpine по
+  data-unit чипа. При правке параметр зафиксирован и стоит в заголовке, а
+  рядом с «Сохранить» — «Удалить замер» (своё имя кнопки, а не пустое значение).
+  Ответ на успех — HX-Redirect туда, откуда открыли (back).
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="measurement-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="measurement-modal-title">
+        {% if entry %}{{ entry.metric.name }}{% else %}Новый замер{% endif %}
+      </h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <form hx-post="{% if entry %}{% url 'body_measurement_edit' entry.pk %}{% else %}{% url 'body_measurement_add' %}{% endif %}"
+          hx-target="#modal" hx-swap="innerHTML"
+          x-data="{ unit: '{{ unit|escapejs }}' }">
+      {% csrf_token %}
+      <input type="hidden" name="back" value="{{ back }}">
+
+      {% if form.metric %}
+        <div class="mb-3">
+          <span class="form-label d-block">Параметр</span>
+          <div class="app-chips">
+            {% for radio in form.metric %}
+              <input type="radio" name="{{ radio.data.name }}" id="{{ radio.id_for_label }}"
+                     value="{{ radio.data.value }}" class="app-chip-input"
+                     data-unit="{{ radio.data.value.instance.unit }}" @change="unit = $el.dataset.unit"
+                     {% if radio.data.selected %}checked{% endif %}>
+              <label class="app-chip" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+            {% endfor %}
+          </div>
+          {% for error in form.metric.errors %}
+            <div class="invalid-feedback d-block">{{ error }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      <div class="app-field-grid">
+        <div>
+          <label class="form-label" for="{{ form.value.id_for_label }}">
+            Значение<span x-show="unit" x-text="', ' + unit"></span>
+          </label>
+          {{ form.value }}
+          {% for error in form.value.errors %}
+            <div class="invalid-feedback d-block">{{ error }}</div>
+          {% endfor %}
+        </div>
+        <div>
+          <label class="form-label" for="{{ form.measured_on.id_for_label }}">{{ form.measured_on.label }}</label>
+          {{ form.measured_on }}
+          {% for error in form.measured_on.errors %}
+            <div class="invalid-feedback d-block">{{ error }}</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="app-form-actions">
+        <button type="submit" class="btn btn-accent app-btn-fill">Сохранить</button>
+        {% if entry %}
+          <button type="submit" class="btn btn-danger-quiet app-btn-fill" name="delete" value="1">Удалить замер</button>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ metric.name }} · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'body_measurements' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <div>
+    {% comment %}
+      Свой параметр переименовывается тапом по названию — приём заголовка своего
+      упражнения. Общий остаётся текстом: его меняет миграция.
+    {% endcomment %}
+    <h1 class="app-page-title mb-0">
+      {% if can_edit %}
+        <button type="button" class="app-title-edit"
+                hx-get="{% url 'body_metric_rename' metric.pk %}" hx-target="#modal" hx-swap="innerHTML"
+                aria-label="Переименовать {{ metric.name }}">
+          {{ metric.name }}{% include "includes/pencil.html" %}
+        </button>
+      {% else %}
+        {{ metric.name }}
+      {% endif %}
+    </h1>
+    <div class="text-secondary-app">{{ count_label }}{% if metric.unit %} · {{ metric.unit }}{% endif %}</div>
+  </div>
+</div>
+
+<div class="app-form-actions app-body-actions">
+  <button type="button" class="btn btn-accent app-btn-fill"
+          hx-get="{% url 'body_measurement_add' %}?metric={{ metric.pk }}&back=metric"
+          hx-target="#modal" hx-swap="innerHTML">
+    + Замер
+  </button>
+  {% if can_edit %}
+    <a class="btn btn-danger-quiet app-btn-fill" href="{% url 'body_metric_delete' metric.pk %}">Удалить параметр</a>
+  {% endif %}
+</div>
+
+{% if chart.values|length > 1 %}
+  <section class="app-card app-chart-card app-body-chart">
+    <div class="app-chart-head">
+      <h2 class="app-chart-title">{{ metric.name }}</h2>
+      {% if metric.unit %}<span class="app-chart-meta text-muted-app">{{ metric.unit }}</span>{% endif %}
+    </div>
+    <div class="app-chart-body">
+      <canvas id="metric-chart" role="img" aria-label="{{ metric.name }} по замерам"></canvas>
+    </div>
+  </section>
+{% elif chart.values|length == 1 %}
+  {% include "includes/empty_state.html" with text="График появится со второго замера." extra_class="app-empty-slim" %}
+{% endif %}
+
+{% if history %}
+  <h2 class="app-section-title app-body-title">Замеры</h2>
+  {% comment %}
+    Строка — кнопка правки замера: тап открывает модалку с днём и значением,
+    там же «Удалить замер». Изменение — к предыдущему по дате замеру.
+  {% endcomment %}
+  <div class="app-rows app-rows-board">
+    {% for entry in history %}
+      <button type="button" class="app-row app-body-entry"
+              hx-get="{% url 'body_measurement_edit' entry.pk %}" hx-target="#modal" hx-swap="innerHTML"
+              aria-label="Изменить замер за {{ entry.day_label }}: {{ entry.display }}">
+        <span class="app-row-text">
+          <span class="app-row-name">{{ entry.day_label }}</span>
+          {% if entry.delta %}<span class="app-row-meta">{{ entry.delta }}</span>{% endif %}
+        </span>
+        <span class="app-row-value num">{{ entry.display }}</span>
+        <span class="app-live-set-icon" aria-hidden="true">{% include "includes/pencil.html" %}</span>
+      </button>
+    {% endfor %}
+  </div>
+{% else %}
+  {% include "includes/empty_state.html" with title="Замеров пока нет" text="Запишите первый — кнопкой «+ Замер»." extra_class="app-empty-slim" %}
+{% endif %}
+
+{{ chart|json_script:"metric-chart-data" }}
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+  <script src="{% static 'js/charts.js' %}"></script>
+  <script src="{% static 'js/body.js' %}"></script>
+{% endblock %}

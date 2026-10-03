@@ -1,0 +1,42 @@
+{% comment %}
+  Свой параметр тела: создать или переименовать. Единица — только подпись к
+  числу: при смене прежние замеры не пересчитываются, о чём модалка и говорит.
+  Ответ на успех — HX-Redirect на страницу параметра.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="metric-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="metric-modal-title">
+        {% if metric %}Параметр{% else %}Свой параметр{% endif %}
+      </h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <form hx-post="{% if metric %}{% url 'body_metric_rename' metric.pk %}{% else %}{% url 'body_metric_create' %}{% endif %}"
+          hx-target="#modal" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+        {{ form.name }}
+        {% for error in form.name.errors %}
+          <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.unit.id_for_label }}">
+          {{ form.unit.label }} <span class="text-muted-app">· необязательно</span>
+        </label>
+        {{ form.unit }}
+        {% if metric %}
+          <p class="app-queue-hint mt-2 mb-0">Единица — подпись к числу: прежние замеры не пересчитываются.</p>
+        {% endif %}
+      </div>
+      <div class="app-form-actions">
+        <button type="submit" class="btn btn-accent app-btn-fill">{% if metric %}Сохранить{% else %}Добавить{% endif %}</button>
+      </div>
+    </form>
+  </div>
+</div>

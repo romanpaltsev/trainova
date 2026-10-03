@@ -14,8 +14,8 @@ from typing import NamedTuple
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Max, Q
-from django.db.models.deletion import ProtectedError
+from django.db.models import Count, F, Max, OuterRef, Q, Subquery
+from django.db.models.deletion import ProtectedError, RestrictedError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -27,6 +27,8 @@ from django.views.generic import DeleteView, ListView, TemplateView, View
 from workouts import excel, excel_import, exercise_excel, services, stats
 from workouts.forms import (
     MAX_DURATION_HOURS,
+    BodyMeasurementForm,
+    BodyMetricForm,
     CardioPartForm,
     CardioWorkoutForm,
     ExerciseQuickForm,
@@ -35,6 +37,8 @@ from workouts.forms import (
     XlsxUploadForm,
 )
 from workouts.models import (
+    BODY_METRIC_NAME_MAX_LENGTH,
+    BODY_METRIC_UNIT_MAX_LENGTH,
     DEFAULT_WEIGHT_STEP,
     EQUIPMENT_MAX_LENGTH,
     EXERCISE_NAME_MAX_LENGTH,
@@ -51,6 +55,8 @@ from workouts.models import (
     SET_STEPS,
     TIME_MEASUREMENTS,
     WEIGHT_STEP_CHOICES,
+    BodyMeasurement,
+    BodyMetric,
     ChangelogEntry,
     Exercise,
     ExerciseNote,
@@ -67,6 +73,8 @@ from workouts.models import (
     decimal_display,
     exercise_usage,
     facets_for,
+    measurement_delta,
+    measurement_display,
     metric_display,
     parse_field_value,
     parse_weight_step,
@@ -2749,3 +2757,298 @@ class ExerciseExportView(LoginRequiredMixin, View):
             filename=exercise_excel.export_filename(timezone.localdate()),
             content_type=excel.CONTENT_TYPE,
         )
+
+
+# ---------- Замеры тела ----------
+#
+# Журнал замеров с датами: вес, рост, обхваты и свои параметры. Параметры —
+# гибридный справочник (общие + свои), замеры — личные. Изоляция фичи держится
+# на user=request.user в каждом запросе замеров: строки общих параметров у всех
+# одни и те же, а значения — у каждого свои.
+
+
+def measure_day_label(day, today):
+    """«сегодня», «вчера», «28 сен» — с годом, если он не текущий."""
+    if day == today:
+        return "сегодня"
+    if day == today - timedelta(days=1):
+        return "вчера"
+    return formats.date_format(day, "j b" if day.year == today.year else "j b Y")
+
+
+def body_metric_rows(user):
+    """Видимые параметры с последним и предыдущим замером пользователя.
+
+    Одним запросом: значения подзапросами, как шаг веса в with_weight_step.
+    Фильтр user=user внутри подзапроса — то, что не даёт увидеть чужой вес на
+    общем параметре.
+    """
+    mine = BodyMeasurement.objects.filter(user=user, metric=OuterRef("pk")).order_by("-measured_on")
+    metrics = list(
+        BodyMetric.objects.visible_to(user).annotate(
+            last_value=Subquery(mine.values("value")[:1]),
+            last_on=Subquery(mine.values("measured_on")[:1]),
+            previous_value=Subquery(mine.values("value")[1:2]),
+        )
+    )
+    today = timezone.localdate()
+    for metric in metrics:
+        if metric.last_on is not None:
+            metric.last_display = measurement_display(metric.last_value, metric.unit)
+            metric.last_label = measure_day_label(metric.last_on, today)
+            metric.delta = measurement_delta(metric.last_value, metric.previous_value, metric.unit)
+    return metrics
+
+
+class BodyMeasurementsView(LoginRequiredMixin, View):
+    """«Мои замеры»: параметры с последним значением, остальные — списком ниже.
+
+    Сверху то, что человек уже измеряет, — со значением, днём и изменением к
+    прошлому замеру; ниже остальные параметры строкой, чтобы новичок не видел
+    восемь пустых карточек (приём «Я тренирую» каталога).
+    """
+
+    def get(self, request):
+        metrics = body_metric_rows(request.user)
+        return render(
+            request,
+            "workouts/body_measurements.html",
+            {
+                "tracked": [metric for metric in metrics if metric.last_on is not None],
+                "untracked": [metric for metric in metrics if metric.last_on is None],
+                "nav_active": "profile",
+            },
+        )
+
+
+class BodyMetricView(LoginRequiredMixin, View):
+    """Страница параметра: график, история замеров с изменениями, «+ Замер»."""
+
+    def get(self, request, pk):
+        metric = get_object_or_404(BodyMetric.objects.visible_to(request.user), pk=pk)
+        entries = list(
+            BodyMeasurement.objects.filter(user=request.user, metric=metric).order_by("measured_on")
+        )
+        today = timezone.localdate()
+        previous = None
+        for entry in entries:
+            entry.display = measurement_display(entry.value, metric.unit)
+            entry.delta = measurement_delta(entry.value, previous, metric.unit)
+            entry.day_label = measure_day_label(entry.measured_on, today)
+            previous = entry.value
+        count = len(entries)
+        return render(
+            request,
+            "workouts/body_metric.html",
+            {
+                "metric": metric,
+                "history": entries[::-1],
+                "count_label": (
+                    f"{count} {ru_plural(count, 'замер', 'замера', 'замеров')}"
+                    if count
+                    else "замеров пока нет"
+                ),
+                # Только float: json_script сериализует Decimal строками, и
+                # математика графика на клиенте сломалась бы молча.
+                "chart": {
+                    "labels": [f"{entry.measured_on:%d.%m}" for entry in entries],
+                    "values": [float(entry.value) for entry in entries],
+                    "unit": metric.unit,
+                    "format": "",
+                    "colorKey": "strength",
+                },
+                "can_edit": metric.owner_id == request.user.pk,
+                "nav_active": "profile",
+            },
+        )
+
+
+def body_redirect(back, metric):
+    """Куда вернуться после модалки: на список или на страницу параметра.
+
+    Цель приходит словом, а не адресом: подмена поля не уведёт на чужой сайт.
+    """
+    if back == "metric" and metric is not None:
+        url = reverse("body_metric", args=[metric.pk])
+    else:
+        url = reverse("body_measurements")
+    return HttpResponse(headers={"HX-Redirect": url})
+
+
+class BodyMeasurementView(LoginRequiredMixin, View):
+    """Модалка замера: добавить (без pk), поправить или удалить (с pk).
+
+    Добавление за уже занятый день — исправление: значение перезаписывается,
+    второй замер за день не появляется (UniqueConstraint). Ответ — HX-Redirect:
+    после записи меняются и значение, и изменение, и график.
+    """
+
+    def get_entry(self, request, pk):
+        if pk is None:
+            return None
+        return get_object_or_404(
+            BodyMeasurement.objects.filter(user=request.user).select_related("metric"), pk=pk
+        )
+
+    def get(self, request, pk=None):
+        entry = self.get_entry(request, pk)
+        if entry is not None:
+            form = BodyMeasurementForm(
+                user=request.user,
+                instance=entry,
+                initial={"value": decimal_display(entry.value), "measured_on": entry.measured_on},
+            )
+            return self.modal(request, form, entry=entry, back="metric", unit=entry.metric.unit)
+        # Параметр — из адреса (со страницы параметра) или первый видимый, то
+        # есть вес: его меряют чаще всего.
+        visible = BodyMetric.objects.visible_to(request.user)
+        raw = request.GET.get("metric", "")
+        chosen = visible.filter(pk=raw).first() if raw.isdecimal() else None
+        chosen = chosen or visible.first()
+        initial = {"measured_on": timezone.localdate(), "metric": chosen.pk if chosen else None}
+        form = BodyMeasurementForm(user=request.user, initial=initial)
+        return self.modal(
+            request, form, back=request.GET.get("back", "list"), unit=chosen.unit if chosen else ""
+        )
+
+    def post(self, request, pk=None):
+        entry = self.get_entry(request, pk)
+        back = request.POST.get("back", "list")
+        if entry is not None and request.POST.get("delete"):
+            metric = entry.metric
+            entry.delete()
+            messages.success(request, "Замер удалён.")
+            return body_redirect(back, metric)
+        form = BodyMeasurementForm(request.POST, user=request.user, instance=entry)
+        if not form.is_valid():
+            unit = entry.metric.unit if entry else self.posted_unit(request)
+            return self.modal(request, form, entry=entry, back=back, unit=unit)
+        value = form.cleaned_data["value"]
+        day = form.cleaned_data["measured_on"]
+        if entry is not None:
+            entry.value = value
+            entry.measured_on = day
+            entry.save(update_fields=["value", "measured_on"])
+            metric = entry.metric
+            messages.success(request, "Замер исправлен.")
+        else:
+            metric = form.cleaned_data["metric"]
+            _, created = BodyMeasurement.objects.update_or_create(
+                user=request.user, metric=metric, measured_on=day, defaults={"value": value}
+            )
+            if created:
+                messages.success(request, "Замер записан.")
+            else:
+                label = formats.date_format(day, "j E")
+                messages.success(request, f"Замер за {label} обновлён.")
+        return body_redirect(back, metric)
+
+    @staticmethod
+    def posted_unit(request):
+        """Единица выбранного в форме параметра — для подписи после ошибки."""
+        raw = request.POST.get("metric", "")
+        if not raw.isdecimal():
+            return ""
+        metric = BodyMetric.objects.visible_to(request.user).filter(pk=raw).first()
+        return metric.unit if metric else ""
+
+    def modal(self, request, form, *, entry=None, back="list", unit=""):
+        return render(
+            request,
+            "workouts/_body_measurement_modal.html",
+            {
+                "form": form,
+                "entry": entry,
+                "back": "metric" if back == "metric" else "list",
+                "unit": unit,
+            },
+        )
+
+
+class BodyMetricEditView(LoginRequiredMixin, View):
+    """Свой параметр: создать (без pk), переименовать или сменить единицу (с pk).
+
+    Общий параметр так не правится — его меняет миграция, — поэтому правка
+    ищет только среди своих (filter(owner=user)): общий и чужой дают 404, как у
+    LocationRenameView.
+    """
+
+    def get_metric(self, request, pk):
+        if pk is None:
+            return None
+        return get_object_or_404(BodyMetric.objects.filter(owner=request.user), pk=pk)
+
+    def get(self, request, pk=None):
+        metric = self.get_metric(request, pk)
+        initial = {"name": metric.name, "unit": metric.unit} if metric else {}
+        form = BodyMetricForm(user=request.user, instance=metric, initial=initial)
+        return self.modal(request, form, metric)
+
+    def post(self, request, pk=None):
+        metric = self.get_metric(request, pk)
+        form = BodyMetricForm(request.POST, user=request.user, instance=metric)
+        if not form.is_valid():
+            return self.modal(request, form, metric)
+        saved = form.save()
+        if metric is None:
+            messages.success(request, f"Параметр «{saved.name}» добавлен — запишите первый замер.")
+        return HttpResponse(headers={"HX-Redirect": reverse("body_metric", args=[saved.pk])})
+
+    def modal(self, request, form, metric):
+        return render(
+            request,
+            "workouts/_body_metric_modal.html",
+            {
+                "form": form,
+                "metric": metric,
+                "name_max_length": BODY_METRIC_NAME_MAX_LENGTH,
+                "unit_max_length": BODY_METRIC_UNIT_MAX_LENGTH,
+            },
+        )
+
+
+class BodyMetricDeleteView(LoginRequiredMixin, View):
+    """Удаление своего параметра — вместе с его замерами, после подтверждения.
+
+    Не CatalogDeleteView: тот считает тренировки и запрещает удалять занятое, а
+    здесь замеры — часть самого параметра, и страница честно говорит, сколько их
+    уйдёт. Замеры удаляются явно: у ссылки замера RESTRICT.
+    """
+
+    def get_metric(self, request, pk):
+        return get_object_or_404(BodyMetric.objects.filter(owner=request.user), pk=pk)
+
+    def get(self, request, pk):
+        metric = self.get_metric(request, pk)
+        count = metric.measurements.filter(user=request.user).count()
+        return render(
+            request,
+            "workouts/catalog_confirm_delete.html",
+            {
+                "title": "Удалить параметр",
+                "item": metric,
+                "usage_label": (
+                    f"{count} {ru_plural(count, 'замер', 'замера', 'замеров')}"
+                    if count
+                    else "замеров нет"
+                ),
+                "delete_note": "Вместе с параметром удалятся все его замеры." if count else "",
+                "cancel_url": reverse("body_metric", args=[metric.pk]),
+                "nav_active": "profile",
+            },
+        )
+
+    def post(self, request, pk):
+        metric = self.get_metric(request, pk)
+        with transaction.atomic():
+            metric.measurements.filter(user=request.user).delete()
+            try:
+                metric.delete()
+            except RestrictedError:
+                # Свой параметр замеряет только владелец, но параллельная вкладка
+                # могла успеть записать замер между двумя удалениями.
+                transaction.set_rollback(True)
+                messages.error(request, "Не получилось: появился новый замер. Попробуйте ещё раз.")
+                return redirect("body_metric", pk=metric.pk)
+        messages.success(request, f"Параметр «{metric.name}» удалён.")
+        return redirect("body_measurements")

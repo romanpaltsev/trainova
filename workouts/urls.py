@@ -37,6 +37,25 @@ urlpatterns = [
     path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
     path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
     path("profile/locations/", views.MyLocationsView.as_view(), name="my_locations"),
+    # Мои замеры: имена маршрутов начинаются с body_ — по префиксу подсвечивается
+    # пункт боковой панели.
+    path("profile/body/", views.BodyMeasurementsView.as_view(), name="body_measurements"),
+    path("profile/body/new/", views.BodyMetricEditView.as_view(), name="body_metric_create"),
+    path("profile/body/<int:pk>/", views.BodyMetricView.as_view(), name="body_metric"),
+    path(
+        "profile/body/<int:pk>/edit/", views.BodyMetricEditView.as_view(), name="body_metric_rename"
+    ),
+    path(
+        "profile/body/<int:pk>/delete/",
+        views.BodyMetricDeleteView.as_view(),
+        name="body_metric_delete",
+    ),
+    path("profile/body/entry/", views.BodyMeasurementView.as_view(), name="body_measurement_add"),
+    path(
+        "profile/body/entry/<int:pk>/",
+        views.BodyMeasurementView.as_view(),
+        name="body_measurement_edit",
+    ),
     path(
         "profile/locations/<int:pk>/default/",
         views.LocationDefaultView.as_view(),

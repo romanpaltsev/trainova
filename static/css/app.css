@@ -1423,6 +1423,20 @@ a.btn {
 
 .app-trained-date { color: var(--app-text-muted); }
 
+/* ---------- Мои замеры ---------- */
+
+.app-body-actions {
+  margin-top: 0;
+  margin-bottom: var(--app-space-4);
+}
+.app-body-title { margin-top: var(--app-space-6); }
+.app-body-own { margin-top: var(--app-space-4); }
+.app-body-chart { margin-bottom: var(--app-space-4); }
+
+/* Строка замера — кнопка правки (модалка с днём и значением): обвязку кнопки
+   снимаем, строка выглядит как соседние ссылки. */
+.app-body-entry { text-align: left; }
+
 /* ---------- Страница упражнения ---------- */
 
 /* Ритм между блоками задаёт колонка, а не поля блоков: раньше у карточки
@@ -2767,6 +2781,18 @@ a.btn {
   .app-profile-catalogs { grid-area: catalogs; }
   .app-profile-app { grid-area: app; }
   .app-profile-account { grid-area: account; }
+
+  /* ---------- Мои замеры ----------
+
+     Кнопки — по содержимому и у левого края: «+ Замер» шириной с форму висел
+     посередине пустой строки, а «+ Свой параметр» во всю ширину страницы
+     выглядел главным действием. */
+  .app-body-actions {
+    flex-direction: row;
+    margin-inline: 0;
+  }
+  .app-body-actions .app-btn-fill,
+  .app-body-own { width: auto; }
 
   /* ---------- Справочник упражнений: таблица ----------
 

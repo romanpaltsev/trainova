@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Мои замеры · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Мои замеры</h1>
+</div>
+
+<div class="app-form-actions app-body-actions">
+  <button type="button" class="btn btn-accent app-btn-fill"
+          hx-get="{% url 'body_measurement_add' %}" hx-target="#modal" hx-swap="innerHTML">
+    + Замер
+  </button>
+</div>
+
+{% comment %}
+  Сверху параметры, которые человек уже измеряет: значение, день и изменение к
+  прошлому замеру (views.body_metric_rows — одним запросом). Изменение без
+  цвета: у веса снижение бывает целью, у бицепса — нет. Ниже остальные
+  параметры строкой, чтобы новичок не видел восемь пустых карточек.
+{% endcomment %}
+{% if tracked %}
+  <div class="app-rows app-rows-board">
+    {% for metric in tracked %}
+      <a class="app-row" href="{% url 'body_metric' metric.pk %}">
+        <span class="app-row-text">
+          <span class="app-row-name">{{ metric.name }}</span>
+          <span class="app-row-meta">{{ metric.last_label }}{% if metric.delta %} · {{ metric.delta }}{% endif %}</span>
+        </span>
+        <span class="app-row-value num">{{ metric.last_display }}</span>
+        {% include "includes/chevron.html" %}
+      </a>
+    {% endfor %}
+  </div>
+{% else %}
+  {% include "includes/empty_state.html" with title="Замеров пока нет" text="Запишите вес — и здесь появятся его значение и изменение к прошлому замеру. Рост, обхваты и пульс — по желанию." extra_class="app-empty-slim" %}
+{% endif %}
+
+{% if untracked %}
+  <h2 class="app-section-title app-body-title">Другие параметры</h2>
+  <div class="app-rows app-rows-board">
+    {% for metric in untracked %}
+      <a class="app-row" href="{% url 'body_metric' metric.pk %}">
+        <span class="app-row-text">
+          <span class="app-row-name">{{ metric.name }}</span>
+          {% if metric.unit or not metric.is_global %}
+            <span class="app-row-meta">{{ metric.unit }}{% if not metric.is_global %}{% if metric.unit %} · {% endif %}моё{% endif %}</span>
+          {% endif %}
+        </span>
+        {% include "includes/chevron.html" %}
+      </a>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<button type="button" class="btn btn-quiet app-btn-fill app-body-own"
+        hx-get="{% url 'body_metric_create' %}" hx-target="#modal" hx-swap="innerHTML">
+  + Свой параметр
+</button>
+{% endblock %}
