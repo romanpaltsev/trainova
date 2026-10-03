@@ -1,0 +1,36 @@
+{% comment %}
+  Раскрытый подход на экране правки записанной тренировки: те же степперы, что
+  у текущего подхода живого режима (_set_steppers.html), но без «Подход
+  выполнен» — он уже выполнен, правка исправляет факт. «Готово» сворачивает
+  панель и перерисовывает регион с новыми значениями; оба действия стоят в той
+  же очереди hx-sync, что и тапы степперов, поэтому недоехавший тап не потеряется.
+  Последний подход тренировки не убирается (sets_count): убрать всё — это
+  «Удалить тренировку».
+{% endcomment %}
+<div class="app-live-current">
+  <div class="app-live-current-head">
+    <span class="app-live-set-num">{{ set.display_number }}</span>
+    <span class="text-secondary-app">правка подхода</span>
+  </div>
+
+  {% if error %}<div class="invalid-feedback d-block mb-2">{{ error }}</div>{% endif %}
+
+  {% include "workouts/_set_steppers.html" %}
+
+  <div class="app-live-links">
+    <button type="button" class="app-live-link is-accent"
+            hx-get="{% url 'workout_correct' workout.pk %}"
+            hx-target="#exercises" hx-swap="outerHTML"
+            hx-sync="closest .app-live-current:queue all">
+      Готово
+    </button>
+    {% if sets_count > 1 %}
+      <button type="button" class="app-live-link"
+              hx-post="{% url 'set_delete' set.pk %}"
+              hx-target="#exercises" hx-swap="outerHTML"
+              hx-sync="closest .app-live-current:queue all" hx-disabled-elt="this">
+        Убрать подход
+      </button>
+    {% endif %}
+  </div>
+</div>

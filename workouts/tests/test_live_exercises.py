@@ -4,7 +4,7 @@ import pytest
 from django.urls import reverse
 
 from workouts import services, views
-from workouts.models import Exercise
+from workouts.models import Exercise, Sport
 from workouts.tests.factories import ExerciseFactory, StrengthSetFactory, WorkoutFactory
 
 pytestmark = pytest.mark.django_db
@@ -133,13 +133,17 @@ def test_create_offer_appears_only_without_exact_match(client, user, active):
     assert "Создать" not in without_offer
 
 
-def test_modal_requires_own_active_workout(client, user, other_user):
+def test_modal_requires_own_strength_workout(client, user, other_user):
+    """Своя силовая в любом состоянии: записанную дополняют на экране правки.
+    Чужая и кардио без подходов — 404."""
     client.force_login(user)
     alien = WorkoutFactory(user=other_user, duration_min=None)
     finished = WorkoutFactory(user=user)
+    cardio = WorkoutFactory(user=user, sport__category=Sport.Category.CARDIO)
 
     assert client.get(modal_url(alien)).status_code == 404
-    assert client.get(modal_url(finished)).status_code == 404
+    assert client.get(modal_url(finished)).status_code == 200
+    assert client.get(modal_url(cardio)).status_code == 404
 
 
 def test_queue_tap_switches_current_exercise(client, user, active):

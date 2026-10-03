@@ -417,6 +417,62 @@ def live_workout_or_404(request, pk):
     )
 
 
+def editable_workout_or_404(request, pk):
+    """Своя силовая в любом состоянии — база правки её состава.
+
+    Черновик и идущая правятся в живом режиме, записанная — на экране правки
+    (WorkoutCorrectView), а эндпоинты у них общие: добавить упражнение, подход,
+    заметку. Второго способа набирать подходы так и не появляется. Действия,
+    которым нужно идущее время (выполнить подход, отдых, текущее упражнение,
+    старт), остаются на live_workout_or_404.
+    """
+    return get_object_or_404(
+        Workout.objects.filter(STRENGTH_WORKOUT, user=request.user)
+        .select_related("sport", "user", "location")
+        .distinct(),
+        pk=pk,
+    )
+
+
+def editable_set_or_404(request, pk, *, for_update=False):
+    """Подход, значения которого можно править: плановый у незавершённой
+    тренировки или любой у записанной.
+
+    Выполненный подход идущей тренировки сюда не попадает: его сначала
+    возвращают в работу (SetUndoView), иначе степпер переписал бы факт под
+    тикающими часами. У записанной выполнены все подходы, и правка — это и есть
+    исправление факта.
+    """
+    editable = Q(workout__duration_min__isnull=True, done=False) | Q(
+        workout__duration_min__isnull=False
+    )
+    queryset = with_weight_step(
+        StrengthSet.objects.filter(editable, workout__user=request.user).select_related(
+            "workout", "exercise"
+        ),
+        request.user.pk,
+    )
+    if for_update:
+        # Тот же приём, что в live_set_or_404: быстрые тапы сериализуются на строке.
+        queryset = queryset.select_for_update(of=("self",))
+    return get_object_or_404(queryset, pk=pk)
+
+
+def correct_context(workout, *, open_set_id=None):
+    """Контекст региона правки записанной тренировки: группы и раскрытый подход."""
+    groups = services.exercise_groups(workout)
+    for group in groups:
+        group["total"] = services.exercise_total(group["sets"])
+    return {
+        "workout": workout,
+        "groups": groups,
+        "open_set_id": open_set_id,
+        # Последний подход записанной тренировки не убирается: пустая силовая
+        # перестала бы быть силовой. Убрать всё — это «Удалить тренировку».
+        "sets_count": sum(len(group["sets"]) for group in groups),
+    }
+
+
 def live_set_or_404(request, pk, *, undone_only=False, for_update=False, started_only=False):
     """Свой подход своей незавершённой тренировки; подходы завершённых неизменяемы."""
     queryset = with_weight_step(
@@ -450,12 +506,22 @@ def live_rest_context(workout, *, autostart=False, oob=False):
     }
 
 
-def live_region_response(request, workout, *, oob=False, restart_timer=False, error=None):
+def live_region_response(
+    request, workout, *, oob=False, restart_timer=False, error=None, open_set_id=None
+):
     """Регион упражнений; при выполненном подходе — плюс OOB-карточка отдыха.
 
     Карточка отдыха пересоздаётся только здесь: пересоздание перезапускает
     Alpine-таймер, поэтому обычные действия региона её не трогают.
+
+    У записанной тренировки регион свой — экрана правки: эндпоинты общие, а
+    отвечать они обязаны тем экраном, с которого их позвали.
     """
+    if workout.is_finished:
+        context = correct_context(workout, open_set_id=open_set_id) | {"oob": oob, "error": error}
+        return HttpResponse(
+            render_to_string("workouts/_correct_exercises.html", context, request=request)
+        )
     context = services.live_context(workout) | {"oob": oob, "error": error}
     html = render_to_string("workouts/_live_exercises.html", context, request=request)
     if restart_timer:
@@ -672,14 +738,14 @@ class LiveExerciseView(LoginRequiredMixin, View):
     """Модалка «+ Упражнение»: поиск по видимым упражнениям и быстрое создание."""
 
     def get(self, request, pk):
-        workout = live_workout_or_404(request, pk)
+        workout = editable_workout_or_404(request, pk)
         context = self.search_context(request, workout)
         if "q" in request.GET:
             return render(request, "workouts/_exercise_results.html", context)
         return render(request, "workouts/_exercise_modal.html", context)
 
     def post(self, request, pk):
-        workout = live_workout_or_404(request, pk)
+        workout = editable_workout_or_404(request, pk)
         exercise_id = request.POST.get("exercise", "")
         if exercise_id:
             if not exercise_id.isdecimal():
@@ -698,7 +764,9 @@ class LiveExerciseView(LoginRequiredMixin, View):
         if not workout.sets.filter(exercise=exercise).exists():
             try:
                 with transaction.atomic():
-                    services.create_planned_sets(workout, exercise)
+                    # В записанной тренировке подходы сразу выполненные: в ней
+                    # плановых не бывает (их удаляет завершение).
+                    services.create_planned_sets(workout, exercise, done=workout.is_finished)
             except IntegrityError:
                 pass  # даблтап: упражнение уже добавил параллельный запрос
         # Пустое тело закрывает модалку, регион упражнений обновляется out-of-band —
@@ -787,7 +855,7 @@ class LiveSetAddView(LoginRequiredMixin, View):
     """«+ Добавить подход»: новый подход повторяет предыдущий — типичный кейс в зале."""
 
     def post(self, request, pk):
-        workout = live_workout_or_404(request, pk)
+        workout = editable_workout_or_404(request, pk)
         exercise_id = request.POST.get("exercise", "")
         if not exercise_id.isdecimal():
             raise Http404("Упражнение не найдено")
@@ -795,27 +863,35 @@ class LiveSetAddView(LoginRequiredMixin, View):
             Exercise.objects.filter(sets__workout=workout).distinct(), pk=int(exercise_id)
         )
         last = workout.sets.filter(exercise=exercise).order_by("-set_number").first()
+        created = None
         try:
             with transaction.atomic():
-                StrengthSet.objects.create(
+                created = StrengthSet.objects.create(
                     workout=workout,
                     exercise=exercise,
                     set_number=last.set_number + 1 if last else 1,
                     measurement=exercise.measurement,
+                    # В записанной тренировке подход сразу выполненный, а done_at
+                    # пуст: когда его сделали, неизвестно — как у тренировки,
+                    # внесённой задним числом.
+                    done=workout.is_finished,
                     **services.set_values(exercise.measurement, last),
                 )
         except IntegrityError:
             pass  # даблтап — второй подход не нужен
-        return live_region_response(request, workout)
+        # На экране правки новый подход сразу раскрыт: его добавили, чтобы поправить.
+        return live_region_response(
+            request, workout, open_set_id=created.pk if created and workout.is_finished else None
+        )
 
 
 class ExerciseNoteView(LoginRequiredMixin, View):
     """Заметка к упражнению тренировки: модалка на GET, сохранение на POST.
 
     Упражнение резолвится ЧЕРЕЗ тренировку, а тренировка — через
-    live_workout_or_404, поэтому чужая тренировка, завершённая (заметка после
-    записи только читается) и упражнение не из этой тренировки дают 404 без
-    отдельных проверок.
+    editable_workout_or_404, поэтому чужая тренировка и упражнение не из этой
+    тренировки дают 404 без отдельных проверок. Записанная правится тоже — на
+    экране правки: «болело плечо» вспоминают и после тренировки.
 
     Формы здесь нет намеренно: пустой текст означает «убрать заметку», а
     ModelForm на непустом поле счёл бы это ошибкой. Остальные эндпоинты живого
@@ -847,7 +923,7 @@ class ExerciseNoteView(LoginRequiredMixin, View):
 
     @staticmethod
     def resolve(request, pk, exercise_id):
-        workout = live_workout_or_404(request, pk)
+        workout = editable_workout_or_404(request, pk)
         if not exercise_id.isdecimal():
             raise Http404("Упражнение не найдено")
         # Через подходы тренировки: это строже, чем visible_to — чужое личное
@@ -903,7 +979,7 @@ class SetAdjustView(LoginRequiredMixin, View):
         direction = request.POST.get("dir", "")
         if field not in SET_STEPS or direction not in {"up", "down"}:
             return HttpResponseBadRequest("Недопустимый шаг")
-        row = live_set_or_404(request, pk, undone_only=True, for_update=True)
+        row = editable_set_or_404(request, pk, for_update=True)
         if field not in MEASUREMENT_FIELDS[row.measurement]:
             # Вес у планки писать нельзя: подход упёрся бы в ограничение
             # set_fields_match_measurement, а это 500 вместо внятного отказа.
@@ -932,7 +1008,7 @@ class SetValueView(LoginRequiredMixin, View):
         field = request.POST.get("field", "")
         if field not in SET_STEPS:
             return HttpResponseBadRequest("Недопустимое поле")
-        row = live_set_or_404(request, pk, undone_only=True, for_update=True)
+        row = editable_set_or_404(request, pk, for_update=True)
         if field not in MEASUREMENT_FIELDS[row.measurement]:
             return HttpResponseBadRequest("Поле не подходит единице упражнения")
         try:
@@ -987,11 +1063,23 @@ class SetUndoView(LoginRequiredMixin, View):
 
 
 class SetDeleteView(LoginRequiredMixin, View):
-    """«Убрать подход»: удаляет невыполненный; выполненные неприкосновенны."""
+    """«Убрать подход»: невыполненный в живом режиме, любой — в записанной.
+
+    Выполненные подходы идущей тренировки неприкосновенны: их сначала
+    возвращают в работу. Последний подход записанной не убирается — пустая
+    силовая перестала бы быть силовой; убрать всё — это «Удалить тренировку».
+    """
 
     def post(self, request, pk):
-        row = live_set_or_404(request, pk, undone_only=True)
+        row = editable_set_or_404(request, pk)
         workout = row.workout
+        if workout.is_finished and not workout.sets.exclude(pk=row.pk).exists():
+            return live_region_response(
+                request,
+                workout,
+                open_set_id=row.pk,
+                error="Это последний подход. Чтобы убрать всё, удалите тренировку.",
+            )
         row.delete()
         # Номера не пересчитываются: на экране подходы нумеруются по позиции,
         # а перенумерация рисковала бы упереться в уникальный индекс.
@@ -1005,9 +1093,9 @@ class WorkoutLocationView(LoginRequiredMixin, View):
     """Место тренировки: модалка на GET, сохранение на POST.
 
     Тренировка берётся любая своя, в любом состоянии. Не live_workout_or_404:
-    экрана правки силовой в проекте нет, и без этого забытое место записанной
-    тренировки осталось бы неисправимым навсегда — а сравнение по залам
-    строилось бы на вранье. Чужая по прямому URL даёт 404 фильтром по user.
+    забытое место записанной тренировки иначе осталось бы неисправимым — а
+    сравнение по залам строилось бы на вранье. Правится из итога и с экрана
+    правки. Чужая по прямому URL даёт 404 фильтром по user.
     """
 
     def get_workout(self):
@@ -1411,6 +1499,36 @@ class WorkoutSummaryView(LoginRequiredMixin, View):
                 "nav_active": "history",
             },
         )
+
+
+class WorkoutCorrectView(LoginRequiredMixin, View):
+    """Правка записанной силовой: подходы, упражнения, заметки.
+
+    Это итог, в котором тап по подходу раскрывает те же степперы, что в живом
+    режиме, а «+ подход» и «+ Упражнение» — те же эндпоинты: второго способа
+    набирать подходы так и не появляется. Новые подходы записанной тренировки
+    сразу выполненные, без метки времени, поэтому тоннаж, рекорды и порядок
+    упражнений пересчитываются сами, а новое упражнение встаёт в конец.
+    HTMX-запрос (?set=<id>) отдаёт регион с раскрытым подходом.
+    """
+
+    def get(self, request, pk):
+        workout = get_object_or_404(
+            Workout.objects.filter(user=request.user).select_related("sport", "user", "location"),
+            pk=pk,
+        )
+        if not workout.is_finished:
+            # Черновик и идущая правятся в живом режиме.
+            return redirect("workout_live", pk=workout.pk)
+        raw = request.GET.get("set", "")
+        context = correct_context(workout, open_set_id=int(raw) if raw.isdecimal() else None)
+        if not context["groups"]:
+            # Подходов нет — дом такой тренировки форма кардио, как у итога.
+            return redirect("workout_edit", pk=workout.pk)
+        if request.headers.get("HX-Request"):
+            return render(request, "workouts/_correct_exercises.html", context)
+        stats.attach_muscle_groups(request.user, [workout])
+        return render(request, "workouts/workout_correct.html", context | {"nav_active": "history"})
 
 
 class WorkoutRepeatView(LoginRequiredMixin, View):

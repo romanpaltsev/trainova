@@ -172,12 +172,15 @@ def last_sets(user, exercise):
     )
 
 
-def create_planned_sets(workout, exercise):
-    """Плановые подходы нового упражнения: копия прошлого раза или один пустой.
+def create_planned_sets(workout, exercise, *, done=False):
+    """Подходы нового упражнения: копия прошлого раза или один пустой.
 
     Номера проставляются заново с единицы — в источнике могли быть пропуски.
     Единицу ставим здесь явно: bulk_create не вызывает save(), а без снимка
     подход упёрся бы в set_fields_match_measurement.
+
+    done=True — для записанной тренировки (экран правки): в ней плановых
+    подходов не бывает. Метки done_at у таких нет — когда их сделали, неизвестно.
     """
     previous = last_sets(workout.user, exercise)
     rows = [
@@ -186,7 +189,7 @@ def create_planned_sets(workout, exercise):
             exercise=exercise,
             set_number=number,
             measurement=exercise.measurement,
-            done=False,
+            done=done,
             **set_values(exercise.measurement, source),
         )
         for number, source in enumerate(previous, start=1)
@@ -196,6 +199,7 @@ def create_planned_sets(workout, exercise):
             exercise=exercise,
             set_number=1,
             measurement=exercise.measurement,
+            done=done,
             **set_values(exercise.measurement, None),
         )
     ]

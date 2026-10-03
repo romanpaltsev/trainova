@@ -194,12 +194,15 @@ def test_done_set_is_immutable(client, user):
     assert row.weight_kg == Decimal("70.00")
 
 
-def test_set_of_finished_workout_is_immutable(client, user):
+def test_set_of_finished_workout_is_editable(client, user):
+    """Опечатку в записанной тренировке исправляют вводом руками."""
     row = StrengthSetFactory(workout=WorkoutFactory(user=user), set_number=1, weight_kg=70)
 
     client.force_login(user)
 
-    assert set_value(client, row, "weight_kg", "200").status_code == 404
+    assert set_value(client, row, "weight_kg", "72,5").status_code == 200
+    row.refresh_from_db()
+    assert row.weight_kg == Decimal("72.5")
 
 
 def test_value_can_be_typed_in_a_draft(client, user):

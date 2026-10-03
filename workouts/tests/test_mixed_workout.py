@@ -68,7 +68,7 @@ def test_cardio_is_added_to_a_running_workout(client, user, strength, run):
 
 
 def test_cardio_is_added_to_a_recorded_workout(client, user, strength, run):
-    """Заминку дописывают и постфактум — экрана правки силовой в проекте нет."""
+    """Заминку дописывают и постфактум — прямо из итога записанной тренировки."""
     workout = WorkoutFactory(user=user, sport=strength, duration_min=90)
     StrengthSetFactory(workout=workout, set_number=1)
     client.force_login(user)

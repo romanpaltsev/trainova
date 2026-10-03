@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Правка тренировки · Дневник тренировок{% endblock %}
+
+{% comment %}Фокус-режим, как в живом: нижней навигации нет, выход — «Готово» или «назад».{% endcomment %}
+{% block bottom_nav %}{% endblock %}
+
+{% block content %}
+{% comment %}
+  Правка записанной силовой (WorkoutCorrectView). Раскладка — итога
+  (.app-summary): на ПК шапка с «Готово» справа и упражнения колонками, на
+  телефоне — столбиком. Полоса «связи нет» та же, что в живом режиме: степперы
+  сохраняют каждый тап, и осечка не должна проходить молча (live.js).
+{% endcomment %}
+{% comment %}Полоса — вне сетки итога: у той ряды заданы областями.{% endcomment %}
+<div class="app-live-offline" id="live-offline" role="status" aria-live="polite" hidden>
+  <span id="live-offline-text"></span>
+  <button type="button" class="btn btn-quiet app-live-offline-btn"
+          onclick="location.reload()">Обновить</button>
+</div>
+<div class="app-summary app-correct">
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'workout_summary' workout.pk %}" aria-label="Назад к итогу">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <div>
+    <h1 class="app-page-title mb-0">{{ workout.muscle_groups|default:workout.sport.name }}</h1>
+    <div class="app-live-meta text-secondary-app">
+      {% include "workouts/_workout_time_value.html" %}
+      {% include "workouts/_location_value.html" %}
+    </div>
+    <p class="app-correct-hint text-secondary-app">Нажмите на подход, чтобы его изменить.</p>
+  </div>
+</div>
+
+{% include "workouts/_correct_exercises.html" %}
+
+<div class="app-form-actions">
+  <a class="btn btn-accent app-btn-fill" href="{% url 'workout_summary' workout.pk %}">Готово</a>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script src="{% static 'js/live.js' %}"></script>
+{% endblock %}

@@ -88,14 +88,30 @@ def test_done_set_cannot_be_adjusted(client, user):
     assert response.status_code == 404
 
 
-def test_sets_of_finished_workout_are_immutable(client, user):
+def test_sets_of_finished_workout_are_editable(client, user):
+    """Записанную тренировку правят на экране правки теми же степперами."""
     client.force_login(user)
     finished = WorkoutFactory(user=user)
-    row = StrengthSetFactory(workout=finished, set_number=1, done=False)
+    row = StrengthSetFactory(workout=finished, set_number=1, weight_kg=80)
 
     response = adjust(client, row, "weight_kg", "up")
 
-    assert response.status_code == 404
+    assert response.status_code == 200
+    row.refresh_from_db()
+    assert row.weight_kg == Decimal("82.5")
+
+
+def test_done_set_of_live_workout_stays_immutable(client, user):
+    """Выполненный подход идущей тренировки степпер не трогает: его сначала
+    возвращают в работу — иначе правка переписала бы факт под часами."""
+    client.force_login(user)
+    live = WorkoutFactory(user=user, duration_min=None)
+    row = StrengthSetFactory(workout=live, set_number=1, weight_kg=80, done=True)
+
+    assert adjust(client, row, "weight_kg", "up").status_code == 404
+    assert client.post(reverse("set_delete", args=[row.pk])).status_code == 404
+    row.refresh_from_db()
+    assert row.weight_kg == 80
 
 
 @pytest.mark.parametrize(

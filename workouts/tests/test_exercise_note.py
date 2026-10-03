@@ -1,7 +1,7 @@
 """Заметка к упражнению внутри тренировки: «болело плечо», «узкий хват».
 
-Заметка привязана к паре (тренировка, упражнение), пишется в живом режиме и в
-черновике, а в записанной тренировке только читается. «Заметки нет» — это
+Заметка привязана к паре (тренировка, упражнение), пишется в живом режиме, в
+черновике и на экране правки записанной тренировки. «Заметки нет» — это
 отсутствие строки, а не пустой текст.
 """
 
@@ -94,7 +94,9 @@ def test_exercise_outside_this_workout_is_404(client, user):
     assert ExerciseNote.objects.exists() is False
 
 
-def test_finished_workout_note_is_read_only(client, user):
+def test_finished_workout_note_is_editable(client, user):
+    """Заметку записанной тренировки правят на экране правки: «болело плечо»
+    вспоминают и после тренировки. Ответ — регион экрана правки."""
     finished = WorkoutFactory(user=user)
     exercise = ExerciseFactory(name="Жим лёжа")
     StrengthSetFactory(workout=finished, exercise=exercise, set_number=1)
@@ -102,12 +104,13 @@ def test_finished_workout_note_is_read_only(client, user):
 
     client.force_login(user)
     summary = client.get(reverse("workout_summary", args=[finished.pk])).content.decode()
+    response = save_note(client, finished, exercise, "правка")
 
-    # Читается в итоге, но правки после записи нет.
     assert "болело плечо" in summary
-    assert open_note(client, finished, exercise).status_code == 404
-    assert save_note(client, finished, exercise, "правка").status_code == 404
-    assert ExerciseNote.objects.get().text == "болело плечо"
+    assert open_note(client, finished, exercise).status_code == 200
+    assert response.status_code == 200
+    assert reverse("workout_correct", args=[finished.pk]) in response.content.decode()
+    assert ExerciseNote.objects.get().text == "правка"
 
 
 # ---------- Запись ----------

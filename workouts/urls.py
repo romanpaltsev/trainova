@@ -145,6 +145,9 @@ urlpatterns = [
     ),
     path("workouts/<int:pk>/finish/", views.WorkoutFinishView.as_view(), name="workout_finish"),
     path("workouts/<int:pk>/summary/", views.WorkoutSummaryView.as_view(), name="workout_summary"),
+    # Правка записанной силовой — отдельный маршрут, а не флаг у итога: у итога
+    # нет ни одного действия, меняющего подходы, и путать их нельзя.
+    path("workouts/<int:pk>/correct/", views.WorkoutCorrectView.as_view(), name="workout_correct"),
     path("workouts/<int:pk>/repeat/", views.WorkoutRepeatView.as_view(), name="workout_repeat"),
     path("sets/<int:pk>/adjust/", views.SetAdjustView.as_view(), name="set_adjust"),
     path("sets/<int:pk>/value/", views.SetValueView.as_view(), name="set_value"),
