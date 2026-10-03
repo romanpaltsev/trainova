@@ -91,6 +91,7 @@ def _empty_totals():
         "tonnage": Decimal(0),
         "distance": Decimal(0),
         "cardio_sports": [],
+        "days": 0,
     }
 
 
@@ -135,10 +136,12 @@ def _split_windows(user, current_start, previous_start, last_day):
     windows = {"current": _empty_totals(), "previous": _empty_totals()}
     cardio_names = {"current": set(), "previous": set()}
     window_by_workout = {}
+    days = {"current": set(), "previous": set()}
     for workout_id, started_at, duration in rows:
         local_date = timezone.localtime(started_at).date()
         key = "current" if local_date >= current_start else "previous"
         window_by_workout[workout_id] = key
+        days[key].add(local_date)
         totals = windows[key]
         totals["count"] += 1
         totals["minutes"] += duration
@@ -155,6 +158,7 @@ def _split_windows(user, current_start, previous_start, last_day):
             windows[key]["distance"] += distance
     for key, names in cardio_names.items():
         windows[key]["cardio_sports"] = sorted(names)
+        windows[key]["days"] = len(days[key])
     return windows
 
 
@@ -165,6 +169,24 @@ def _delta(value, suffix=""):
     if value < 0:
         return {"label": f"−{abs(value)}{suffix}", "direction": "down"}
     return {"label": "без изменений", "direction": "flat"}
+
+
+def _badge(current, previous, unit=""):
+    """Бейдж динамики плитки на ПК: «+1», «−38 мин», «+1200 кг», без изменений — «±0».
+
+    Короче подписи телефона (_delta): «к прошлым 7 дням» в бейдж не помещается и
+    уходит в title. Когда оба окна пустые, сравнивать нечего — бейджа нет: «±0»
+    у дистанции человека, который не бегает, был бы шумом на каждой загрузке.
+    """
+    if not current and not previous:
+        return None
+    value = current - previous
+    text = decimal_display(abs(value)) if isinstance(value, Decimal) else str(abs(value))
+    if value > 0:
+        return {"label": f"+{text}{unit}", "direction": "up"}
+    if value < 0:
+        return {"label": f"−{text}{unit}", "direction": "down"}
+    return {"label": "±0", "direction": "flat"}
 
 
 def seven_day_summary(user, today=None):
@@ -179,6 +201,7 @@ def seven_day_summary(user, today=None):
     count_delta = current["count"] - previous["count"]
     minutes_delta = current["minutes"] - previous["minutes"]
     strength = current["strength_count"]
+    count, days = current["count"], current["days"]
     return {
         "start": today - timedelta(days=6),
         "end": today,
@@ -197,6 +220,16 @@ def seven_day_summary(user, today=None):
         "distance_display": decimal_display(current["distance"]),
         "cardio_sports": current["cardio_sports"],
         "cardio_sports_label": " + ".join(name.lower() for name in current["cardio_sports"]),
+        # Плитки на ПК: бейджи динамики и строка под числом у тренировок и
+        # времени. Всё считается из тех же двух окон — ни одного запроса сверху.
+        "badges": {
+            "count": _badge(count, previous["count"]),
+            "minutes": _badge(current["minutes"], previous["minutes"], " мин"),
+            "tonnage": _badge(current["tonnage"], previous["tonnage"], " кг"),
+            "distance": _badge(current["distance"], previous["distance"], " км"),
+        },
+        "days_label": f"{days} {ru_plural(days, 'день', 'дня', 'дней')} из 7" if days else "",
+        "average_display": hours_display(current["minutes"] // count) if count else "",
     }
 
 
@@ -293,6 +326,16 @@ def workout_row(workout, today):
         pieces.append(workload)
     pieces += [f"{part.distance_display} км" for part in workout.cardio_parts.all()]
     metric = " · ".join(pieces) if pieces else NO_VALUE
+    # Подходы есть — значит, у тренировки есть силовая часть: Sum по пустому
+    # джойну даёт None, а по подходам планки — ноль, но не None.
+    has_sets = getattr(workout, "tonnage", None) is not None
+    has_cardio = bool(workout.cardio_parts.all())
+    if has_sets and has_cardio:
+        kind = "Смешанная"
+    elif has_sets:
+        kind = "Силовая"
+    else:
+        kind = "Кардио"
     return {
         "workout": workout,
         # Силовая подписывается группами мышц (attach_muscle_groups), иначе весь
@@ -301,6 +344,11 @@ def workout_row(workout, today):
         "sport_name": getattr(workout, "muscle_groups", "") or workout.sport.name,
         "color_key": workout.sport.color_key,
         "meta": f"{day_label} · {workout.duration_display} · {metric}",
+        # Ячейки таблицы «Последние тренировки» на ПК — то же, что в meta, по
+        # отдельности: строка одна, и телефон по-прежнему читает meta.
+        "day_label": day_label,
+        "metric": metric,
+        "kind": kind,
     }
 
 
@@ -310,7 +358,8 @@ def latest_workouts(user, today=None, limit=5):
     workouts = (
         Workout.objects.filter(user=user)
         .finished()
-        .select_related("sport")
+        # Место — ячейка таблицы на ПК: джойном, а не запросом на строку.
+        .select_related("sport", "location")
         .prefetch_related(cardio_parts_prefetch())
         .annotate(**WORKLOAD_ANNOTATIONS)
         .order_by("-started_at", "-id")[:limit]

@@ -13,6 +13,7 @@ from workouts.tests.factories import (
     ExerciseFactory,
     SportFactory,
     StrengthSetFactory,
+    TimeSetFactory,
     WorkoutFactory,
 )
 
@@ -131,6 +132,68 @@ def test_summary_ignores_other_users_workouts(user, other_user):
     summary = stats.seven_day_summary(user, today=TODAY)
 
     assert summary["count"] == 0
+
+
+def test_summary_badges_compare_windows(user):
+    """Бейджи плиток на ПК: знак, единица и направление — по каждой метрике."""
+    now = workout_on(user, TODAY, minutes=70)
+    StrengthSetFactory(workout=now, set_number=1, weight_kg=100, reps=10)
+    CardioPartFactory(
+        workout__user=user,
+        workout__started_at=local_dt(TODAY.year, TODAY.month, TODAY.day - 1),
+        workout__duration_min=40,
+        distance_km=Decimal("7.5"),
+    )
+    before = workout_on(user, TODAY - timedelta(days=8), minutes=150)
+    StrengthSetFactory(workout=before, set_number=1, weight_kg=Decimal("77.5"), reps=8)
+    CardioPartFactory(
+        workout__user=user,
+        workout__started_at=local_dt(TODAY.year, TODAY.month, TODAY.day - 9),
+        workout__duration_min=60,
+        distance_km=Decimal("12.3"),
+    )
+
+    badges = stats.seven_day_summary(user, today=TODAY)["badges"]
+
+    assert badges["count"] == {"label": "±0", "direction": "flat"}
+    assert badges["minutes"] == {"label": "−100 мин", "direction": "down"}
+    assert badges["tonnage"] == {"label": "+380 кг", "direction": "up"}  # 1000 − 620
+    assert badges["distance"] == {"label": "−4,8 км", "direction": "down"}
+
+
+def test_summary_badge_is_absent_when_both_windows_are_empty(user):
+    """Нечего сравнивать — бейджа нет: «±0» у дистанции того, кто не бегает,
+    был бы шумом на каждой загрузке."""
+    workout_on(user, TODAY)
+
+    badges = stats.seven_day_summary(user, today=TODAY)["badges"]
+
+    assert badges["count"]["direction"] == "up"
+    assert badges["tonnage"] is None
+    assert badges["distance"] is None
+
+
+def test_summary_counts_training_days_and_average(user):
+    """Две тренировки в один день — это один день из семи."""
+    workout_on(user, TODAY, minutes=50)
+    WorkoutFactory(
+        user=user,
+        started_at=local_dt(TODAY.year, TODAY.month, TODAY.day, hour=19),
+        duration_min=40,
+    )
+    workout_on(user, TODAY - timedelta(days=3), minutes=60)
+
+    summary = stats.seven_day_summary(user, today=TODAY)
+
+    assert summary["days_label"] == "2 дня из 7"
+    assert summary["average_display"] == "0:50"  # 150 мин / 3
+
+
+def test_summary_footnotes_are_empty_without_workouts(user):
+    summary = stats.seven_day_summary(user, today=TODAY)
+
+    assert summary["days_label"] == ""
+    assert summary["average_display"] == ""
 
 
 # ---------- График «часы по неделям» ----------
@@ -264,6 +327,37 @@ def test_latest_workouts_ignore_other_users_workouts(user, other_user):
     workout_on(other_user, TODAY)
 
     assert stats.latest_workouts(user, today=TODAY) == []
+
+
+def test_latest_workouts_kind_follows_content(user):
+    """Тип в таблице на ПК выводится из содержимого, а не из вида спорта: у
+    смешанной хозяин — силовая, но в ней есть и пробежка."""
+    strength = workout_on(user, TODAY)
+    StrengthSetFactory(workout=strength, set_number=1)
+    plank = workout_on(user, TODAY - timedelta(days=1))
+    TimeSetFactory(workout=plank, set_number=1)  # тоннаж ноль, но подходы есть
+    mixed = workout_on(user, TODAY - timedelta(days=2))
+    StrengthSetFactory(workout=mixed, set_number=1)
+    CardioPartFactory(workout=mixed, sport=SportFactory(category=Sport.Category.CARDIO))
+    CardioPartFactory(
+        workout__user=user,
+        workout__started_at=local_dt(TODAY.year, TODAY.month, TODAY.day - 3),
+    )
+
+    kinds = [row["kind"] for row in stats.latest_workouts(user, today=TODAY)]
+
+    assert kinds == ["Силовая", "Силовая", "Смешанная", "Кардио"]
+
+
+def test_latest_workouts_cells_repeat_meta_pieces(user):
+    """Ячейки таблицы — те же значения, что в строке телефона, по отдельности."""
+    workout = workout_on(user, TODAY - timedelta(days=1), minutes=62)
+    StrengthSetFactory(workout=workout, set_number=1, weight_kg=80, reps=10)
+
+    row = stats.latest_workouts(user, today=TODAY)[0]
+
+    assert row["meta"] == f"{row['day_label']} · 1:02 · {row['metric']}"
+    assert (row["day_label"], row["metric"]) == ("вчера", "800 кг")
 
 
 # ---------- Рекорды ----------

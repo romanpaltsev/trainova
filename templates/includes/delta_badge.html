@@ -1,0 +1,16 @@
+{% comment %}
+  Бейдж динамики плитки сводки (stats._badge) — только ПК: на телефоне динамику
+  несёт строка .app-stat-delta. Пустой badge (оба окна без данных) — бейджа нет.
+{% endcomment %}
+{% if badge %}
+  <span class="app-stat-badge is-{{ badge.direction }}" title="к прошлым 7 дням">
+    {% if badge.direction == "up" %}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    {% elif badge.direction == "down" %}
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
+    {% endif %}
+    {{ badge.label }}<span class="visually-hidden"> к прошлым 7 дням</span>
+  </span>
+{% endif %}

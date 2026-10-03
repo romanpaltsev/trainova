@@ -1512,6 +1512,18 @@ a.btn {
 .app-stat-delta.is-down { color: var(--app-text-secondary); }
 .app-stat-delta.is-flat { color: var(--app-text-muted); }
 
+/* Части плитки и таблицы «Последние», которые есть только на ПК (блок 768):
+   иконка, строка пояснения, бейдж динамики, ячейки и шапка таблицы. Обёртки
+   тела плитки на телефоне не образуют боксов — плитка прежняя. */
+.app-stat-body,
+.app-stat-text { display: contents; }
+
+.app-stat-icon,
+.app-stat-foot,
+.app-stat-badge,
+.app-latest-cell,
+.app-recent-head { display: none; }
+
 /* Текст шапки встаёт на общий отступ карточки (у шапки и легенды свои 4px),
    а полотно графика — на 4px шире: подписям осей это место нужнее. */
 .app-chart-card {
@@ -1559,8 +1571,9 @@ a.btn {
   margin-top: 0.5rem;
 }
 
-/* Основная колонка: график, панель недели и «Подготовлено». Ритм — зазором
-   колонки, как у .app-dash: пустая панель недели (:empty) не оставляет дыры. */
+/* Основная колонка: график, панель недели, «Подготовлено» и «Последние». Ритм —
+   зазором колонки, как у .app-dash: пустая панель недели (:empty) не оставляет
+   дыры. */
 .app-dash-main {
   display: flex;
   flex-direction: column;
@@ -1602,9 +1615,6 @@ a.btn {
   flex-direction: column;
   gap: 1rem;
 }
-
-/* Мобильный порядок: последние тренировки выше рекордов, как в макете */
-.app-dash-side .app-latest { order: -1; }
 
 .app-latest-row {
   display: flex;
@@ -2330,7 +2340,6 @@ a.btn {
   .app-rest-time { font-size: 4.5rem; }
   /* Дашборд: четыре плитки в ряд, график выше */
   .app-dash-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .app-stat.is-desktop { display: flex; flex-direction: column; }
   .app-chart-body { height: 320px; }
   /* Окно на ПК — диалог по центру шириной с форму, а не шторка телефона.
      Потолок по высоте и своя прокрутка: длинный список не уводит заголовок и
@@ -2797,18 +2806,134 @@ a.btn {
 
   /* ---------- Дашборд на средних экранах ----------
 
-     Плитки и график — во всю ширину; под ними прожектор, а рекорды и последние
-     тренировки — двумя карточками рядом. Карточки со строками, как в макете, —
-     с 768, а не с 1200: на планшете и узком ноутбуке стопка телефонных плиток
-     во всю ширину и делала дашборд «полумобильным». На 1200 боковая часть
-     снова становится колонкой справа от графика. */
-  .app-dash-side {
+     Плитки, график, «Подготовлено» и таблица последних — во всю ширину; под
+     ними прожектор и рекорды. Карточки со строками, как в макете, — с 768, а не
+     с 1200: на планшете и узком ноутбуке стопка телефонных плиток во всю ширину
+     и делала дашборд «полумобильным». На 1200 боковая часть становится колонкой
+     справа от графика. */
+
+  /* Плитка сводки — приём TailAdmin: квадрат с иконкой, ниже подпись, число и
+     строка пояснения. Бейдж динамики — напротив иконки, а не у числа, как у
+     TailAdmin: плиток четыре в ряд, и рядом с бейджем «8280 кг» переносилось
+     на две строки. Тело плитки (.app-stat-body) не образует бокса и на ПК —
+     иначе бейдж нельзя было бы поднять в верхний ряд сетки. Динамику на ПК
+     несёт бейдж, поэтому строка .app-stat-delta здесь не нужна.
+     .is-desktop — ради специфичности: базовое .app-stat.is-desktop прячет
+     плитки тоннажа и дистанции на телефоне. */
+  .app-stat,
+  .app-stat.is-desktop {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "icon badge"
+      "text text";
+    align-items: center;
+    padding: var(--app-space-5) var(--app-card-inset);
   }
-  .app-dash-side > .app-spotlight { grid-column: 1 / -1; }
-  .app-dash-side .app-latest { order: 0; }
+  .app-stat-icon {
+    grid-area: icon;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--app-space-12);
+    height: var(--app-space-12);
+    border-radius: var(--app-radius-field);
+    background-color: var(--app-raised);
+    color: var(--app-text);
+  }
+  .app-stat-text {
+    grid-area: text;
+    display: block;
+    min-width: 0;
+    margin-top: var(--app-space-5);
+  }
+  .app-stat-delta { display: none; }
+  .app-stat-foot { display: block; }
+  /* Спад не красим в «ошибку»: неделя отдыха — не провал, и строка динамики
+     на телефоне его тоже не красит. Зелёный — только у роста. */
+  .app-stat-badge {
+    grid-area: badge;
+    justify-self: end;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-1);
+    padding: 0.125rem var(--app-space-2);
+    border-radius: var(--app-radius-pill);
+    background-color: var(--app-raised);
+    color: var(--app-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .app-stat-badge.is-up {
+    background-color: var(--app-success-soft);
+    color: var(--app-success);
+  }
+  .app-stat-badge.is-down { color: var(--app-text-secondary); }
+
+  /* «Последние тренировки» — таблица (приём TailAdmin): шапка с линиями сверху
+     и снизу, строки через линию. Колонки задаёт список, строки берут их через
+     subgrid, как в истории: ширины считаются по самой широкой ячейке, без
+     магических чисел. Старый браузер без subgrid остаётся на строках. */
+  @supports (grid-template-columns: subgrid) {
+    .app-recent .app-latest-list {
+      display: grid;
+      grid-template-columns:
+        max-content             /* точка вида спорта */
+        minmax(0, 1fr)          /* тренировка */
+        max-content             /* дата */
+        max-content             /* время */
+        max-content             /* нагрузка */
+        minmax(0, max-content)  /* место: обрезается первым */
+        max-content;            /* тип */
+      column-gap: var(--app-space-5);
+    }
+    .app-recent-head,
+    .app-recent .app-latest-row {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+      align-items: center;
+    }
+    .app-recent-head {
+      padding-block: var(--app-space-3);
+      border-block: 1px solid var(--app-line);
+      color: var(--app-text-muted);
+      font-size: 0.8125rem;
+      font-weight: 600;
+    }
+    .app-recent .app-latest-row {
+      padding-block: var(--app-space-3);
+      border-bottom: 1px solid var(--app-line);
+      border-radius: 0;
+    }
+    .app-recent .app-latest-row:last-child { border-bottom: 0; }
+    .app-recent .app-latest-text { display: block; }
+    .app-recent .app-latest-meta { display: none; }
+    .app-latest-cell {
+      display: block;
+      color: var(--app-text-secondary);
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+    .app-latest-cell.num {
+      color: var(--app-text);
+      font-size: 0.9375rem;
+    }
+    .app-latest-place {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .app-kind {
+      display: inline-block;
+      padding: 0.125rem var(--app-space-2);
+      border-radius: var(--app-radius-pill);
+      background-color: var(--app-raised);
+      color: var(--app-text-secondary);
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+  }
   .app-spotlight { display: block; }
   /* Первый силовой рекорд живёт в прожекторе — плитку прячем */
   .app-records-item.is-spotlight { display: none; }
@@ -3232,7 +3357,9 @@ a.btn {
     grid-column: 3;
   }
 
-  /* Дашборд: сетка «плитки во всю ширину, график слева, колонка справа» */
+  /* Дашборд: сетка «плитки во всю ширину; график, подготовленное и таблица
+     последних слева, прожектор и рекорды справа». Зазоры — как у TailAdmin на
+     широком экране: 24px между карточками и плитками. */
   .app-dash {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
@@ -3240,16 +3367,15 @@ a.btn {
       "stats stats"
       "main side";
     align-items: start;
-    gap: 1rem;
+    gap: var(--app-space-6);
   }
+  .app-dash-stats { gap: var(--app-space-6); }
+  .app-dash-main,
+  .app-dash-side { gap: var(--app-space-6); }
 
   .app-dash-stats { grid-area: stats; }
   .app-dash-main { grid-area: main; }
   .app-dash-side { grid-area: side; }
-  /* Колонка справа — снова столбиком (на 768 она сетка из двух колонок).
-     align-items сбрасываем вместе с display: start из блока 768 нужен сетке,
-     а во флекс-столбике он сжал бы карточки до ширины содержимого. */
-  .app-dash-side { display: flex; align-items: stretch; }
 
   /* ---------- История: плотные строки ----------
 

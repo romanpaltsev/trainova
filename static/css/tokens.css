@@ -21,7 +21,6 @@
      прозрачность светлой темы выше, чем тёмной. */
   --app-accent-soft: rgba(198, 241, 62, 0.30);
   --app-success-soft: rgba(0, 99, 0, 0.10);
-  --app-danger-soft: rgba(196, 52, 43, 0.10);
 
   /* Виды спорта — цвет закреплён за видом, а не за порядком в наборе */
   --app-sport-strength: #2a78d6;
@@ -54,7 +53,6 @@
   --app-danger: #E5645C;
   --app-accent-soft: rgba(198, 241, 62, 0.12);
   --app-success-soft: rgba(12, 163, 12, 0.16);
-  --app-danger-soft: rgba(229, 100, 92, 0.16);
 
   --app-sport-strength: #3987e5;
   --app-sport-bike: #d95926;

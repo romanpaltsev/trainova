@@ -8,6 +8,18 @@
     <span class="app-latest-name">{{ item.sport_name }}</span>
     <span class="app-latest-meta">{{ item.meta }}</span>
   </span>
+  {% comment %}
+    Ячейки таблицы «Последние тренировки» на ПК — только по cells=True: панель
+    недели их не показывает, а место без select_related стоило бы там запроса
+    на строку. На телефоне ячейки скрыты, и строка читает meta.
+  {% endcomment %}
+  {% if cells %}
+    <span class="app-latest-cell">{{ item.day_label }}</span>
+    <span class="app-latest-cell num">{{ item.workout.duration_display }}</span>
+    <span class="app-latest-cell num">{{ item.metric }}</span>
+    <span class="app-latest-cell app-latest-place">{{ item.workout.location.name|default:"—" }}</span>
+    <span class="app-latest-cell"><span class="app-kind">{{ item.kind }}</span></span>
+  {% endif %}
   <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
        aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>

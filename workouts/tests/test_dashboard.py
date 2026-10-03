@@ -12,6 +12,7 @@ from workouts.models import Sport
 from workouts.tests.factories import (
     CardioPartFactory,
     ExerciseFactory,
+    LocationFactory,
     SportFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -65,6 +66,53 @@ def test_dashboard_hides_other_users_data(client, user, other_user):
     assert f'data-workout="{alien.pk}"' not in content
     assert "Чужое упражнение" not in content
     assert "200 кг" not in content
+
+
+def test_dashboard_latest_table_carries_cells_with_place(client, user):
+    """Таблица «Последние» на ПК: ячейки с местом и типом есть у строк дашборда,
+    шапка — только когда есть строки."""
+    place = LocationFactory(owner=user, name="СпортЛайф")
+    workout = WorkoutFactory(user=user, location=place)
+    StrengthSetFactory(workout=workout, set_number=1)
+
+    client.force_login(user)
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert "app-recent-head" in content
+    assert 'class="app-latest-cell app-latest-place">СпортЛайф<' in content
+    assert '<span class="app-kind">Силовая</span>' in content
+
+
+def test_dashboard_latest_table_has_no_head_without_workouts(client, user):
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert "app-recent-head" not in content
+
+
+def test_week_partial_rows_have_no_table_cells(client, user):
+    """Панель недели — строки без ячеек: таблица только в «Последних», а место
+    без select_related стоило бы там запроса на строку."""
+    WorkoutFactory(user=user, started_at=timezone.now())
+
+    client.force_login(user)
+    monday = stats.week_start(timezone.localdate())
+    content = client.get(reverse("dashboard_week"), {"start": monday.isoformat()}).content.decode()
+
+    assert "app-latest-row" in content
+    assert "app-latest-cell" not in content
+
+
+def test_dashboard_tiles_carry_badges_for_desktop(client, user):
+    WorkoutFactory(user=user, duration_min=45)
+
+    client.force_login(user)
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert 'class="app-stat-badge is-up"' in content
+    assert "+45 мин" in content
+    assert "1 день из 7" in content
 
 
 def test_dashboard_redirects_anonymous_to_login(client):
