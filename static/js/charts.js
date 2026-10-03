@@ -297,6 +297,113 @@ window.appCharts = (function () {
     return chart;
   }
 
+  // «#3987e5» + 0.28 -> «rgba(57, 135, 229, 0.28)». Цвета видов спорта в токенах —
+  // шестнадцатеричные; что-то другое возвращается как есть, без прозрачности.
+  function withAlpha(color, alpha) {
+    const hex = color.replace("#", "");
+    if (!/^([0-9a-f]{3}|[0-9a-f]{6})$/i.test(hex)) return color;
+    const full = hex.length === 3 ? hex.replace(/./g, "$&$&") : hex;
+    const [r, g, b] = [0, 2, 4].map(function (start) {
+      return parseInt(full.slice(start, start + 2), 16);
+    });
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  // «Статистика» дашборда на ПК — приём TailAdmin: линии видов спорта с мягкой
+  // заливкой к оси, одна ось Y справа, легенда HTML-ом в карточке. Заливка —
+  // градиентом по высоте области графика, поэтому собирается в момент отрисовки.
+  function buildArea(canvas, payload, tab) {
+    const t = theme();
+    const unit = " " + tab.unit;
+    const datasets = tab.datasets.map(function (d) {
+      const color = t.sports[d.colorKey] || t.sports.strength;
+      return {
+        label: d.name,
+        data: d.values,
+        _colorKey: d.colorKey,
+        borderColor: color,
+        pointBackgroundColor: color,
+        pointBorderColor: t.card,
+        backgroundColor: function (context) {
+          const area = context.chart.chartArea;
+          if (!area) return "transparent";
+          const stroke = context.dataset.borderColor;
+          const gradient = context.chart.ctx.createLinearGradient(0, area.top, 0, area.bottom);
+          gradient.addColorStop(0, withAlpha(stroke, 0.28));
+          gradient.addColorStop(1, withAlpha(stroke, 0));
+          return gradient;
+        },
+        fill: "origin",
+        tension: 0.35,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        pointHoverBorderWidth: 2,
+      };
+    });
+
+    const chart = new Chart(canvas, {
+      type: "line",
+      data: { labels: payload.labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 18 } },
+        interaction: { mode: "index", intersect: false },
+        scales: {
+          x: {
+            grid: { display: false },
+            border: { display: true, color: t.line },
+            ticks: { color: t.muted, font: { size: 11 }, maxRotation: 0 },
+          },
+          y: {
+            position: "right",
+            beginAtZero: true,
+            grid: { color: t.line, drawTicks: false },
+            border: { display: false },
+            ticks: {
+              mirror: true,
+              labelOffset: -8,
+              color: t.muted,
+              font: { size: 11 },
+              maxTicksLimit: 5,
+              callback: function (value) {
+                return value > 0 ? comma(value) + unit : "";
+              },
+            },
+          },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: Object.assign(tooltipDefaults(t), {
+            callbacks: {
+              title: function (items) {
+                return payload.titles[items[0].dataIndex];
+              },
+              label: function (ctx) {
+                return ctx.dataset.label + ": " + comma(ctx.parsed.y) + unit;
+              },
+            },
+          }),
+        },
+      },
+    });
+
+    register(chart, function (target, next) {
+      target.data.datasets.forEach(function (dataset) {
+        const color = next.sports[dataset._colorKey] || next.sports.strength;
+        dataset.borderColor = color;
+        dataset.pointBackgroundColor = color;
+        dataset.pointBorderColor = next.card;
+      });
+      const scales = target.options.scales;
+      scales.x.ticks.color = scales.y.ticks.color = next.muted;
+      scales.x.border.color = scales.y.grid.color = next.line;
+      Object.assign(target.options.plugins.tooltip, tooltipDefaults(next));
+    });
+    return chart;
+  }
+
   // Спарклайн прожектора: без осей, точка только на последнем значении.
   function buildSparkline(canvas, values, colorKey) {
     const t = theme();
@@ -341,5 +448,5 @@ window.appCharts = (function () {
     return chart;
   }
 
-  return { buildStackedBar, buildLine, buildSparkline, destroy };
+  return { buildStackedBar, buildLine, buildArea, buildSparkline, destroy };
 })();

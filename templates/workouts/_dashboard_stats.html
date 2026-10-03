@@ -1,0 +1,49 @@
+{% comment %}
+  Карточка «Статистика» (stats.monthly_stats): три вкладки — время, тоннаж,
+  дистанция — по месяцам за год. Данные всех вкладок приходят разом, вкладки
+  переключает dashboard.js без запросов. Легенда и итог года у каждой вкладки
+  свои и рендерятся здесь же — так цвета видов спорта берутся токенами, как у
+  графика «часы по неделям».
+{% endcomment %}
+<section class="app-card app-stats" aria-labelledby="stats-title" data-stats>
+  <div class="app-stats-head">
+    <div>
+      <h2 class="app-chart-title" id="stats-title">Статистика</h2>
+      <p class="app-stats-sub">по месяцам за год</p>
+    </div>
+    {% if has_data %}
+      <div class="app-tabs" role="tablist" aria-label="Что показать">
+        {% for tab in stats.tabs %}
+          <button type="button" class="app-tab" role="tab" id="stats-tab-{{ tab.key }}"
+                  aria-controls="stats-panel" aria-selected="false"
+                  data-stats-tab="{{ tab.key }}">{{ tab.title }}</button>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </div>
+
+  {% if has_data %}
+    <div id="stats-panel" role="tabpanel" aria-labelledby="stats-title">
+      {% for tab in stats.tabs %}
+        <div class="app-stats-meta" data-stats-panel="{{ tab.key }}" hidden>
+          <div class="app-chart-legend">
+            {% for dataset in tab.datasets %}
+              <span class="app-chart-legend-item">
+                <span class="app-sport-dot" style="--dot: var(--app-sport-{{ dataset.colorKey }})"></span>
+                {{ dataset.name }}
+              </span>
+            {% endfor %}
+          </div>
+          <span class="app-stats-total">за год <span class="num">{{ tab.total }}</span></span>
+        </div>
+      {% endfor %}
+      <div class="app-stats-body">
+        <canvas data-stats-canvas role="img" aria-label="Статистика по месяцам за год"></canvas>
+      </div>
+      <p class="app-stats-empty" data-stats-empty hidden>За этот год здесь пока пусто.</p>
+    </div>
+    {{ stats|json_script:"stats-data" }}
+  {% else %}
+    {% include "includes/empty_state.html" with text="Статистика за год появится после первых тренировок." %}
+  {% endif %}
+</section>

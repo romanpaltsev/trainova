@@ -1555,6 +1555,24 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return records
 
 
+class DashboardStatsView(LoginRequiredMixin, View):
+    """Карточка «Статистика» дашборда на ПК: время, тоннаж и дистанция за год.
+
+    Дашборд рендерит только заготовку карточки, а данные она забирает сама,
+    когда попадает в поле зрения (hx-trigger="intersect once"): на телефоне
+    карточка скрыта, IntersectionObserver её не видит, и запроса нет вовсе —
+    а у самого дашборда бюджет запросов не двигается.
+    """
+
+    def get(self, request):
+        data = stats.monthly_stats(request.user)
+        return render(
+            request,
+            "workouts/_dashboard_stats.html",
+            {"stats": data, "has_data": any(tab["datasets"] for tab in data["tabs"])},
+        )
+
+
 class DashboardWeekView(LoginRequiredMixin, View):
     """Партиал по тапу на столбец графика: тренировки выбранной недели."""
 

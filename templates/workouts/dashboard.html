@@ -229,6 +229,23 @@
       </section>
     {% endif %}
   </aside>
+
+  {% comment %}
+    «Статистика» за год — только ПК, приём TailAdmin «Statistics». Здесь лишь
+    заготовка той же высоты, что и график: данные карточка забирает сама, когда
+    попадает в поле зрения (intersect once), — на телефоне она скрыта, и запроса
+    нет вовсе. Ответ заменяет заготовку целиком (_dashboard_stats.html).
+  {% endcomment %}
+  <section class="app-card app-stats" aria-labelledby="stats-title"
+           hx-get="{% url 'dashboard_stats' %}" hx-trigger="intersect once" hx-swap="outerHTML">
+    <div class="app-stats-head">
+      <div>
+        <h2 class="app-chart-title" id="stats-title">Статистика</h2>
+        <p class="app-stats-sub">по месяцам за год</p>
+      </div>
+    </div>
+    <div class="app-stats-body" aria-hidden="true"></div>
+  </section>
 </div>
 
 {{ chart|json_script:"chart-data" }}

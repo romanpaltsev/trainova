@@ -1524,8 +1524,9 @@ a.btn {
 .app-latest-cell,
 .app-recent-head { display: none; }
 
-/* Карточка «Цель на неделю» — только ПК (блок 768) */
-.app-goal { display: none; }
+/* Карточки «Цель на неделю» и «Статистика» — только ПК (блок 768) */
+.app-goal,
+.app-stats { display: none; }
 
 /* Текст шапки встаёт на общий отступ карточки (у шапки и легенды свои 4px),
    а полотно графика — на 4px шире: подписям осей это место нужнее. */
@@ -2244,6 +2245,8 @@ a.btn {
     color: var(--app-text);
   }
 
+  .app-tab:not(.is-active):hover { color: var(--app-text); }
+
   /* Карточки и строки, кликабельные целиком: рамка, подъём и тень */
   .app-workout-link:hover,
   .app-row:hover,
@@ -2951,11 +2954,13 @@ a.btn {
   .app-dash-side { display: contents; }
   .app-dash-stats,
   .app-dash-main,
+  .app-stats,
   .app-records { grid-column: 1 / -1; }
   .app-goal,
   .app-spotlight { order: 1; }
   .app-dash-main { order: 2; }
-  .app-records { order: 3; }
+  .app-stats { order: 3; }
+  .app-records { order: 4; }
   .app-dash:not(:has(.app-spotlight)) .app-goal { grid-column: 1 / -1; }
 
   /* «Цель на неделю» — приём TailAdmin «Monthly Target»: полукруглая шкала
@@ -3056,6 +3061,83 @@ a.btn {
   .app-goal-facts dd {
     margin: var(--app-space-1) 0 0;
     font-size: 1.0625rem;
+  }
+
+  /* «Статистика» — приём TailAdmin «Statistics»: заголовок слева, вкладки
+     справа, под ними легенда с итогом года и график по месяцам. Высота тела
+     одна у заготовки и у карточки с данными — подгрузка не сдвигает страницу. */
+  .app-stats {
+    display: block;
+    padding: var(--app-space-5) calc(var(--app-card-inset) - var(--app-space-1)) var(--app-space-3);
+  }
+  .app-stats-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--app-space-3);
+    padding-inline: var(--app-space-1);
+  }
+  .app-stats-sub {
+    margin: var(--app-space-1) 0 0;
+    color: var(--app-text-muted);
+    font-size: 0.875rem;
+  }
+  .app-stats-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--app-space-2) var(--app-space-4);
+    margin-top: var(--app-space-3);
+    padding-inline: var(--app-space-1);
+  }
+  .app-stats-meta .app-chart-legend { margin: 0; }
+  .app-stats-total {
+    color: var(--app-text-secondary);
+    font-size: 0.875rem;
+  }
+  .app-stats-total .num {
+    margin-left: var(--app-space-1);
+    color: var(--app-text);
+    font-size: 1rem;
+  }
+  .app-stats-body {
+    position: relative;
+    height: 320px;
+    margin-top: var(--app-space-2);
+  }
+  .app-stats-empty {
+    margin: var(--app-space-6) 0;
+    color: var(--app-text-secondary);
+    text-align: center;
+  }
+  .app-stats .app-empty { margin-top: var(--app-space-4); }
+
+  /* Переключатель-сегменты (TailAdmin): подложка, активный сегмент — карточкой
+     поверх неё. Поверхности по темам разные (--app-segment-*): в тёмной
+     активный светлее подложки, в светлой — белая карточка на сером. */
+  .app-tabs {
+    display: inline-flex;
+    gap: var(--app-space-1);
+    padding: var(--app-space-1);
+    border-radius: var(--app-radius-field);
+    background-color: var(--app-segment-bg);
+  }
+  .app-tab {
+    padding: var(--app-space-2) var(--app-space-3);
+    border: 0;
+    border-radius: calc(var(--app-radius-field) - var(--app-space-1));
+    background-color: transparent;
+    color: var(--app-text-secondary);
+    font-size: 0.875rem;
+    font-weight: 600;
+    transition: var(--app-transition-ui);
+  }
+  .app-tab.is-active {
+    background-color: var(--app-segment-active);
+    box-shadow: var(--app-shadow-card);
+    color: var(--app-text);
   }
 
   /* Первый силовой рекорд живёт в прожекторе — плитку прячем */
@@ -3488,10 +3570,12 @@ a.btn {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
     grid-template-areas:
       "stats stats"
-      "main side";
+      "main side"
+      "year year";
     align-items: start;
     gap: var(--app-space-6);
   }
+  .app-stats { grid-area: year; }
   .app-dash-stats { gap: var(--app-space-6); }
   .app-dash-main,
   .app-dash-side { gap: var(--app-space-6); }

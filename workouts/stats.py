@@ -4,7 +4,7 @@
 без подмены системного времени.
 """
 
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, Max, Min, Q, Sum
@@ -337,6 +337,130 @@ def week_goal(target, week_totals, today):
         # Длина дуги в долях пути (pathLength="100" у SVG-полукруга).
         "arc": min(percent, 100),
         "message": message,
+    }
+
+
+def month_starts(today, count):
+    """Первые числа последних count месяцев, от старого к текущему."""
+    year, month = today.year, today.month
+    starts = []
+    for _ in range(count):
+        starts.append(date(year, month, 1))
+        year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+    return starts[::-1]
+
+
+def monthly_stats(user, today=None, months=12):
+    """Карточка «Статистика» на ПК: время, тоннаж и дистанция по месяцам за год.
+
+    Четыре запроса на все три вкладки сразу — тренировки, тоннаж по тренировкам,
+    кардио-части и их виды спорта, — поэтому вкладки переключаются на клиенте без
+    новых запросов. Время делится между хозяином и частями так же, как в
+    weekly_chart, а тоннаж и части — отдельными запросами по той же причине, что
+    в _split_windows: джойн размножил бы строки тренировок. Только float — по
+    той же причине, что в weekly_chart.
+    """
+    today = today or timezone.localdate()
+    starts = month_starts(today, months)
+    last_day = (starts[-1] + timedelta(days=31)).replace(day=1) - timedelta(days=1)
+    first_moment, end = day_bounds(starts[0], last_day)
+    index = {(start.year, start.month): position for position, start in enumerate(starts)}
+
+    rows = list(
+        Workout.objects.filter(user=user)
+        .finished()
+        .filter(started_at__gte=first_moment, started_at__lt=end)
+        .values_list("id", "started_at", "duration_min", "sport_id")
+    )
+    workout_ids = [row[0] for row in rows]
+    tonnage_by_workout = dict(
+        StrengthSet.objects.filter(workout_id__in=workout_ids)
+        .values_list("workout_id")
+        .annotate(value=Sum(F("weight_kg") * F("reps"), output_field=DecimalField()))
+    )
+    part_rows = list(
+        CardioPart.objects.filter(workout_id__in=workout_ids).values_list(
+            "workout_id", "sport_id", "duration_min", "distance_km"
+        )
+    )
+    sports = Sport.objects.in_bulk(
+        {row[3] for row in rows} | {sport_id for _, sport_id, _, _ in part_rows}
+    )
+
+    position_by_workout = {}
+    minutes = {}  # (sport_id, месяц) -> минуты
+    tonnage = [Decimal(0)] * months
+    distance = {}  # (sport_id, месяц) -> км
+    parts_by_workout = {}
+    for workout_id, sport_id, duration, km in part_rows:
+        parts_by_workout.setdefault(workout_id, []).append((sport_id, duration or 0, km))
+    for workout_id, started_at, duration, sport_id in rows:
+        local = timezone.localtime(started_at).date()
+        position = index[(local.year, local.month)]
+        position_by_workout[workout_id] = position
+        tonnage[position] += tonnage_by_workout.get(workout_id) or 0
+        parts = parts_by_workout.get(workout_id, [])
+        for part_sport_id, part_minutes, km in parts:
+            key = (part_sport_id, position)
+            minutes[key] = minutes.get(key, 0) + part_minutes
+            if km:
+                distance[key] = distance.get(key, Decimal(0)) + km
+        rest = max(0, duration - sum(part_minutes for _, part_minutes, _ in parts))
+        if rest or not parts:
+            key = (sport_id, position)
+            minutes[key] = minutes.get(key, 0) + rest
+
+    ordered = sorted(sports.values(), key=lambda sport: (not sport.is_strength, sport.name))
+
+    def series(values_by_key, convert):
+        datasets = []
+        for sport in ordered:
+            values = [values_by_key.get((sport.pk, position), 0) for position in range(months)]
+            if any(values):
+                datasets.append(
+                    {
+                        "name": sport.name,
+                        "colorKey": sport.color_key,
+                        "values": [convert(value) for value in values],
+                    }
+                )
+        return datasets
+
+    total_minutes = sum(minutes.values())
+    total_tonnage = sum(tonnage)
+    total_distance = sum(distance.values(), Decimal(0))
+    tonnage_dataset = {
+        "name": "Тоннаж",
+        "colorKey": "strength",
+        "values": [round(float(value) / 1000, 2) for value in tonnage],
+    }
+    return {
+        "labels": [formats.date_format(start, "b") for start in starts],
+        "titles": [f"{formats.date_format(start, 'F')} {start.year}" for start in starts],
+        "tabs": [
+            {
+                "key": "time",
+                "title": "Время",
+                "unit": "ч",
+                "total": f"{round(total_minutes / 60)} ч",
+                "datasets": series(minutes, lambda value: round(value / 60, 1)),
+            },
+            {
+                "key": "tonnage",
+                "title": "Тоннаж",
+                "unit": "т",
+                "total": f"{decimal_display(round(total_tonnage / 1000, 1))} т",
+                "datasets": [tonnage_dataset] if total_tonnage else [],
+            },
+            {
+                "key": "distance",
+                "title": "Дистанция",
+                "unit": "км",
+                # round(…, 0), а не round(…): без знаков Decimal округляется в int.
+                "total": f"{decimal_display(round(total_distance, 0))} км",
+                "datasets": series(distance, lambda value: round(float(value), 1)),
+            },
+        ],
     }
 
 
