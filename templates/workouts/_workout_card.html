@@ -1,6 +1,12 @@
-{% comment %}Карточка тренировки в ленте. Кардио открывается на правку по тапу.{% endcomment %}
+{% comment %}
+  Карточка тренировки в ленте, нажимается целиком: силовая открывает итог, кардио —
+  правку. Кардио-карточка сама ссылка. Силовой так нельзя: в ней форма «Повторить»,
+  а кнопку внутри <a> HTML не допускает. Поэтому силовая — статья, ссылка в ней —
+  заголовок, и его ::after растянут на всю карточку (.app-workout-stretch), а форма
+  поднята над ним. Нажатие на кнопку повторяет, на всё остальное — открывает.
+{% endcomment %}
 {% if workout.sport.is_strength %}
-  <article class="app-card app-workout" id="workout-{{ workout.pk }}">
+  <article class="app-card app-workout app-workout-link app-workout-stretch" id="workout-{{ workout.pk }}">
 {% else %}
   <a class="app-card app-workout app-workout-link" id="workout-{{ workout.pk }}"
      href="{% url 'workout_edit' workout.pk %}">
@@ -13,7 +19,11 @@
         можно только элемент, у анонимного текстового узла flex-контейнера
         text-overflow не работает. Группа мышц бывает и в 60 символов.
       {% endcomment %}
-      <span class="app-workout-title">{{ workout.muscle_groups|default:workout.sport.name }}</span>
+      {% if workout.sport.is_strength %}
+        <a class="app-workout-title app-workout-open" href="{% url 'workout_summary' workout.pk %}">{{ workout.muscle_groups|default:workout.sport.name }}</a>
+      {% else %}
+        <span class="app-workout-title">{{ workout.muscle_groups|default:workout.sport.name }}</span>
+      {% endif %}
     </span>
     <span class="text-secondary-app">{{ workout.started_at|date:"D, j b"|lower }}</span>
   </div>
@@ -66,12 +76,16 @@
     </div>
   {% endif %}
 {% if workout.sport.is_strength %}
+  {% comment %}
+    Кнопки «Открыть» нет: открывает нажатие на карточку. Шеврон — та же подсказка
+    «строка ведёт дальше», что у кардио; виден только в плотной строке на 1200px.
+  {% endcomment %}
   <div class="app-workout-actions">
     <form method="post" action="{% url 'workout_repeat' workout.pk %}">
       {% csrf_token %}
       <button type="submit" class="btn btn-quiet w-100">Повторить</button>
     </form>
-    <a class="btn btn-quiet" href="{% url 'workout_summary' workout.pk %}">Открыть</a>
+    {% include "includes/chevron.html" %}
   </div>
   </article>
 {% else %}

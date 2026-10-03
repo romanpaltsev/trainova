@@ -1316,7 +1316,7 @@ a.btn {
   font-weight: 700;
 }
 
-/* Кнопки силовой карточки истории: широкая «Повторить», узкая «Открыть» */
+/* Кнопка силовой карточки истории: «Повторить» во всю ширину */
 .app-workout-actions {
   display: flex;
   gap: 0.5rem;
@@ -1325,9 +1325,43 @@ a.btn {
 
 .app-workout-actions form { flex: 1 1 auto; }
 
-/* Шеврон нужен только плотной строке на ≥1200px: на телефоне вся кардио-карточка
-   очевидно нажимаемая, и указатель там лишний. */
-.app-workout > .app-pick-chevron { display: none; }
+/* Силовая карточка нажимается целиком, как кардио, но ссылкой быть не может: в ней
+   форма «Повторить». Ссылка — заголовок, её ::after растянут на карточку. Обрезка
+   заголовка (overflow: hidden) его не задевает: блок-контейнер у ::after — сама
+   карточка, а она предок заголовка. Над ссылкой поднята только форма, а не весь
+   ряд кнопок: пустое место ряда и шеврон остаются частью ссылки. */
+.app-workout-stretch { position: relative; }
+
+.app-workout-open {
+  color: inherit;
+  text-decoration: none;
+}
+
+.app-workout-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--app-radius-card);
+}
+
+.app-workout-stretch .app-workout-actions form {
+  position: relative;
+  z-index: 1;
+}
+
+/* Фокус с клавиатуры — рамкой всей карточки, а не одного заголовка: рамку рисует
+   растянутый ::after. Без :has(), поэтому фокус виден в любом браузере. */
+.app-workout-open:focus-visible { outline: none; }
+
+.app-workout-open:focus-visible::after {
+  outline: var(--app-focus-outline);
+  outline-offset: var(--app-focus-offset);
+}
+
+/* Шеврон нужен только плотной строке на ≥1200px: на телефоне карточка очевидно
+   нажимаемая, и указатель там лишний. У силовой он в ряду кнопок, у кардио —
+   прямо в карточке, поэтому селектор потомка. */
+.app-workout .app-pick-chevron { display: none; }
 
 /* ---------- Справочник упражнений ---------- */
 
@@ -3867,12 +3901,17 @@ a.btn {
 
     .app-workout-actions {
       grid-column: 7;
+      align-items: center;
       margin-top: 0;
     }
 
+    /* Шеврон силовой — после «Повторить», у правой кромки (margin-left: auto
+       базового .app-pick-chevron). */
+    .app-workout-actions > .app-pick-chevron { display: block; }
+
     /* К правому краю колонки действий: ширину колонки задают «Повторить» и
-       «Открыть» силовых строк, и шеврон кардио висел в её начале, посреди
-       карточки, а не у кромки, где его ищет глаз. */
+       шеврон силовых строк, и шеврон кардио висел бы в её начале, посреди
+       карточки, а не на одной вертикали с шевронами силовых. */
     .app-workout > .app-pick-chevron {
       display: block;
       grid-column: 7;

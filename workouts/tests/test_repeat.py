@@ -1,5 +1,6 @@
 """Кнопка «Повторить»: новая активная тренировка с тем же набором упражнений."""
 
+import re
 from datetime import timedelta
 
 import pytest
@@ -90,16 +91,27 @@ def test_repeat_of_cardio_or_unfinished_is_404(client, user):
     assert client.post(reverse("workout_repeat", args=[unfinished.pk])).status_code == 404
 
 
-def test_history_strength_card_has_repeat_and_open_buttons(client, user):
+def test_history_strength_card_opens_summary_and_keeps_repeat(client, user):
+    """Силовая карточка нажимается целиком, как кардио: ссылка на итог — её
+    заголовок (растянутый на карточку CSS), а «Повторить» остаётся формой рядом.
+    Кнопка в ссылке недопустима в HTML, поэтому форма не должна оказаться внутри."""
     client.force_login(user)
     strength = WorkoutFactory(user=user)
+    StrengthSetFactory(workout=strength, set_number=1)
     cardio = CardioPartFactory(workout__user=user).workout
 
     content = client.get(reverse("workout_history")).content.decode()
 
-    assert reverse("workout_repeat", args=[strength.pk]) in content
-    assert reverse("workout_summary", args=[strength.pk]) in content
-    # Кардио-карточка — ссылка на правку, кнопок повторения у неё нет.
+    card = re.search(rf'id="workout-{strength.pk}">(.*?)</article>', content, re.S).group(1)
+    link = re.search(
+        r'<a class="app-workout-title app-workout-open" href="([^"]+)">(.*?)</a>', card, re.S
+    )
+    assert link.group(1) == reverse("workout_summary", args=[strength.pk])
+    assert "<form" not in link.group(2)
+    assert reverse("workout_repeat", args=[strength.pk]) in card
+    assert "Открыть" not in card
+    # Кардио-карточка — сама ссылка на правку, кнопок повторения у неё нет.
+    assert f'href="{reverse("workout_edit", args=[cardio.pk])}"' in content
     assert reverse("workout_repeat", args=[cardio.pk]) not in content
 
 
