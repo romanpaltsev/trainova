@@ -145,6 +145,17 @@ def test_catalog_query_budget_with_both_facets(client, user, django_assert_max_n
         client.get(reverse("exercise_list"), {"equipment": "Штанга", "group": bench.muscle_group})
 
 
+@pytest.mark.parametrize("sort", ["-workouts", "group", "name", "last", "мусор"])
+def test_catalog_query_budget_with_sort(client, user, django_assert_max_num_queries, sort):
+    """Таблица на ПК сортирует уже загруженный список в Python: ни одна колонка
+    не стоит лишнего запроса, и бюджет каталога остаётся 7."""
+    fill_history(user)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(7):
+        client.get(reverse("exercise_list"), {"sort": sort})
+
+
 @pytest.mark.parametrize("queued", [1, 6], ids=["one-exercise", "six-exercises"])
 def test_live_screen_query_budget(client, user, django_assert_max_num_queries, queued):
     """Живой экран не должен зависеть от числа упражнений в очереди."""

@@ -5,8 +5,11 @@
 """
 
 import io
+from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
+from operator import attrgetter
+from typing import NamedTuple
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -1758,6 +1761,111 @@ def trained_first(exercises):
     return trained
 
 
+class CatalogSort(NamedTuple):
+    """Колонка таблицы справочника на ПК, по которой можно сортировать."""
+
+    label: str
+    # Для подписи таблицы читалкам: «Упражнения по названию, по возрастанию».
+    caption: str
+    # None — порядок запроса, то есть по названию: сравнивает база, её правилами.
+    key: Callable | None
+    # У строки нет значения (нет группы, не тренировал) — в хвост при любом
+    # направлении: десяток прочерков сверху скрыл бы то, ради чего сортировали.
+    missing: Callable | None
+    # Направление первого клика: числа и даты — сначала большие и свежие.
+    descending: bool
+
+
+CATALOG_SORTS = {
+    "name": CatalogSort("Упражнение", "по названию", None, None, False),
+    "group": CatalogSort(
+        "Группа", "по группе мышц", attrgetter("muscle_group"), lambda e: not e.muscle_group, False
+    ),
+    "workouts": CatalogSort(
+        "Тренировок",
+        "по числу тренировок",
+        lambda e: (e.workouts_count, e.last_workout_at),
+        lambda e: not e.workouts_count,
+        True,
+    ),
+    "last": CatalogSort(
+        "Последняя",
+        "по дате последней тренировки",
+        lambda e: (e.last_workout_at, e.workouts_count),
+        lambda e: not e.workouts_count,
+        True,
+    ),
+}
+# Свежее сверху — тот же порядок, что у плиток «Я тренирую» на телефоне: таблица
+# на ПК их заменяет, и первым на экране должно быть то, что человек делает сейчас.
+DEFAULT_CATALOG_SORT = ("last", True)
+
+
+def parse_catalog_sort(raw):
+    """«-last» → ("last", True). Мусор молча даёт умолчание — как неизвестный чип."""
+    raw = (raw or "").strip()
+    field = raw.removeprefix("-")
+    if field not in CATALOG_SORTS:
+        return DEFAULT_CATALOG_SORT
+    return field, raw.startswith("-")
+
+
+def catalog_sort_param(field, desc):
+    """Значение sort для ссылки; у умолчания параметра нет — адрес остаётся чистым."""
+    if (field, desc) == DEFAULT_CATALOG_SORT:
+        return None
+    return f"-{field}" if desc else field
+
+
+def sort_catalog(exercises, field, desc):
+    """Строки таблицы справочника в выбранном порядке.
+
+    Сортируем в Python уже загруженный список, а не в запросе: телефонные
+    раскладки (группы, плитки) читают тот же список по названию, и порядок
+    таблицы не должен их задевать — а нового запроса это не стоит. Сортировки
+    стабильные, поэтому равные значения остаются в порядке названий из базы.
+    """
+    rows = list(exercises)
+    sort = CATALOG_SORTS[field]
+    if sort.key is None:
+        return rows[::-1] if desc else rows
+    present = [row for row in rows if not sort.missing(row)]
+    absent = [row for row in rows if sort.missing(row)]
+    present.sort(key=sort.key, reverse=desc)
+    return present + absent
+
+
+def catalog_columns(field, desc):
+    """Заголовки таблицы: подпись, aria-sort у активной и ссылка следующего клика.
+
+    Клик по активной колонке разворачивает направление, по другой — включает её
+    с направлением первого клика. Рекорд не сортируется: в нём смешаны
+    килограммы, повторы и время.
+    """
+    columns = []
+    for key, sort in CATALOG_SORTS.items():
+        active = key == field
+        columns.append(
+            {
+                "field": key,
+                "label": sort.label,
+                "sortable": True,
+                "aria_sort": ("descending" if desc else "ascending") if active else "",
+                "param": catalog_sort_param(key, not desc if active else sort.descending),
+            }
+        )
+    columns.append({"field": "record", "label": "Рекорд", "sortable": False, "aria_sort": ""})
+    return columns
+
+
+def last_workout_label(moment, today):
+    """Дата последней тренировки для таблицы: «25 авг», с годом — если не текущий."""
+    if not moment:
+        return ""
+    local = timezone.localtime(moment)
+    return formats.date_format(local, "j b" if local.year == today.year else "j b Y")
+
+
 def visible_exercise_with_step(user, pk):
     """Видимое упражнение вместе с шагом веса этого пользователя — одним запросом."""
     queryset = with_weight_step(Exercise.objects.visible_to(user), user.pk, exercise_ref="pk")
@@ -1966,6 +2074,7 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         context = super().get_context_data(**kwargs)
         my_records = stats.strength_records(self.request.user)
         records = {row["exercise_id"]: row["value_display"] for row in my_records}
+        today = timezone.localdate()
         for exercise in context["exercises"]:
             # Рекорд приходит уже с единицей внутри: «83,75 кг», «12 повторов», «1:30».
             exercise.record_display = records.get(exercise.pk)
@@ -1976,6 +2085,19 @@ class ExerciseListView(LoginRequiredMixin, ListView):
                 None
                 if exercise.measurement == Exercise.Measurement.WEIGHT_REPS
                 else exercise.get_measurement_display().lower()
+            )
+            # Таблица на ПК: дата последней тренировки и вторая строка под
+            # названием — снаряд, необычная единица и «моё». Склейка здесь, а не в
+            # шаблоне: так не остаётся висячих разделителей у пропущенных частей.
+            exercise.last_workout_label = last_workout_label(exercise.last_workout_at, today)
+            exercise.table_meta = " · ".join(
+                part
+                for part in (
+                    exercise.equipment,
+                    exercise.measurement_label,
+                    None if exercise.is_global else "моё",
+                )
+                if part
             )
         # Справочник ниже остаётся полным: выполненное упражнение показывается и
         # плиткой, и строкой в своей группе — иначе в «Груди» не оказалось бы жима
@@ -2008,6 +2130,14 @@ class ExerciseListView(LoginRequiredMixin, ListView):
         # стоит в активном чипе: без фильтра одна группа могла остаться и сама по
         # себе, и тогда назвать её больше нечем.
         context["shows_group_titles"] = len(groups) > 1 or not context["group_filter"]
+        # Таблица на ПК — те же упражнения в порядке выбранной колонки. Телефон
+        # читает exercises/groups/trained выше, и sort их не трогает.
+        field, desc = parse_catalog_sort(self.request.GET.get("sort"))
+        context["table_rows"] = sort_catalog(context["exercises"], field, desc)
+        context["columns"] = catalog_columns(field, desc)
+        context["sort_param"] = catalog_sort_param(field, desc)
+        direction = "по убыванию" if desc else "по возрастанию"
+        context["sort_caption"] = f"Упражнения {CATALOG_SORTS[field].caption}, {direction}"
         return context
 
     def facets(self):
