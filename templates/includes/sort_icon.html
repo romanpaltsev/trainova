@@ -1,0 +1,15 @@
+{% comment %}
+  Значок сортировки в заголовке таблицы: direction — значение aria-sort колонки.
+  У активной колонки стрелка показывает направление, у остальных — приглушённая
+  пара «вверх-вниз»: колонку можно отсортировать.
+{% endcomment %}
+<svg class="app-sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  {% if direction == "descending" %}
+    <path d="M12 5v14M19 12l-7 7-7-7"/>
+  {% elif direction == "ascending" %}
+    <path d="M12 19V5M5 12l7-7 7 7"/>
+  {% else %}
+    <path d="M8 9l4-4 4 4M8 15l4 4 4-4"/>
+  {% endif %}
+</svg>

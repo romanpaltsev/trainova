@@ -1317,9 +1317,11 @@ a.btn {
 
 /* ---------- Справочник упражнений ---------- */
 
-/* Панель детали живёт только в мастер-детали на ≥1200px. По умолчанию её нет —
-   на мобильном упражнение открывается отдельной страницей, как и раньше. */
-.app-catalog-detail { display: none; }
+/* Шторка упражнения живёт только на ≥1200px, поверх таблицы. По умолчанию её
+   нет — на мобильном упражнение открывается отдельной страницей. Таблица
+   справочника — только ПК (блок 768): телефон читает плитки и группы. */
+.app-catalog-detail,
+.app-catalog-table { display: none; }
 
 /* Заголовок блока экрана («Я тренирую» / «Весь справочник»). Единственная дельта
    к .app-section-title — основной цвет текста: под ним стоят заголовки групп, и
@@ -2247,6 +2249,9 @@ a.btn {
 
   .app-tab:not(.is-active):hover { color: var(--app-text); }
 
+  .app-catalog-table tbody tr:hover > td { background-color: var(--app-raised); }
+  .app-catalog-sort:hover { color: var(--app-text); }
+
   /* Карточки и строки, кликабельные целиком: рамка, подъём и тень */
   .app-workout-link:hover,
   .app-row:hover,
@@ -2444,13 +2449,6 @@ a.btn {
     text-align: start;
   }
 
-  /* Двух строк хватает названиям справочника при ширине плитки от 210px: самое
-     длинное — «Жим штанги на наклонной скамье» (30 символов), оно переносится по
-     пробелу и в две строки укладывается. Имена стали точнее, поэтому запас тут
-     меньше прежнего: если справочник когда-нибудь доберётся до сорока символов,
-     клэмп придётся поднимать до трёх. На 375px он и так три — обрезать имя,
-     которое сегодня спокойно переносится, было бы ухудшением мобильного вида. */
-  .app-trained-name { -webkit-line-clamp: 2; }
   /* На широком экране карточка входа стоит по центру, а не прижата к верху */
   .app-auth { justify-content: center; padding-bottom: 4rem; }
   .app-auth-brand { margin-top: 0; }
@@ -2708,25 +2706,100 @@ a.btn {
   .app-profile-app { grid-area: app; }
   .app-profile-account { grid-area: account; }
 
-  /* ---------- Справочник упражнений ----------
+  /* ---------- Справочник упражнений: таблица ----------
 
-     До 1200 мастер-детали нет, и список идёт во всю ширину: плитки «Я тренирую»
-     заполняют ряд сколько влезет (не уже --app-measure-tile), справочник — в две
-     колонки. Группа — неразрывный блок, иначе заголовок оторвался бы от строк.
-     Отфильтрованный список без заголовков групп — одна карточка, её колонками
-     не режем. */
-  .app-trained-list {
-    grid-template-columns: repeat(auto-fill, minmax(var(--app-measure-tile), 1fr));
-  }
-  .app-catalog-all {
-    columns: 2;
-    column-gap: var(--app-space-6);
-  }
-  .app-catalog-all:not(:has(.app-group-title)) { columns: auto; }
-  .app-catalog-group {
+     С 768 справочник — таблица (приём TailAdmin «Basic Table»), а телефонные
+     раскладки прячутся: плитки «Я тренирую», заголовки блоков и группы со своими
+     заголовками. Прячем именно группы, а не .app-catalog-all: в нём живёт
+     пустое состояние ({% empty %}), и при пустом поиске оно должно остаться.
+     Карточка таблицы — overflow: clip, а не hidden: hidden сделал бы её
+     контейнером прокрутки, и шапка таблицы перестала бы залипать. */
+  .app-catalog-title,
+  .app-trained-list,
+  .app-catalog-group { display: none; }
+  .app-catalog-table {
     display: block;
-    break-inside: avoid;
+    overflow: clip;
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-card);
+    background-color: var(--app-card);
+    box-shadow: var(--app-shadow-card);
   }
+  .app-catalog-table table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  /* Боковые отступы ячеек до 1200 — 8px: на 768 под названия иначе
+     оставалось ~150px, и почти каждое переносилось. С 1200 — 12px. */
+  .app-catalog-table th,
+  .app-catalog-table td {
+    padding: var(--app-space-3) var(--app-space-2);
+    text-align: start;
+    vertical-align: middle;
+  }
+  .app-catalog-table :is(th, td):first-child { padding-inline-start: var(--app-card-inset); }
+  .app-catalog-table :is(th, td):last-child { padding-inline-end: var(--app-card-inset); }
+  /* Шапка таблицы залипает под шапкой сайта: справочник длинный, и в его
+     середине без неё не понять, где «Тренировок», а где рекорд. */
+  .app-catalog-table thead th {
+    position: sticky;
+    top: var(--app-header-height);
+    z-index: 1;
+    border-bottom: 1px solid var(--app-line);
+    background-color: var(--app-card);
+    color: var(--app-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .app-catalog-sort {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--app-space-1);
+    color: inherit;
+    text-decoration: none;
+    transition: var(--app-transition-ui);
+  }
+  .app-catalog-sort.is-active { color: var(--app-text); }
+  /* Строка кликабельна целиком (exercise.js), разделитель — линия сверху. */
+  .app-catalog-table tbody tr { cursor: pointer; }
+  .app-catalog-table tbody tr + tr > td { border-top: 1px solid var(--app-line); }
+  /* overflow-wrap: на 768 таблица сжимается, а не уезжает за край экрана. */
+  .app-catalog-table td {
+    color: var(--app-text-secondary);
+    font-size: 0.9375rem;
+    overflow-wrap: anywhere;
+    transition: var(--app-transition-ui);
+  }
+  .app-catalog-table td.num { color: var(--app-text); }
+  /* Прочерк «значения нет» — тихий: шрифтом цифр он выглядел бы жирной чертой
+     и спорил бы с настоящими числами в колонке. */
+  .app-catalog-none {
+    color: var(--app-text-muted);
+    font-family: var(--app-font-sans);
+    font-weight: 400;
+  }
+  .app-catalog-table .app-row-name { font-weight: 700; }
+  .app-catalog-table .app-row-meta {
+    display: block;
+    font-size: 0.8125rem;
+  }
+  /* Все колонки, кроме названия, — по содержимому: остаток ширины забирает
+     название. Цифры прижаты вправо, как в любой таблице. */
+  .app-catalog-table :is(
+    .app-catalog-col-group,
+    .app-catalog-col-workouts,
+    .app-catalog-col-last,
+    .app-catalog-col-record,
+    .app-catalog-col-actions
+  ) {
+    width: 1%;
+    white-space: nowrap;
+  }
+  .app-catalog-table :is(.app-catalog-col-workouts, .app-catalog-col-record) { text-align: end; }
+  /* Кнопка удаления 44px не раздувает строку: высоту задают текстовые ячейки. */
+  .app-catalog-table td.app-catalog-col-actions { padding-block: 0; }
 
   /* ---------- Страница упражнения (и панель каталога с 1200) ---------- */
 
@@ -3444,114 +3517,73 @@ a.btn {
   .app-auth-card { grid-column: 2; grid-row: 2; }
   .app-auth-footer { grid-column: 2; grid-row: 3; }
 
-  /* ---------- Справочник упражнений: список во всю ширину, панель по выбору ----------
+  /* ---------- Справочник упражнений: шторка поверх таблицы ----------
 
-     Пока упражнение не выбрано, каталог — дашборд во всю ширину: плитки «Я
-     тренирую» заполняют ряд, справочник идёт колонками доски. Пустая панель-
-     заглушка на пол-экрана рядом с узкой колонкой списка и делала страницу
-     полумобильной. Выбор упражнения (exercise.js ставит .is-open) делит экран:
-     слева список-навигатор, справа панель; крестик, Esc и «назад» закрывают её. */
-  .app-catalog-all { columns: var(--app-board-cols); }
-
-  /* В колонке списка (30rem) справочник снова одной колонкой, а доска истории
-     в панели — двумя: на 3 колонки токена панели не хватает ширины. */
-  .app-catalog.is-open .app-catalog-all { columns: auto; }
+     Клик по строке (exercise.js ставит .is-open) открывает упражнение шторкой
+     справа: таблица остаётся во всю ширину и не теряет прокрутку, а соседнюю
+     строку можно открыть, не закрывая шторку, — поэтому без затемнения. Шторка
+     стоит под шапкой сайта (z-index 1020: у шапки 1030, у окон 1050) и
+     прокручивается сама: в ней история подходов на несколько экранов, а
+     страница под ней остаётся на месте. Фон — фон страницы, а не карточки:
+     карточки внутри выглядят так же, как на странице упражнения. */
+  .app-catalog.is-open > .app-catalog-detail {
+    position: fixed;
+    inset-block: var(--app-header-height) 0;
+    inset-inline-end: 0;
+    z-index: 1020;
+    display: block;
+    width: var(--app-measure-drawer);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 var(--app-space-6) var(--app-space-8);
+    border-inline-start: 1px solid var(--app-line);
+    background-color: var(--app-bg);
+    box-shadow: var(--app-shadow-drawer);
+  }
+  /* Шторка уже страницы: доска истории подходов — в две колонки. */
   .app-catalog-detail { --app-board-cols: 2; }
+  /* С 1200 места хватает — ячейкам возвращаются полные 12px по бокам. Крайние
+     ячейки держат отступ карточки: их правило специфичнее. */
+  .app-catalog-table th,
+  .app-catalog-table td { padding-inline: var(--app-space-3); }
+  /* Фокус в шторку ставит код, а не человек: обводка вокруг всей шторки
+     только мешала бы. Внутри неё фокус по-прежнему видно. */
+  .app-catalog-detail:focus-visible { outline: none; }
 
-  /* Отдельная страница упражнения шире панели: четыре блока настроек встают
+  /* Открытое упражнение в таблице — фон и акцентная рейка у первой ячейки.
+     Рейка — inset-тенью: у ячеек таблицы нет своей рамки слева. */
+  .app-catalog-table tr.is-active > td { background-color: var(--app-raised); }
+  .app-catalog-table tr.is-active > td:first-child {
+    box-shadow: inset 3px 0 0 var(--app-accent);
+  }
+
+  /* Отдельная страница упражнения шире шторки: четыре блока настроек встают
      в один ряд, а не 2×2 с пустой половиной карточки. Колонки по содержимому
      и сжимаемые — у своего упражнения чипы групп и снарядов переносятся
-     внутри блока, а не выталкивают его за край. Панель каталога — не прямой
-     ребёнок main, её правило не задевает. */
+     внутри блока, а не выталкивают его за край. Шторка — не прямой ребёнок
+     main, её правило не задевает. */
   :where(.app-main) > .app-exercise > .app-settings-row {
     grid-template-columns: repeat(4, minmax(0, max-content));
   }
 
-  .app-catalog.is-open {
-    display: grid;
-    /* 30rem, а не 22rem: в 22rem не влезали две плитки, а название в строке с
-       рекордом получало 185px при нужных 194px и ломалось на две строки. При
-       30rem у названия в строке 414px, у названия в плитке — 210px. */
-    grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
-    gap: var(--app-space-6);
-    align-items: start;
-  }
-
-  /* Колонка списка — обычный блок. Своя полоса прокрутки давала 2,4 экрана
-     внутреннего скролла и торчала посреди страницы рядом с пустой панелью;
-     теперь прокручивается страница целиком. Липкой колонку сделать нельзя:
-     залипший элемент выше вьюпорта перестаёт двигаться, и всё ниже кромки
-     экрана становится недостижимым — у списка это две трети упражнений. */
-
-  .app-catalog.is-open > .app-catalog-detail {
-    display: block;
-    /* Клик по строке в низу списка свапает панель в верх правой колонки, то есть
-       выше кромки экрана. exercise.js подтягивает её в вид, а этот отступ не даёт
-       заехать под липкую шапку сайта. */
-    scroll-margin-top: calc(var(--app-header-height) + var(--app-space-4));
-  }
-
-  /* Приглашение «выберите упражнение» занимает колонку целиком, как займёт её
-     панель: мерой страницы (34rem по центру) оно висело узким островом
-     посреди пустой правой половины экрана. */
-  .app-catalog-detail > .app-empty {
-    max-width: none;
-    margin-inline: 0;
-  }
-
-  /* Выбранное упражнение. Раньше здесь менялся border-color, но у плотной строки
-     рамки нет по построению (border: 0), и от выделения оставался один чуть более
-     светлый фон.
-
-     Один URL соответствует двум элементам — плитке и строке того же упражнения:
-     справочник намеренно остался полным, поэтому подсвечиваются оба. Это
-     следствие решения, а не дефект. */
-  .app-catalog-list [data-exercise-item].is-active {
-    background-color: var(--app-raised);
-  }
-
-  /* Строка: акцентная рейка слева. Псевдоэлемент, а не box-shadow — тень строки
-     перебивается наведением, и выделение мигало бы под курсором. Рейку аккуратно
-     срезает overflow: hidden плотной карточки, а раскладку она не двигает. */
-  .app-rows-dense .app-row.is-active { position: relative; }
-
-  .app-rows-dense .app-row.is-active::before {
-    content: "";
-    position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
-    width: 3px;
-    background-color: var(--app-accent);
-  }
-
-  /* Плитка: рамка у неё своя, поэтому подсветка — акцентная рамка, удвоенная
-     inset-линией (один пиксель акцента на светлой карточке почти не виден — тот
-     же довод, что у чипов выбора вида спорта). Рейка не подошла бы: радиус 16px
-     срезал бы её в короткую полоску посередине края. */
-  .app-trained-item.is-active {
-    border-color: var(--app-accent);
-    box-shadow: inset 0 0 0 1px var(--app-accent);
-  }
-
-  /* Липкой становится шапка панели, а не панель целиком: у упражнения с двумя
-     десятками тренировок история подходов уходит на три экрана, а залипший
-     элемент выше вьюпорта перестаёт двигаться — всё ниже кромки стало бы
-     недостижимым. Шапка же всегда ниже вьюпорта и отвечает на единственный
-     вопрос, который теряется при прокрутке: «что я сейчас читаю».
-     Рендерится только в панели ({% if in_panel %}), поэтому мобильную страницу
-     правило задеть не может. Фон обязателен — иначе под название проезжает
-     график; z-index 1 хватает: у шапки сайта 1030, и панель уходит под неё. */
+  /* Липкой становится шапка шторки, а не вся она: шапка отвечает на
+     единственный вопрос, который теряется при прокрутке, — «что я сейчас
+     читаю», и держит крестик закрытия под рукой. Шторка прокручивается сама,
+     поэтому top: 0. Поля шторки шапка перекрывает отрицательными полями, чтобы
+     её фон шёл от края до края и под ней не проезжал график. Рендерится только
+     в шторке ({% if in_panel %}), поэтому страницу упражнения правило не
+     задевает. */
   .app-exercise-head {
     position: sticky;
-    top: calc(var(--app-header-height) + var(--app-space-4));
+    top: 0;
     z-index: 1;
-    padding-block: var(--app-space-2);
-    background-color: var(--app-bg);
-    /* Заголовок слева, крестик закрытия панели справа */
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--app-space-3);
+    margin-inline: calc(-1 * var(--app-space-6));
+    padding: var(--app-space-4) var(--app-space-6) var(--app-space-3);
+    background-color: var(--app-bg);
   }
   .app-exercise-head-text { min-width: 0; }
 

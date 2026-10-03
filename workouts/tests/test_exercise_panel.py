@@ -91,7 +91,7 @@ def test_panel_hides_back_arrow(client, user):
 
 
 def test_panel_has_close_button_page_does_not(client, user):
-    """Крестик закрывает панель и раскрывает список во всю ширину. На отдельной
+    """Крестик закрывает шторку поверх таблицы справочника. На отдельной
     странице закрывать нечего — там стрелка «назад» в каталог."""
     exercise = ExerciseFactory(name="Жим лёжа", owner=None)
 
@@ -104,8 +104,8 @@ def test_panel_has_close_button_page_does_not(client, user):
 
 
 def test_catalog_carries_hook_for_master_detail(client, user):
-    """По этому атрибуту exercise.js раскрывает и закрывает панель: без него
-    справочник остался бы во всю ширину, а выбранное упражнение — невидимым."""
+    """По этому атрибуту exercise.js открывает и закрывает шторку: без него
+    выбранное упражнение осталось бы невидимым."""
     ExerciseFactory(name="Жим лёжа", owner=None)
 
     client.force_login(user)
@@ -115,14 +115,15 @@ def test_catalog_carries_hook_for_master_detail(client, user):
 
 
 def test_catalog_renders_empty_panel(client, user):
-    """Сервер ничего не предвыбирает: он не знает ширину экрана."""
+    """Сервер ничего не предвыбирает: он не знает ширину экрана. Шторка пустая —
+    заполняет её exercise.js по клику на строку таблицы."""
     ExerciseFactory(name="Жим лёжа", owner=None)
 
     client.force_login(user)
     content = client.get(reverse("exercise_list")).content.decode()
 
     assert 'id="exercise-panel"' in content
-    assert "Выберите упражнение в списке" in content
+    assert 'id="exercise-body"' not in content
     assert 'id="exercise-chart"' not in content
 
 

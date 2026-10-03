@@ -1,10 +1,11 @@
-// Экран упражнений: график прогресса и мастер-деталь на широком экране.
+// Экран упражнений: график прогресса и шторка упражнения на широком экране.
 //
-// На десктопе справочник сначала во всю ширину; клик по строке подгружает
-// упражнение в правую панель, не уходя со страницы, и экран делится на список и
-// панель (класс is-open на каталоге). Крестик, Esc и «назад» панель закрывают.
-// На мобильном перехватчик молча выходит, и строка работает обычной ссылкой на
-// отдельную страницу — экран остаётся рабочим и без JS.
+// На ПК справочник — таблица во всю ширину; с 1200 клик по строке подгружает
+// упражнение в шторку справа поверх таблицы (класс is-open на каталоге), не
+// уходя со страницы, — таблица не сжимается и не теряет прокрутку. Крестик, Esc
+// и «назад» шторку закрывают. Ниже 1200 и на телефоне перехватчик молча выходит,
+// и строка работает обычной ссылкой на отдельную страницу — экран остаётся
+// рабочим и без JS.
 (function () {
   const WIDE = window.matchMedia("(min-width: 1200px)");
   const panel = document.getElementById("exercise-panel");
@@ -15,10 +16,10 @@
   // Заголовок запоминаем, а не пишем текстом: шаблон остаётся единственным местом.
   const listUrl = location.href;
   const listTitle = document.title;
-  // Снимок пустого состояния: с ним «назад» в исходное состояние не требует
-  // запроса, а русский текст не приходится дублировать в JS.
-  const emptyPanel = panel ? panel.innerHTML : "";
   let chart = null;
+  // Ссылка строки, с которой открыли шторку: при закрытии фокус возвращается
+  // туда, откуда человек пришёл, а не в начало страницы.
+  let opener = null;
 
   function renderChart() {
     if (chart) {
@@ -43,9 +44,10 @@
 
   function markActive(url) {
     document.querySelectorAll(ITEM).forEach(function (item) {
-      // У плитки хук стоит на самой ссылке, у строки — на обёртке рядом с кнопкой
-      // удаления. Одно упражнение может быть на экране дважды (плиткой и строкой),
-      // и подсвечиваются оба: справочник намеренно остался полным.
+      // У плитки хук стоит на самой ссылке, у строки группы и таблицы — на
+      // обёртке рядом с кнопкой удаления. Телефонная разметка (плитки, группы)
+      // остаётся в странице и на ПК спрятана: подсветка спрятанных ничего не
+      // стоит, а видна только строка таблицы.
       const link = item.matches(LINK) ? item : item.querySelector(LINK);
       const active = Boolean(link) && Boolean(url) && link.getAttribute("href") === url;
       item.classList.toggle("is-active", active);
@@ -61,15 +63,17 @@
     return htmx
       .ajax("GET", url, { target: "#exercise-panel", swap: "innerHTML" })
       .then(function () {
-        // Сначала раскрыть панель, потом строить график: на скрытом canvas
+        // Сначала раскрыть шторку, потом строить график: на скрытом canvas
         // renderChart молча выходит.
         if (catalog) catalog.classList.add("is-open");
+        // Шторка прокручивается сама, и новое упражнение открывается с начала,
+        // а не на месте, где читали предыдущее.
+        panel.scrollTop = 0;
         renderChart();
         markActive(url);
-        // Страница прокручивается целиком, поэтому клик по строке в низу списка
-        // свапнул бы панель выше кромки экрана. scroll-margin-top не даёт ей
-        // заехать под липкую шапку сайта.
-        if (panel.getBoundingClientRect().top < 0) panel.scrollIntoView();
+        // Фокус — в шторку: читалка начинает с открытого упражнения, а Tab
+        // ведёт по нему, а не по таблице. Прокрутку страницы фокус не трогает.
+        panel.focus({ preventScroll: true });
         const holder = panel.querySelector(".app-exercise");
         if (holder && holder.dataset.title) document.title = holder.dataset.title;
       });
@@ -96,18 +100,24 @@
 
   document.body.addEventListener("htmx:oobAfterSwap", function (event) {
     if (event.detail.target && event.detail.target.id === "exercise-body") {
-      afterBodySwap(event.detail.target);
+      // При outerHTML-свопе target — уже выброшенный старый элемент: имя из него
+      // отставало на одно переименование. Читаем то, что теперь в документе.
+      afterBodySwap(document.getElementById("exercise-body") || event.detail.target);
     }
   });
 
   function showEmpty() {
-    panel.innerHTML = emptyPanel;
+    const focusInside = panel.contains(document.activeElement);
+    panel.replaceChildren();
     if (chart) {
       appCharts.destroy(chart);
       chart = null;
     }
     markActive(null);
     if (catalog) catalog.classList.remove("is-open");
+    // Фокус был в шторке — вернуть его на строку, с которой её открыли: иначе он
+    // упал бы в начало страницы, и с клавиатуры пришлось бы идти по таблице заново.
+    if (focusInside && opener && opener.isConnected) opener.focus({ preventScroll: true });
   }
 
   // Закрыть панель — вернуться к списку во всю ширину. Новой записью в истории,
@@ -140,8 +150,31 @@
       const url = link.getAttribute("href");
       if (!url) return;
       event.preventDefault();
+      opener = link;
+      // Повторный клик по уже открытому — без второй записи в истории.
+      if (catalog && catalog.classList.contains("is-open") && history.state && history.state.exercisePanel === url) {
+        panel.focus({ preventScroll: true });
+        return;
+      }
       history.pushState({ exercisePanel: url }, "", url);
       loadPanel(url);
+    });
+
+    // Строка таблицы кликабельна целиком: клик по любой ячейке — это клик по
+    // ссылке-названию. Синтетический клик проходит через перехватчик выше,
+    // поэтому с 1200 откроется шторка, а ниже — обычный переход на страницу.
+    // Псевдоэлемент на всю строку вместо этого не годится: Safari не делает
+    // <tr> якорем для position, и оверлей накрыл бы всю таблицу.
+    document.addEventListener("click", function (event) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+      }
+      // Свои клики у ссылок, кнопок и полей; выделение текста — не клик.
+      if (event.target.closest("a, button, input, label, select, textarea")) return;
+      const row = event.target.closest("[data-exercise-row]");
+      if (!row || String(window.getSelection())) return;
+      const link = row.querySelector(LINK);
+      if (link) link.click();
     });
 
     // Esc закрывает панель — но не поверх модалки (переименование): ту Esc

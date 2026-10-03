@@ -4,11 +4,12 @@
 
 {% block content %}
 {% comment %}
-  На десктопе (с 1200) справочник сначала во всю ширину, а выбор упражнения
-  открывает мастер-деталь: слева список-навигатор, справа выбранное упражнение;
-  крестик, Esc или «назад» закрывают панель (exercise.js, data-exercise-catalog).
-  До 1200 панель скрыта (CSS), и строки остаются обычными ссылками на
-  отдельную страницу — так экран работает и без JS.
+  Одна страница, две раскладки. Телефон: плитки «Я тренирую» и справочник по
+  группам мышц. ПК (с 768): таблица с сортировкой колонок, плиток и групп нет
+  (CSS). С 1200 клик по строке открывает упражнение шторкой справа поверх
+  таблицы — таблица не сжимается и не теряет прокрутку; крестик, Esc или
+  «назад» закрывают шторку (exercise.js, data-exercise-catalog). Ниже 1200 строка
+  ведёт на отдельную страницу — так экран работает и без JS.
 {% endcomment %}
 <div class="app-catalog" data-exercise-catalog>
 <div class="app-catalog-list">
@@ -57,9 +58,77 @@
   {% if mine_only %}<input type="hidden" name="mine" value="1">{% endif %}
   {% if group_filter %}<input type="hidden" name="group" value="{{ group_filter }}">{% endif %}
   {% if equipment_filter %}<input type="hidden" name="equipment" value="{{ equipment_filter }}">{% endif %}
+  {% if sort_param %}<input type="hidden" name="sort" value="{{ sort_param }}">{% endif %}
   <input type="search" name="q" value="{{ query }}" class="form-control"
          placeholder="Найти упражнение" autocomplete="off" aria-label="Найти упражнение">
 </form>
+
+{% if table_rows %}
+  {% comment %}
+    Таблица — ПК (с 768), приём TailAdmin «Basic Table». Строки — те же
+    упражнения в порядке выбранной колонки (views.sort_catalog). Ссылка в строке
+    одна — название: так работают Ctrl/средний клик и страница без JS, а клик по
+    любой ячейке exercise.js превращает в клик по ней (data-exercise-row).
+    Растягивать ссылку псевдоэлементом на всю строку нельзя: Safari не делает
+    <tr> якорем для position, и оверлей накрыл бы всю таблицу. Имя — в
+    .app-row-name: по этому классу exercise.js обновляет его после
+    переименования. Ссылки сортировки — от адреса каталога: после открытия
+    шторки адрес страницы уже /exercises/5/.
+  {% endcomment %}
+  <div class="app-catalog-table">
+    <table>
+      <caption class="visually-hidden">{{ sort_caption }}</caption>
+      <thead>
+        <tr>
+          {% for column in columns %}
+            <th scope="col" class="app-catalog-col-{{ column.field }}"{% if column.aria_sort %} aria-sort="{{ column.aria_sort }}"{% endif %}>
+              {% if column.sortable %}
+                <a class="app-catalog-sort{% if column.aria_sort %} is-active{% endif %}"
+                   href="{% url 'exercise_list' %}{% querystring sort=column.param %}">
+                  {{ column.label }}{% include "includes/sort_icon.html" with direction=column.aria_sort only %}
+                </a>
+              {% else %}
+                {{ column.label }}
+              {% endif %}
+            </th>
+          {% endfor %}
+          <th scope="col" class="app-catalog-col-actions"><span class="visually-hidden">Удалить</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for exercise in table_rows %}
+          <tr data-exercise-item data-exercise-row>
+            <td class="app-catalog-col-name">
+              <a class="app-row-link" data-exercise-link href="{% url 'exercise_detail' exercise.pk %}"><span class="app-row-name">{{ exercise.name }}</span></a>
+              {% if exercise.table_meta %}<span class="app-row-meta">{{ exercise.table_meta }}</span>{% endif %}
+            </td>
+            <td class="app-catalog-col-group">{{ exercise.muscle_group|default:"—" }}</td>
+            <td class="app-catalog-col-workouts num">
+              {% if exercise.workouts_count %}{{ exercise.workouts_count }}{% else %}<span class="app-catalog-none" aria-hidden="true">—</span><span class="visually-hidden">нет</span>{% endif %}
+            </td>
+            <td class="app-catalog-col-last">
+              {% if exercise.last_workout_label %}{{ exercise.last_workout_label }}{% else %}<span class="app-catalog-none" aria-hidden="true">—</span><span class="visually-hidden">нет</span>{% endif %}
+            </td>
+            <td class="app-catalog-col-record num">
+              {% if exercise.record_display %}{{ exercise.record_display }}{% else %}<span class="app-catalog-none" aria-hidden="true">—</span><span class="visually-hidden">нет</span>{% endif %}
+            </td>
+            <td class="app-catalog-col-actions">
+              {% if not exercise.is_global %}
+                <a class="app-icon-btn app-row-delete" href="{% url 'exercise_delete' exercise.pk %}"
+                   aria-label="Удалить {{ exercise.name }}">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                       stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>
+                  </svg>
+                </a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
 
 {% if trained %}
   {% comment %}
@@ -163,13 +232,13 @@
 </div>{# .app-catalog-list #}
 
 {% comment %}
-  Панель детали. Сервер здесь ничего не предвыбирает: он не знает ширину экрана,
-  и автовыбор заставил бы считать прогресс упражнения даже на телефоне, где
-  панели нет. Бюджет запросов каталога это и охраняет.
+  Шторка упражнения (с 1200). Пустая: заполняет её exercise.js по клику на
+  строку, и до этого она скрыта — заглушка «выберите упражнение» в шторке не
+  видна никогда. Сервер ничего не предвыбирает: он не знает ширину экрана, и
+  автовыбор заставил бы считать прогресс упражнения даже на телефоне. tabindex
+  — чтобы открытая шторка принимала фокус: читалка начинает с неё.
 {% endcomment %}
-<div class="app-catalog-detail" id="exercise-panel" role="region" aria-label="Упражнение">
-  {% include "includes/empty_state.html" with title="Упражнение" text="Выберите упражнение в списке — здесь появятся график прогресса, настройки и история подходов." %}
-</div>
+<div class="app-catalog-detail" id="exercise-panel" role="region" aria-label="Упражнение" tabindex="-1"></div>
 </div>
 {% endblock %}
 

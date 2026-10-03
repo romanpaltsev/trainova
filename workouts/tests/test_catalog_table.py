@@ -5,6 +5,7 @@
 поэтому телефон (группы и плитки) от параметра sort не меняется.
 """
 
+import re
 from datetime import date, datetime, timedelta
 
 import pytest
@@ -204,3 +205,108 @@ def test_last_workout_label_adds_year_only_for_other_years():
     assert last_workout_label(this_year, today) == "25 авг"
     assert last_workout_label(last_year, today) == "31 дек 2025"
     assert last_workout_label(None, today) == ""
+
+
+# ---------- Разметка таблицы ----------
+
+
+def page(client, **params):
+    return client.get(reverse("exercise_list"), params).content.decode()
+
+
+def header_links(html):
+    """href ссылок сортировки в шапке таблицы, по колонкам."""
+    head = html.split("<thead>", 1)[1].split("</thead>", 1)[0]
+    return dict(re.findall(r'class="app-catalog-col-(\w+)".*?href="([^"]+)"', head, re.S))
+
+
+def test_table_has_exactly_one_sorted_column(client, user, catalog):
+    client.force_login(user)
+
+    html = page(client, sort="-workouts")
+
+    assert html.count("aria-sort=") == 1
+    assert 'class="app-catalog-col-workouts" aria-sort="descending"' in html
+
+
+def test_active_column_link_reverses_direction(client, user, catalog):
+    client.force_login(user)
+
+    links = header_links(page(client, sort="-workouts"))
+
+    assert links["workouts"].endswith("?sort=workouts")
+    # Другие колонки включаются со своим направлением первого клика.
+    assert links["name"].endswith("?sort=name")
+    assert links["group"].endswith("?sort=group")
+
+
+def test_link_to_default_sort_has_no_parameter(client, user, catalog):
+    """По умолчанию — «Последняя» по убыванию: ссылка на неё — чистый адрес."""
+    client.force_login(user)
+
+    links = header_links(page(client, sort="name"))
+
+    # {% querystring %} без параметров оставляет голый «?» — адрес тот же.
+    assert links["last"].rstrip("?") == reverse("exercise_list")
+
+
+def test_header_links_start_at_catalog_and_keep_filters(client, user, catalog):
+    """Ссылки — от адреса каталога: после открытия шторки адрес страницы уже
+    /exercises/5/, и относительный «?sort=…» увёл бы на деталь."""
+    ExerciseFactory(name="Мой жим", muscle_group="Грудь", owner=user)
+    client.force_login(user)
+
+    links = header_links(page(client, q="жим", group="Грудь", mine="1"))
+
+    for href in links.values():
+        assert href.startswith(reverse("exercise_list") + "?")
+        assert "q=%D0%B6%D0%B8%D0%BC" in href
+        assert "mine=1" in href
+        assert "group=" in href
+
+
+def test_chips_and_search_keep_sort(client, user, catalog):
+    client.force_login(user)
+
+    html = page(client, sort="-workouts")
+
+    chips = html.split('class="app-filter-axes"', 1)[1].split("</div>", 1)[0]
+    assert "sort=-workouts" in chips
+    assert '<input type="hidden" name="sort" value="-workouts">' in html
+
+
+def test_search_has_no_sort_field_for_default_order(client, user, catalog):
+    client.force_login(user)
+
+    assert 'name="sort"' not in page(client)
+
+
+def test_empty_result_has_no_table_but_keeps_hint(client, user, catalog):
+    client.force_login(user)
+
+    html = page(client, q="такого упражнения нет")
+
+    assert "app-catalog-table" not in html
+    assert "По этому запросу упражнений нет." in html
+
+
+def test_table_offers_delete_only_for_own_exercises(client, user):
+    ExerciseFactory(name="Жим лёжа")
+    own = ExerciseFactory(name="Моё упражнение", owner=user)
+
+    client.force_login(user)
+    table = page(client).split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+
+    assert table.count("app-row-delete") == 1
+    assert reverse("exercise_delete", args=[own.pk]) in table
+
+
+def test_table_rows_carry_js_hooks(client, user, catalog):
+    """По data-атрибутам exercise.js делает строку кликабельной и подсвечивает
+    открытое упражнение; ссылка-название — то, что откроет шторка."""
+    client.force_login(user)
+
+    table = page(client).split("<tbody>", 1)[1].split("</tbody>", 1)[0]
+
+    assert table.count("<tr data-exercise-item data-exercise-row>") == 6
+    assert table.count("data-exercise-link") == 6
