@@ -17,7 +17,7 @@
   <section class="app-card app-profile-user">
     <span class="app-avatar app-avatar-lg" aria-hidden="true">{{ user.initial }}</span>
     <div>
-      <div class="app-profile-email">{{ user.email }}</div>
+      <div class="app-profile-email" title="{{ user.email }}">{{ user.email }}</div>
       {% if email_verified %}
         <div class="app-profile-verified">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"

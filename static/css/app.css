@@ -3348,6 +3348,22 @@ a.btn {
   }
   .app-profile-user,
   .app-profile-catalogs { align-self: stretch; }
+  /* Карточка пользователя — плитка, как соседние: аватар сверху, почта и
+     отметка внизу. Рядом с боковой панелью колонка ~250px, и в строку с
+     аватаром длинный адрес ломался посреди слова. Почта — одной строкой с
+     многоточием, полный адрес — в title. */
+  .app-profile-user {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .app-profile-user > div { max-width: 100%; }
+  .app-profile-email {
+    overflow: hidden;
+    overflow-wrap: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   /* Заголовок над плитками не нужен: ряд читается как плитки дашборда.
      Читалкам он остаётся — прячем визуально, как .visually-hidden. */
   .app-profile-catalogs > .app-section-title {
@@ -3609,8 +3625,35 @@ a.btn {
         minmax(0, 1fr)          /* заметка забирает остаток ширины */
         max-content;            /* действия */
       column-gap: var(--app-space-6);
-      row-gap: var(--app-space-2);
+      row-gap: 0;
       align-items: center;
+    }
+
+    /* Неделя — одна таблица-карточка, как у TailAdmin: строки стоят вплотную и
+       делят рамку (соседняя заезжает на пиксель), скруглены только верх первой
+       строки недели и низ последней. Всё на соседстве в плоском списке —
+       обёртки недели в разметке нет, а подгрузка «Показать ещё» дописывает
+       строки той же недели прямо за предыдущими. */
+    .app-feed > .app-workout + .app-workout {
+      margin-top: -1px;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+    .app-feed > .app-workout:has(+ .app-workout) {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+    .app-feed > .btn { margin-top: var(--app-space-4); }
+
+    /* В таблице строка не «взлетает» при наведении, как карточка, а
+       подсвечивается фоном: подъём одной строки рвал бы общую рамку недели. */
+    @media (hover: hover) and (pointer: fine) {
+      .app-feed > .app-workout-link:hover {
+        border-color: var(--app-line);
+        background-color: var(--app-raised);
+        box-shadow: none;
+        transform: none;
+      }
     }
 
     /* Заголовки недель, «Показать ещё» и пустое состояние — во всю строку:
@@ -3632,6 +3675,7 @@ a.btn {
       align-items: center;
       padding: var(--app-space-3) var(--app-space-4);
       margin-bottom: 0;
+      box-shadow: none;
     }
 
     /* Зазор в subgrid-оси берёт родитель, но прописываем то же значение и здесь:
