@@ -1,0 +1,35 @@
+{% comment %}
+  Свой период сводки: две даты и «Показать». Форма — обычный GET на главную, а
+  не htmx: выбор живёт в адресе, и переход закрывает окно сам. Перепутанные
+  даты сервер поменяет местами, а будущее обрежет сегодняшним днём
+  (views.parse_period), поэтому своих проверок у окна нет — только min и max.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="period-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="period-modal-title">Свой период</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <form method="get" action="{% url 'dashboard' %}">
+      <div class="app-field-grid">
+        <div>
+          <label class="form-label" for="period-from">С</label>
+          <input type="date" class="form-control" id="period-from" name="from" required
+                 value="{{ first|date:'Y-m-d' }}" min="{{ earliest|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}">
+        </div>
+        <div>
+          <label class="form-label" for="period-to">По</label>
+          <input type="date" class="form-control" id="period-to" name="to" required
+                 value="{{ last|date:'Y-m-d' }}" min="{{ earliest|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}">
+        </div>
+      </div>
+      <div class="app-form-actions mt-3">
+        <button type="submit" class="btn btn-accent app-btn-fill">Показать</button>
+      </div>
+    </form>
+  </div>
+</div>

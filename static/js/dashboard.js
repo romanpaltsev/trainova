@@ -1,5 +1,12 @@
 // Дашборд: график «часы по неделям», спарклайн карточки-прожектора и «Статистика».
 (function () {
+  // Ряд периодов на телефоне прокручивается вбок, и активный чип («Всё время»,
+  // «Свой период») может стоять за правым краем — тогда в видимой части не горит
+  // ни один. Подкручиваем ряд к нему; nearest не трогает вертикаль страницы, а
+  // scroll-padding ряда оставляет справа тот же отступ, что слева.
+  const activePeriod = document.querySelector("[data-period-chips] .is-active");
+  if (activePeriod) activePeriod.scrollIntoView({ block: "nearest", inline: "nearest" });
+
   const chartEl = document.getElementById("weekly-chart");
   const dataEl = document.getElementById("chart-data");
   if (chartEl && dataEl) {

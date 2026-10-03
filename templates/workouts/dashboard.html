@@ -4,24 +4,37 @@
 
 {% block content %}
 <div class="app-dash-head">
-  <h1 class="app-page-title mb-0">За 7 дней</h1>
-  <span class="text-secondary-app">
-    {% if summary.start|date:"m Y" == summary.end|date:"m Y" %}
-      {{ summary.start|date:"j" }} — {{ summary.end|date:"j b" }}
-    {% else %}
-      {{ summary.start|date:"j b" }} — {{ summary.end|date:"j b" }}
-    {% endif %}
-  </span>
+  <h1 class="app-page-title mb-0">{{ summary.title }}</h1>
+  <span class="text-secondary-app">{{ summary.range_display }}</span>
+</div>
+{% comment %}
+  Период сводки. Готовые окна — ссылками: выбор живёт в адресе, обновление и
+  «назад» его сохраняют, а у 7 дней адрес чистый. Свой период — окном с двумя
+  датами (dashboard_period), даты подставлены из открытой сводки. Ряд тот же,
+  что у фильтров истории: на телефоне прокручивается вбок, на ПК переносится.
+  Период меняет только сводку — график, рекорды и последние от него не зависят.
+{% endcomment %}
+<div class="app-chips app-filters" role="group" aria-label="Период сводки" data-period-chips>
+  {% for chip in period_chips %}
+    <a class="app-chip{% if chip.active %} is-active{% endif %}" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>
+  {% endfor %}
+  <button type="button" class="app-chip{% if period.key == 'custom' %} is-active{% endif %}"
+          hx-get="{% url 'dashboard_period' %}?from={{ summary.start|date:'Y-m-d' }}&amp;to={{ summary.end|date:'Y-m-d' }}"
+          hx-target="#modal" hx-swap="innerHTML"{% if period.key == 'custom' %} aria-current="true"{% endif %}>Свой период…</button>
 </div>
 
 <div class="app-dash">
   {% comment %}
     Плитки сводки. На ПК — в духе TailAdmin: квадрат с иконкой, подпись, число,
-    строка пояснения и бейдж динамики к прошлым 7 дням. На телефоне иконка,
+    строка пояснения и бейдж динамики к прошлому окну той же длины. На телефоне иконка,
     пояснение и бейдж скрыты, обёртки .app-stat-body/.app-stat-text не образуют
     боксов — плитка прежняя: подпись, число, строка динамики.
   {% endcomment %}
-  <section class="app-dash-stats" aria-label="Сводка за 7 дней">
+  {% comment %}
+    У «всего времени» сравнивать не с чем: строка динамики телефона показывает
+    то же, что строка пояснения на ПК, — высота плиток не меняется.
+  {% endcomment %}
+  <section class="app-dash-stats" aria-label="Сводка {{ summary.title|lower }}">
     <div class="app-card app-stat">
       <span class="app-stat-icon" aria-hidden="true">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -33,12 +46,16 @@
         <div class="app-stat-text">
           <div class="app-stat-label">Тренировки</div>
           <div class="app-stat-value num">{{ summary.count }}</div>
-          <div class="app-stat-delta is-{{ summary.count_delta_label.direction }}">
-            {{ summary.count_delta_label.label }}
-          </div>
+          {% if summary.compare %}
+            <div class="app-stat-delta is-{{ summary.count_delta_label.direction }}">
+              {{ summary.count_delta_label.label }}
+            </div>
+          {% else %}
+            <div class="app-stat-delta is-flat">{{ summary.days_label|default:"—" }}</div>
+          {% endif %}
           <div class="app-stat-sub app-stat-foot">{{ summary.days_label|default:"—" }}</div>
         </div>
-        {% include "includes/delta_badge.html" with badge=summary.badges.count only %}
+        {% include "includes/delta_badge.html" with badge=summary.badges.count compare=summary.compare_label only %}
       </div>
     </div>
     <div class="app-card app-stat">
@@ -52,14 +69,20 @@
         <div class="app-stat-text">
           <div class="app-stat-label">Время</div>
           <div class="app-stat-value num">{{ summary.duration_display }}</div>
-          <div class="app-stat-delta is-{{ summary.minutes_delta_label.direction }}">
-            {{ summary.minutes_delta_label.label }}
-          </div>
+          {% if summary.compare %}
+            <div class="app-stat-delta is-{{ summary.minutes_delta_label.direction }}">
+              {{ summary.minutes_delta_label.label }}
+            </div>
+          {% else %}
+            <div class="app-stat-delta is-flat">
+              {% if summary.average_display %}в среднем {{ summary.average_display }}{% else %}—{% endif %}
+            </div>
+          {% endif %}
           <div class="app-stat-sub app-stat-foot">
             {% if summary.average_display %}в среднем {{ summary.average_display }}{% else %}—{% endif %}
           </div>
         </div>
-        {% include "includes/delta_badge.html" with badge=summary.badges.minutes only %}
+        {% include "includes/delta_badge.html" with badge=summary.badges.minutes compare=summary.compare_label only %}
       </div>
     </div>
     <div class="app-card app-stat is-desktop">
@@ -77,7 +100,7 @@
           </div>
           <div class="app-stat-sub">{{ summary.strength_count_label|default:"—" }}</div>
         </div>
-        {% include "includes/delta_badge.html" with badge=summary.badges.tonnage only %}
+        {% include "includes/delta_badge.html" with badge=summary.badges.tonnage compare=summary.compare_label only %}
       </div>
     </div>
     <div class="app-card app-stat is-desktop">
@@ -96,7 +119,7 @@
           </div>
           <div class="app-stat-sub">{{ summary.cardio_sports_label|default:"—" }}</div>
         </div>
-        {% include "includes/delta_badge.html" with badge=summary.badges.distance only %}
+        {% include "includes/delta_badge.html" with badge=summary.badges.distance compare=summary.compare_label only %}
       </div>
     </div>
   </section>

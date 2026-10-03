@@ -4,6 +4,7 @@ from workouts import views
 
 urlpatterns = [
     path("", views.DashboardView.as_view(), name="dashboard"),
+    path("dashboard/period/", views.DashboardPeriodView.as_view(), name="dashboard_period"),
     path("dashboard/week/", views.DashboardWeekView.as_view(), name="dashboard_week"),
     path("dashboard/stats/", views.DashboardStatsView.as_view(), name="dashboard_stats"),
     path("exercises/", views.ExerciseListView.as_view(), name="exercise_list"),

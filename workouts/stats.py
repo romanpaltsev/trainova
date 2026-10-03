@@ -6,6 +6,7 @@
 
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from typing import NamedTuple
 
 from django.db.models import DecimalField, ExpressionWrapper, F, FloatField, Max, Min, Q, Sum
 from django.db.models.functions import Coalesce
@@ -92,24 +93,31 @@ def _empty_totals():
         "distance": Decimal(0),
         "cardio_sports": [],
         "days": 0,
+        "first_day": None,
     }
 
 
 def _split_windows(user, current_start, previous_start, last_day):
-    """Итоги двух соседних недельных окон за три запроса на оба окна.
+    """Итоги двух соседних окон за три запроса на оба окна.
 
     Раньше каждое окно считалось пятью агрегатами, и три из них ещё и
-    переисполняли оконную выборку подзапросом. Тренировок за две недели — единицы,
-    поэтому дешевле забрать их строки один раз и разложить в Python; ту же логику
-    уже использует weekly_chart.
+    переисполняли оконную выборку подзапросом. Тренировок за пару окон — единицы
+    или сотни, поэтому дешевле забрать их строки один раз и разложить в Python;
+    ту же логику уже использует weekly_chart.
+
+    previous_start=None — прошлого окна нет; current_start=None — текущее окно
+    с первой тренировки (сводка «за всё время»). Первый день с тренировкой
+    текущего окна возвращается в first_day: им «всё время» подписывает начало
+    без отдельного запроса.
     """
-    start, end = day_bounds(previous_start, last_day)
-    rows = list(
-        Workout.objects.filter(user=user)
-        .finished()
-        .filter(started_at__gte=start, started_at__lt=end)
-        .values_list("id", "started_at", "duration_min")
-    )
+    first = previous_start or current_start
+    workouts = Workout.objects.filter(user=user).finished()
+    if first is None:
+        workouts = workouts.filter(started_at__lt=day_bounds(last_day, last_day)[1])
+    else:
+        start, end = day_bounds(first, last_day)
+        workouts = workouts.filter(started_at__gte=start, started_at__lt=end)
+    rows = list(workouts.values_list("id", "started_at", "duration_min"))
     workout_ids = [row[0] for row in rows]
     tonnage_by_workout = dict(
         StrengthSet.objects.filter(workout_id__in=workout_ids)
@@ -139,7 +147,7 @@ def _split_windows(user, current_start, previous_start, last_day):
     days = {"current": set(), "previous": set()}
     for workout_id, started_at, duration in rows:
         local_date = timezone.localtime(started_at).date()
-        key = "current" if local_date >= current_start else "previous"
+        key = "current" if current_start is None or local_date >= current_start else "previous"
         window_by_workout[workout_id] = key
         days[key].add(local_date)
         totals = windows[key]
@@ -159,6 +167,7 @@ def _split_windows(user, current_start, previous_start, last_day):
     for key, names in cardio_names.items():
         windows[key]["cardio_sports"] = sorted(names)
         windows[key]["days"] = len(days[key])
+        windows[key]["first_day"] = min(days[key], default=None)
     return windows
 
 
@@ -189,28 +198,120 @@ def _badge(current, previous, unit=""):
     return {"label": "±0", "direction": "flat"}
 
 
-def seven_day_summary(user, today=None):
-    """Сводка скользящего окна «за 7 дней» с дельтами к прошлым 7 дням.
+class Period(NamedTuple):
+    """Окно сводки дашборда: [start, end] включительно и его подписи.
 
-    Дельты абсолютные («+1», «+38 мин»): окна всегда одинаковой длины,
-    а деления на пустую прошлую неделю просто не существует.
+    start=None — «всё время»: начало — первая записанная тренировка. Пустой
+    compare_label — сравнивать не с чем: у «всего времени» прошлого окна нет.
+    """
+
+    key: str
+    start: date | None
+    end: date
+    title: str
+    compare_label: str
+
+
+# Готовые окна сводки: ключ в адресе (?period=…) → чип, заголовок, подпись
+# сравнения и длина в днях. Окна скользящие, а не календарные: прошлое окно той
+# же длины сравнивается честно, а неполный текущий месяц с полным прошлым — нет.
+PERIOD_PRESETS = {
+    "7": ("7 дней", "За 7 дней", "к прошлым 7 дням", 7),
+    "30": ("30 дней", "За 30 дней", "к прошлым 30 дням", 30),
+    "90": ("3 месяца", "За 3 месяца", "к прошлым 3 месяцам", 90),
+    "365": ("Год", "За год", "к прошлому году", 365),
+    "all": ("Всё время", "За всё время", "", None),
+}
+DEFAULT_PERIOD = "7"
+# Раньше этого дня свой период не начинается: дата из адреса недоверенная, а у
+# «0001-01-01» прошлое окно ушло бы за начало календаря, и страница упала бы.
+EARLIEST_DAY = date(1970, 1, 1)
+
+
+def preset_period(key, today):
+    _chip, title, compare_label, days = PERIOD_PRESETS[key]
+    start = today - timedelta(days=days - 1) if days else None
+    return Period(key, start, today, title, compare_label)
+
+
+def custom_period(start, end):
+    """Свой период: заголовок по числу дней — «За 12 дней», сравнение с прошлыми 12."""
+    days = (end - start).days + 1
+    title = f"За {days} {ru_plural(days, 'день', 'дня', 'дней')}"
+    if days == 1:
+        compare_label = "к прошлому дню"
+    else:
+        compare_label = f"к прошлым {days} {ru_plural(days, 'дню', 'дням', 'дням')}"
+    return Period("custom", start, end, title, compare_label)
+
+
+def range_display(start, end, today):
+    """Подпись окна: «27 сен — 3 окт», «1 — 30 сен», «3 мар 2025 — 3 окт».
+
+    Год пишется только у дат не текущего года — как в истории и на итоге.
+    """
+
+    def day(value, fmt="j b"):
+        return formats.date_format(value, fmt if value.year == today.year else f"{fmt} Y")
+
+    if start == end:
+        return day(end)
+    if (start.year, start.month) == (end.year, end.month):
+        return f"{start.day} — {day(end)}"
+    return f"{day(start)} — {day(end)}"
+
+
+def seven_day_summary(user, today=None):
+    """Сводка окна по умолчанию — 7 дней, как открывается дашборд."""
+    today = today or timezone.localdate()
+    return period_summary(user, preset_period(DEFAULT_PERIOD, today), today)
+
+
+def period_summary(user, period, today=None):
+    """Сводка окна дашборда с дельтами к прошлому окну той же длины.
+
+    Дельты абсолютные («+1», «+38 мин»): окна всегда одинаковой длины, а
+    деления на пустое прошлое окно просто не существует. У «всего времени»
+    прошлого окна нет — нет и дельт с бейджами.
     """
     today = today or timezone.localdate()
-    windows = _split_windows(user, today - timedelta(days=6), today - timedelta(days=13), today)
+    compare = bool(period.compare_label)
+    previous_start = None
+    if period.start is not None and compare:
+        previous_start = period.start - timedelta(days=(period.end - period.start).days + 1)
+    windows = _split_windows(user, period.start, previous_start, period.end)
     current, previous = windows["current"], windows["previous"]
+    start = period.start or current["first_day"] or period.end
+    length = (period.end - start).days + 1
     count_delta = current["count"] - previous["count"]
     minutes_delta = current["minutes"] - previous["minutes"]
     strength = current["strength_count"]
     count, days = current["count"], current["days"]
+    # Плитки на ПК: бейджи динамики и строка под числом у тренировок и времени.
+    # Всё считается из тех же двух окон — ни одного запроса сверху.
+    badges = {
+        "count": _badge(count, previous["count"]),
+        "minutes": _badge(current["minutes"], previous["minutes"], " мин"),
+        "tonnage": _badge(current["tonnage"], previous["tonnage"], " кг"),
+        "distance": _badge(current["distance"], previous["distance"], " км"),
+    }
+    if not compare:
+        # Прошлое окно здесь пусто по построению: «+12» к нулю было бы неправдой.
+        badges = dict.fromkeys(badges)
     return {
-        "start": today - timedelta(days=6),
-        "end": today,
+        "key": period.key,
+        "title": period.title,
+        "compare": compare,
+        "compare_label": period.compare_label,
+        "start": start,
+        "end": period.end,
+        "range_display": range_display(start, period.end, today),
         "count": current["count"],
-        "count_delta": count_delta,
-        "count_delta_label": _delta(count_delta, " к прошлым 7 дням"),
+        "count_delta": count_delta if compare else None,
+        "count_delta_label": _delta(count_delta, f" {period.compare_label}") if compare else None,
         "minutes": current["minutes"],
-        "minutes_delta": minutes_delta,
-        "minutes_delta_label": _delta(minutes_delta, " мин"),
+        "minutes_delta": minutes_delta if compare else None,
+        "minutes_delta_label": _delta(minutes_delta, " мин") if compare else None,
         "duration_display": hours_display(current["minutes"]),
         "strength_count": strength,
         "strength_count_label": (
@@ -220,15 +321,10 @@ def seven_day_summary(user, today=None):
         "distance_display": decimal_display(current["distance"]),
         "cardio_sports": current["cardio_sports"],
         "cardio_sports_label": " + ".join(name.lower() for name in current["cardio_sports"]),
-        # Плитки на ПК: бейджи динамики и строка под числом у тренировок и
-        # времени. Всё считается из тех же двух окон — ни одного запроса сверху.
-        "badges": {
-            "count": _badge(count, previous["count"]),
-            "minutes": _badge(current["minutes"], previous["minutes"], " мин"),
-            "tonnage": _badge(current["tonnage"], previous["tonnage"], " кг"),
-            "distance": _badge(current["distance"], previous["distance"], " км"),
-        },
-        "days_label": f"{days} {ru_plural(days, 'день', 'дня', 'дней')} из 7" if days else "",
+        "badges": badges,
+        "days_label": (
+            f"{days} {ru_plural(days, 'день', 'дня', 'дней')} из {length}" if days else ""
+        ),
         "average_display": hours_display(current["minutes"] // count) if count else "",
     }
 

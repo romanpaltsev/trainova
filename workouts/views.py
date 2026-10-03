@@ -575,6 +575,37 @@ def parse_day(raw):
         return None
 
 
+def parse_period(params, today):
+    """Окно сводки дашборда из адреса: ?period=30 или свой период ?from=…&to=….
+
+    Мусор молча даёт 7 дней — как неизвестный фильтр истории: устаревшая
+    ссылка не должна ронять главную. Свой период прощает перепутанные даты
+    (меняет местами), будущее обрезает сегодняшним днём (будущих тренировок не
+    бывает), а начало раньше EARLIEST_DAY поднимает до него.
+    """
+    first, last = parse_day(params.get("from")), parse_day(params.get("to"))
+    if first and last:
+        first, last = sorted((first, last))
+        first, last = max(first, stats.EARLIEST_DAY), min(last, today)
+        if first <= last:
+            return stats.custom_period(first, last)
+    key = params.get("period")
+    return stats.preset_period(key if key in stats.PERIOD_PRESETS else stats.DEFAULT_PERIOD, today)
+
+
+def period_chips(period):
+    """Чипы готовых окон. У окна по умолчанию адрес без параметра — чистая главная."""
+    dashboard = reverse("dashboard")
+    return [
+        {
+            "label": chip,
+            "url": dashboard if key == stats.DEFAULT_PERIOD else f"{dashboard}?period={key}",
+            "active": key == period.key,
+        }
+        for key, (chip, *_rest) in stats.PERIOD_PRESETS.items()
+    ]
+
+
 def unfinished_workouts(user):
     """Идущая тренировка и подготовленные черновики, готовые к показу.
 
@@ -1620,7 +1651,12 @@ class SportCreateView(LoginRequiredMixin, View):
 
 
 class DashboardView(LoginRequiredMixin, TemplateView):
-    """Главная: сводка за 7 дней, часы по неделям, рекорды, последние тренировки."""
+    """Главная: сводка за период, часы по неделям, рекорды, последние тренировки.
+
+    Период меняет только сводку (заголовок и плитки): график, рекорды и
+    последние тренировки от него не зависят. Выбор живёт в адресе — обновление
+    и «назад» его сохраняют, а новое открытие начинается с 7 дней.
+    """
 
     template_name = "workouts/dashboard.html"
     extra_context = {"nav_active": "dashboard"}
@@ -1628,6 +1664,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         user = self.request.user
+        today = timezone.localdate()
+        period = parse_period(self.request.GET, today)
         chart = stats.weekly_chart(user)
         # Цель недели — из минут того же графика: ни одного запроса сверху.
         goal = stats.week_goal(user.weekly_goal_minutes, chart["totals"], timezone.localdate())
@@ -1640,7 +1678,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context.update(
             {
                 "planned": drafts,
-                "summary": stats.seven_day_summary(user),
+                "period": period,
+                "period_chips": period_chips(period),
+                "summary": stats.period_summary(user, period, today),
                 "goal": goal,
                 "chart": chart,
                 "has_chart": bool(chart["datasets"]),
@@ -1699,6 +1739,25 @@ class DashboardStatsView(LoginRequiredMixin, View):
             request,
             "workouts/_dashboard_stats.html",
             {"stats": data, "has_data": any(tab["datasets"] for tab in data["tabs"])},
+        )
+
+
+class DashboardPeriodView(LoginRequiredMixin, View):
+    """Окно «Свой период»: две даты и GET-форма на главную.
+
+    Окно приходит htmx-ом в #modal, как остальные. Отправка — обычный переход
+    по адресу с from и to, поэтому выбор живёт в адресе, а «назад» возвращает
+    прежний период. Даты подставлены из открытой сводки.
+    """
+
+    def get(self, request):
+        today = timezone.localdate()
+        first = parse_day(request.GET.get("from")) or today - timedelta(days=6)
+        last = parse_day(request.GET.get("to")) or today
+        return render(
+            request,
+            "workouts/_period_modal.html",
+            {"first": first, "last": last, "today": today, "earliest": stats.EARLIEST_DAY},
         )
 
 

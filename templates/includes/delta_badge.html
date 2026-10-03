@@ -1,9 +1,10 @@
 {% comment %}
   Бейдж динамики плитки сводки (stats._badge) — только ПК: на телефоне динамику
-  несёт строка .app-stat-delta. Пустой badge (оба окна без данных) — бейджа нет.
+  несёт строка .app-stat-delta. Пустой badge (оба окна без данных или период без
+  сравнения) — бейджа нет. compare — подпись окна: «к прошлым 30 дням».
 {% endcomment %}
 {% if badge %}
-  <span class="app-stat-badge is-{{ badge.direction }}" title="к прошлым 7 дням">
+  <span class="app-stat-badge is-{{ badge.direction }}" title="{{ compare }}">
     {% if badge.direction == "up" %}
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
@@ -11,6 +12,6 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
            stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
     {% endif %}
-    {{ badge.label }}<span class="visually-hidden"> к прошлым 7 дням</span>
+    {{ badge.label }}<span class="visually-hidden"> {{ compare }}</span>
   </span>
 {% endif %}

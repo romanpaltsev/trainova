@@ -93,6 +93,18 @@ def test_dashboard_queries_do_not_scale_with_history(client, user, django_assert
         client.get(reverse("dashboard"))
 
 
+@pytest.mark.parametrize("query", ["period=30", "period=all", "from=2026-01-01&to=2026-06-30"])
+def test_dashboard_query_budget_for_any_period(client, user, django_assert_max_num_queries, query):
+    """Период меняет только окна сводки: те же три запроса на оба окна, а у
+    «всего времени» начало берётся из уже загруженных строк, без MIN-запроса."""
+    fill_history(user, weeks=12)
+    fill_drafts(user, 4)
+
+    client.force_login(user)
+    with django_assert_max_num_queries(22 + SIDEBAR_QUERIES):
+        client.get(f"{reverse('dashboard')}?{query}")
+
+
 def test_exercise_page_query_budget(client, user, django_assert_max_num_queries):
     bench = fill_history(user)
 
