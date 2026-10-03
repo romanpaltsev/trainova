@@ -1,11 +1,20 @@
 // Экран упражнений: график прогресса и мастер-деталь на широком экране.
 //
-// На десктопе клик по строке списка подгружает упражнение в правую панель, не
-// уходя со страницы. На мобильном перехватчик молча выходит, и строка работает
-// обычной ссылкой на отдельную страницу — экран остаётся рабочим и без JS.
+// На десктопе справочник сначала во всю ширину; клик по строке подгружает
+// упражнение в правую панель, не уходя со страницы, и экран делится на список и
+// панель (класс is-open на каталоге). Крестик, Esc и «назад» панель закрывают.
+// На мобильном перехватчик молча выходит, и строка работает обычной ссылкой на
+// отдельную страницу — экран остаётся рабочим и без JS.
 (function () {
   const WIDE = window.matchMedia("(min-width: 1200px)");
   const panel = document.getElementById("exercise-panel");
+  // Раскладку переключает класс, а не :has() в CSS: без поддержки :has панель
+  // осталась бы скрытой, и клик по упражнению ничего бы не показал.
+  const catalog = document.querySelector("[data-exercise-catalog]");
+  // Адрес и заголовок списка (вместе с фильтрами) — сюда возвращает крестик.
+  // Заголовок запоминаем, а не пишем текстом: шаблон остаётся единственным местом.
+  const listUrl = location.href;
+  const listTitle = document.title;
   // Снимок пустого состояния: с ним «назад» в исходное состояние не требует
   // запроса, а русский текст не приходится дублировать в JS.
   const emptyPanel = panel ? panel.innerHTML : "";
@@ -52,6 +61,9 @@
     return htmx
       .ajax("GET", url, { target: "#exercise-panel", swap: "innerHTML" })
       .then(function () {
+        // Сначала раскрыть панель, потом строить график: на скрытом canvas
+        // renderChart молча выходит.
+        if (catalog) catalog.classList.add("is-open");
         renderChart();
         markActive(url);
         // Страница прокручивается целиком, поэтому клик по строке в низу списка
@@ -95,6 +107,16 @@
       chart = null;
     }
     markActive(null);
+    if (catalog) catalog.classList.remove("is-open");
+  }
+
+  // Закрыть панель — вернуться к списку во всю ширину. Новой записью в истории,
+  // а не history.back(): после нескольких открытых упражнений «назад» вело бы
+  // к предыдущему упражнению, а не к списку.
+  function closePanel() {
+    history.pushState({ exercisePanel: null }, "", listUrl);
+    showEmpty();
+    document.title = listTitle;
   }
 
   if (panel) {
@@ -109,6 +131,10 @@
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
         return;
       }
+      if (event.target.closest("[data-exercise-close]")) {
+        closePanel();
+        return;
+      }
       const link = event.target.closest(LINK);
       if (!link) return;
       const url = link.getAttribute("href");
@@ -116,6 +142,15 @@
       event.preventDefault();
       history.pushState({ exercisePanel: url }, "", url);
       loadPanel(url);
+    });
+
+    // Esc закрывает панель — но не поверх модалки (переименование): ту Esc
+    // закрывает сама, а слушатель документа срабатывает раньше её слушателя окна.
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || !WIDE.matches) return;
+      if (!catalog || !catalog.classList.contains("is-open")) return;
+      if (document.querySelector("#modal .app-modal-backdrop")) return;
+      closePanel();
     });
 
     window.addEventListener("popstate", function (event) {

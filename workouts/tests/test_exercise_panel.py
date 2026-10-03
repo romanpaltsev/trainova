@@ -90,6 +90,30 @@ def test_panel_hides_back_arrow(client, user):
     assert "app-screen-head" in as_page
 
 
+def test_panel_has_close_button_page_does_not(client, user):
+    """Крестик закрывает панель и раскрывает список во всю ширину. На отдельной
+    странице закрывать нечего — там стрелка «назад» в каталог."""
+    exercise = ExerciseFactory(name="Жим лёжа", owner=None)
+
+    client.force_login(user)
+    in_panel = panel(client, exercise).content.decode()
+    as_page = client.get(reverse("exercise_detail", args=[exercise.pk])).content.decode()
+
+    assert "data-exercise-close" in in_panel
+    assert "data-exercise-close" not in as_page
+
+
+def test_catalog_carries_hook_for_master_detail(client, user):
+    """По этому атрибуту exercise.js раскрывает и закрывает панель: без него
+    справочник остался бы во всю ширину, а выбранное упражнение — невидимым."""
+    ExerciseFactory(name="Жим лёжа", owner=None)
+
+    client.force_login(user)
+    content = client.get(reverse("exercise_list")).content.decode()
+
+    assert "data-exercise-catalog" in content
+
+
 def test_catalog_renders_empty_panel(client, user):
     """Сервер ничего не предвыбирает: он не знает ширину экрана."""
     ExerciseFactory(name="Жим лёжа", owner=None)

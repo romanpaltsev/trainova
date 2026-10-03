@@ -18,8 +18,18 @@
      data-title="{{ exercise.name }} · Дневник тренировок">
   {% if in_panel %}
     <div class="app-exercise-head">
-      {% include "workouts/_exercise_title.html" %}
-      <div class="text-secondary-app">{{ stats_line }}</div>
+      <div class="app-exercise-head-text">
+        {% include "workouts/_exercise_title.html" %}
+        <div class="text-secondary-app">{{ stats_line }}</div>
+      </div>
+      {% comment %}
+        Крестик закрывает панель: справочник снова раскрывается во всю ширину
+        (exercise.js). Хук — data-атрибут, как у строк списка.
+      {% endcomment %}
+      <button type="button" class="app-icon-btn" data-exercise-close aria-label="Закрыть упражнение">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
   {% else %}
     <div class="app-screen-head">
