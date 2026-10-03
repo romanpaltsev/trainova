@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 import factory
@@ -5,6 +6,8 @@ from django.utils import timezone
 
 from accounts.tests.factories import UserFactory
 from workouts.models import (
+    BodyMeasurement,
+    BodyMetric,
     CardioPart,
     ChangelogEntry,
     Exercise,
@@ -138,3 +141,26 @@ class ChangelogEntryFactory(factory.django.DjangoModelFactory):
     body = "Текст новости."
     published_at = factory.LazyFunction(timezone.now)
     is_published = True
+
+
+class BodyMetricFactory(factory.django.DjangoModelFactory):
+    """Параметр тела. По умолчанию общий — как у видов спорта и упражнений."""
+
+    class Meta:
+        model = BodyMetric
+
+    name = factory.Sequence(lambda n: f"Параметр {n}")
+    unit = "см"
+    owner = None
+
+
+class BodyMeasurementFactory(factory.django.DjangoModelFactory):
+    """Замер: каждый следующий — на день раньше, чтобы не упереться в «один в день»."""
+
+    class Meta:
+        model = BodyMeasurement
+
+    user = factory.SubFactory(UserFactory)
+    metric = factory.SubFactory(BodyMetricFactory)
+    value = Decimal("80")
+    measured_on = factory.Sequence(lambda n: timezone.localdate() - timedelta(days=n))

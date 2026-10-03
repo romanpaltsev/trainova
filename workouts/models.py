@@ -1307,3 +1307,151 @@ class ChangelogEntry(models.Model):
         проекта.
         """
         return not self.is_read and self.published_at > user.date_joined
+
+
+# ---------- Замеры тела ----------
+#
+# Вес, рост, обхваты и свои параметры — журналом с датами, а не полями профиля:
+# вес и обхваты меняются, и ценность в динамике. «Сейчас» — последний замер.
+
+BODY_METRIC_NAME_MAX_LENGTH = 60
+BODY_METRIC_UNIT_MAX_LENGTH = 12
+# max_digits=7: свои параметры бывают крупнее веса («Шаги за день» — 12000).
+MEASUREMENT_MAX_VALUE = Decimal("99999.99")
+
+
+class BodyMetric(CatalogItem):
+    """Параметр тела: общий (owner NULL — вес, рост, обхваты) или свой.
+
+    Гибридный справочник, как виды спорта и упражнения. Общие параметры создаёт
+    data-миграция 0049, а не seed: миграции на проде применяются каждым деплоем,
+    а seed запускают руками — без общих параметров раздел был бы пуст.
+    """
+
+    name = models.CharField("название", max_length=BODY_METRIC_NAME_MAX_LENGTH)
+    unit = models.CharField(
+        "единица",
+        max_length=BODY_METRIC_UNIT_MAX_LENGTH,
+        blank=True,
+        help_text="Подпись к числу: «кг», «см», «%». Пусто — число без подписи.",
+    )
+
+    class Meta(CatalogItem.Meta):
+        abstract = False
+        verbose_name = "параметр тела"
+        verbose_name_plural = "параметры тела"
+        # Общие — в порядке миграции (вес первым), свои — после них.
+        ordering = [F("owner").asc(nulls_first=True), "id"]
+        constraints = [
+            # Тот же приём, что у Sport: второе ограничение защищает общие записи,
+            # потому что NULL-ы в Postgres не равны друг другу.
+            models.UniqueConstraint(
+                Lower("name"),
+                "owner",
+                name="unique_body_metric_name_per_owner",
+                violation_error_message="Параметр с таким названием у вас уже есть.",
+            ),
+            models.UniqueConstraint(
+                Lower("name"),
+                condition=Q(owner__isnull=True),
+                name="unique_global_body_metric_name",
+                violation_error_message="Общий параметр с таким названием уже есть.",
+            ),
+        ]
+
+
+class BodyMeasurement(models.Model):
+    """Замер параметра в конкретный день: «82,5 кг 3 октября».
+
+    Один на параметр в день (UniqueConstraint): повторный ввод за тот же день —
+    исправление, а не второй замер. Время дня не храним: утренний вес против
+    вечернего — уже другой разговор.
+
+    metric — RESTRICT, а не PROTECT и не CASCADE. PROTECT ломал бы удаление
+    пользователя со своими параметрами: его замеры ссылаются на удаляемый
+    параметр, хоть и удаляются тем же каскадом. CASCADE позволил бы админу одним
+    удалением общей записи стереть всем историю «Бицепса». RESTRICT пропускает
+    каскад через пользователя и запрещает всё остальное.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="пользователь",
+        on_delete=models.CASCADE,
+        related_name="body_measurements",
+    )
+    metric = models.ForeignKey(
+        BodyMetric,
+        verbose_name="параметр",
+        on_delete=models.RESTRICT,
+        related_name="measurements",
+    )
+    value = models.DecimalField("значение", max_digits=7, decimal_places=2)
+    measured_on = models.DateField("день замера")
+
+    class Meta:
+        verbose_name = "замер"
+        verbose_name_plural = "замеры"
+        ordering = ["-measured_on", "-id"]
+        constraints = [
+            # Он же — индекс «последний замер параметра»: обратный проход с LIMIT 1.
+            models.UniqueConstraint(
+                fields=["user", "metric", "measured_on"],
+                name="unique_body_measurement_per_day",
+            ),
+            models.CheckConstraint(
+                condition=Q(value__gt=0), name="body_measurement_value_positive"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.metric} {self.value} ({self.measured_on})"
+
+
+def parse_measurement_value(text):
+    """Введённое значение замера → Decimal, или ValueError с текстом для человека.
+
+    Принимает «82,5» и «82.5». Ноль и минус отклоняются: ни веса, ни обхвата
+    такого не бывает, а «0» чаще всего значит «забыл ввести».
+    """
+    cleaned = (text or "").strip().replace(",", ".")
+    if not cleaned:
+        raise ValueError("Введите значение, например 82,5.")
+    try:
+        value = Decimal(cleaned)
+    except InvalidOperation as error:
+        raise ValueError("Значение — это число, например 82,5.") from error
+    # «nan» и «inf» Decimal принимает, а сравнение и округление на них падают.
+    if not value.is_finite():
+        raise ValueError("Значение — это число, например 82,5.")
+    if value <= 0:
+        raise ValueError("Значение должно быть больше нуля.")
+    # Сначала грубая граница, потом округление: quantize у «1e30» не влезает в
+    # точность Decimal — тот же приём, что в parse_field_value.
+    if value > MEASUREMENT_MAX_VALUE:
+        raise ValueError(f"Значение не больше {decimal_display(MEASUREMENT_MAX_VALUE)}.")
+    value = value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if value <= 0:
+        raise ValueError("Значение должно быть больше нуля.")
+    return value
+
+
+def measurement_display(value, unit):
+    """«82,5 кг» — неразрывный пробел перед единицей, чтобы она не уезжала."""
+    number = decimal_display(value)
+    return f"{number} {unit}" if unit else number
+
+
+def measurement_delta(current, previous, unit):
+    """Изменение к прошлому замеру: «+0,4 кг», «−0,4 кг», «без изменений».
+
+    Без цвета: у веса снижение бывает целью, а у бицепса — нет, и красить
+    одно и то же направление по-разному значило бы знать цели человека.
+    """
+    if previous is None:
+        return None
+    difference = current - previous
+    if not difference:
+        return "без изменений"
+    sign = "+" if difference > 0 else "−"
+    return f"{sign}{measurement_display(abs(difference), unit)}"

@@ -4,15 +4,23 @@ import pytest
 from django.db import IntegrityError, transaction
 
 from accounts.tests.factories import UserFactory
-from workouts.models import Exercise, Sport
-from workouts.tests.factories import ExerciseFactory, SportFactory
+from workouts.models import BodyMetric, Exercise, Sport
+from workouts.tests.factories import BodyMetricFactory, ExerciseFactory, SportFactory
 
 pytestmark = pytest.mark.django_db
 
 CATALOGS = [
     pytest.param(Sport, SportFactory, id="sport"),
     pytest.param(Exercise, ExerciseFactory, id="exercise"),
+    pytest.param(BodyMetric, BodyMetricFactory, id="body_metric"),
 ]
+
+
+@pytest.fixture(autouse=True)
+def without_shipped_body_metrics():
+    """Общие параметры тела приезжают data-миграцией 0049 и уже лежат в тестовой
+    базе, а тесты ниже сверяют точный набор записей — на своих данных."""
+    BodyMetric.objects.filter(owner__isnull=True).delete()
 
 
 @pytest.mark.parametrize(("model", "factory"), CATALOGS)

@@ -1,6 +1,8 @@
 from django.contrib import admin
 
 from workouts.models import (
+    BodyMeasurement,
+    BodyMetric,
     CardioPart,
     ChangelogEntry,
     Exercise,
@@ -32,6 +34,24 @@ class CatalogAdmin(admin.ModelAdmin):
 class SportAdmin(CatalogAdmin):
     list_display = ("name", "category", "owner_display")
     list_filter = ("category", "owner")
+
+
+@admin.register(BodyMetric)
+class BodyMetricAdmin(CatalogAdmin):
+    """Параметры тела: общие правятся здесь, свои — в разделе «Мои замеры»."""
+
+    list_display = ("name", "unit", "owner_display")
+
+
+@admin.register(BodyMeasurement)
+class BodyMeasurementAdmin(admin.ModelAdmin):
+    list_display = ("measured_on", "metric", "value", "user")
+    list_filter = ("metric",)
+    date_hierarchy = "measured_on"
+    autocomplete_fields = ("user", "metric")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("user", "metric")
 
 
 @admin.register(Exercise)
