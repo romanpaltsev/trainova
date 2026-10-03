@@ -69,13 +69,15 @@ def test_panel_of_global_exercise_shows_only_own_sets(client, user, other_user):
     mine = WorkoutFactory(user=user)
     StrengthSetFactory(workout=mine, exercise=exercise, set_number=1, weight_kg=80, reps=8)
     alien = WorkoutFactory(user=other_user)
-    StrengthSetFactory(workout=alien, exercise=exercise, set_number=1, weight_kg=200, reps=1)
+    # Дробный вес: «197,5» не встретится ни в id, ни в адресах — голое «200» в
+    # ответе находилось среди первичных ключей, и тест падал от порядка запуска.
+    StrengthSetFactory(workout=alien, exercise=exercise, set_number=1, weight_kg="197.5", reps=1)
 
     client.force_login(user)
     content = panel(client, exercise).content.decode()
 
     assert "80 кг" in content
-    assert "200" not in content
+    assert "197,5" not in content
 
 
 def test_panel_hides_back_arrow(client, user):

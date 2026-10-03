@@ -13,6 +13,7 @@ from django.urls import reverse
 
 from workouts import stats
 from workouts.models import Sport, StrengthSet
+from workouts.tests.budgets import SIDEBAR_QUERIES
 from workouts.tests.factories import (
     CardioPartFactory,
     ExerciseFactory,
@@ -118,7 +119,7 @@ def test_correct_screen_queries_do_not_scale(client, user, count, django_assert_
             StrengthSetFactory(workout=workout, exercise=exercise, set_number=number)
 
     client.force_login(user)
-    with django_assert_max_num_queries(8):
+    with django_assert_max_num_queries(8 + SIDEBAR_QUERIES):
         client.get(correct_url(workout))
 
 

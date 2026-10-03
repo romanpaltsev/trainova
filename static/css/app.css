@@ -2650,6 +2650,15 @@ a.btn {
     background-color: var(--app-accent-soft);
     color: var(--app-accent-text);
   }
+  /* Точка «есть новое» у «Что нового». В «рельсе» подписи нет, и точка садится
+     на угол иконки, как бейдж уведомления; в развёрнутой панели (1200) она
+     уходит в конец строки. */
+  .app-side-link { position: relative; }
+  .app-side-dot {
+    position: absolute;
+    top: var(--app-space-2);
+    right: var(--app-space-2);
+  }
 
   /* Шапка рядом с панелью: логотип и разделы переехали в панель, вместо них —
      поиск по справочнику. Фон и линия идут во всю колонку, как у TailAdmin,
@@ -3518,6 +3527,10 @@ a.btn {
   :root:not([data-sidebar-collapsed]) .app-sidebar-logo,
   :root:not([data-sidebar-collapsed]) .app-side-link { justify-content: flex-start; }
   :root:not([data-sidebar-collapsed]) .app-sidebar-logo { padding-inline: var(--app-space-3); }
+  :root:not([data-sidebar-collapsed]) .app-side-dot {
+    position: static;
+    margin-left: auto;
+  }
   :root:not([data-sidebar-collapsed]) .app-sidebar-group {
     display: block;
     margin: var(--app-space-6) var(--app-space-3) var(--app-space-2);

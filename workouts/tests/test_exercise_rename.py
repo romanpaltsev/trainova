@@ -10,6 +10,7 @@ import pytest
 from django.urls import reverse
 
 from workouts.models import Exercise, StrengthSet
+from workouts.tests.budgets import SIDEBAR_QUERIES
 from workouts.tests.factories import ExerciseFactory, StrengthSetFactory, WorkoutFactory
 
 pytestmark = pytest.mark.django_db
@@ -270,7 +271,7 @@ def test_equipment_page_queries_stay_in_budget(client, user, django_assert_max_n
     with_history(user, mine)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_detail", args=[mine.pk]))
 
 

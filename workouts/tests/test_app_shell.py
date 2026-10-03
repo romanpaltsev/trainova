@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 from django.conf import settings
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
-from workouts.tests.factories import BodyMetricFactory
+from workouts.tests.factories import BodyMetricFactory, ChangelogEntryFactory, ExerciseFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -103,3 +105,60 @@ def test_collapsed_sidebar_is_applied_before_first_paint(client, user):
 
     assert f'localStorage.getItem("{key}")' in head
     assert "data-sidebar-collapsed" in head
+
+
+# ---------- Точка «есть новое» у «Что нового» ----------
+
+
+NEWS_LINK = r'<a class="app-side-link[^"]*" href="/changelog/".*?</a>'
+
+
+def news_link(html):
+    """Пункт «Что нового» панели целиком — до закрывающего </a>."""
+    return re.search(NEWS_LINK, html, re.S).group(0)
+
+
+def test_sidebar_marks_changelog_when_there_is_unread_news(client, user):
+    ChangelogEntryFactory()
+    client.force_login(user)
+
+    link = news_link(page(client, "dashboard"))
+
+    assert "app-side-dot" in link
+    assert "есть новые записи" in link
+
+
+def test_sidebar_dot_goes_out_after_opening_changelog(client, user):
+    ChangelogEntryFactory()
+    client.force_login(user)
+
+    changelog = page(client, "changelog")
+    dashboard = page(client, "dashboard")
+
+    # На самой «Что нового» точки нет сразу: её только что открыли.
+    assert "app-side-dot" not in news_link(changelog)
+    assert "app-side-dot" not in news_link(dashboard)
+
+
+def test_sidebar_dot_is_per_user(client, user, other_user):
+    """Прочитал другой — у меня точка горит: отметка у каждого своя."""
+    ChangelogEntryFactory()
+    client.force_login(other_user)
+    page(client, "changelog")
+
+    client.force_login(user)
+
+    assert "app-side-dot" in news_link(page(client, "dashboard"))
+
+
+def test_htmx_fragment_does_not_ask_for_news(client, user):
+    """Значение ленивое: фрагмент без панели не платит запрос за точку, иначе
+    каждый тап по степперу ходил бы в базу за новостями."""
+    ChangelogEntryFactory()
+    exercise = ExerciseFactory()
+    client.force_login(user)
+
+    with CaptureQueriesContext(connection) as queries:
+        client.get(reverse("exercise_detail", args=[exercise.pk]), headers={"HX-Request": "true"})
+
+    assert not [q for q in queries.captured_queries if "workouts_changelogentry" in q["sql"]]

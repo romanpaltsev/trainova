@@ -20,6 +20,7 @@ from workouts.models import (
     measurement_display,
     parse_measurement_value,
 )
+from workouts.tests.budgets import SIDEBAR_QUERIES
 from workouts.tests.factories import BodyMeasurementFactory, BodyMetricFactory
 
 pytestmark = pytest.mark.django_db
@@ -402,7 +403,7 @@ def test_list_query_budget(client, user, django_assert_max_num_queries, scale):
             BodyMeasurementFactory(user=user, metric=metric)
 
     client.force_login(user)
-    with django_assert_max_num_queries(5):
+    with django_assert_max_num_queries(5 + SIDEBAR_QUERIES):
         client.get(reverse("body_measurements"))
 
 
@@ -414,5 +415,5 @@ def test_metric_page_query_budget(client, user, django_assert_max_num_queries, c
     url = reverse("body_metric", args=[metric.pk])
 
     client.force_login(user)
-    with django_assert_max_num_queries(6):
+    with django_assert_max_num_queries(6 + SIDEBAR_QUERIES):
         client.get(url)

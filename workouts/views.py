@@ -2630,10 +2630,13 @@ class ChangelogView(LoginRequiredMixin, View):
         ]
         request.user.changelog_seen_at = timezone.now()
         request.user.save(update_fields=["changelog_seen_at"])
+        # Точка в панели гаснет на этой же странице: всё опубликованное только
+        # что увидели. Явный False перекрывает ленивое значение процессора —
+        # без него страница спросила бы базу о том, что уже известно.
         return render(
             request,
             "workouts/changelog.html",
-            {"entries": entries, "nav_active": "profile"},
+            {"entries": entries, "nav_active": "profile", "changelog_unread": False},
         )
 
 

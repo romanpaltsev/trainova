@@ -90,6 +90,15 @@
           <path d="M12 4l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8z"/>
         </svg>
         <span class="app-sidebar-label">Что нового</span>
+        {% comment %}
+          Точка «есть новое» — та же, что у строки в профиле. Значение ленивое
+          (accounts.context_processors.changelog_unread): запрос уходит только
+          здесь, на страницах с панелью.
+        {% endcomment %}
+        {% if changelog_unread %}
+          <span class="app-sport-dot app-side-dot" style="--dot: var(--app-accent-text)" aria-hidden="true"></span>
+          <span class="visually-hidden">есть новые записи</span>
+        {% endif %}
       </a>
     </nav>
   </aside>

@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from workouts import exercise_excel
 from workouts.models import Exercise, Sport
+from workouts.tests.budgets import SIDEBAR_QUERIES
 from workouts.tests.factories import (
     CardioPartFactory,
     ExerciseFactory,
@@ -79,7 +80,7 @@ def test_dashboard_query_budget(client, user, django_assert_max_num_queries, dra
     fill_drafts(user, drafts)
 
     client.force_login(user)
-    with django_assert_max_num_queries(22):
+    with django_assert_max_num_queries(22 + SIDEBAR_QUERIES):
         client.get(reverse("dashboard"))
 
 
@@ -88,7 +89,7 @@ def test_dashboard_queries_do_not_scale_with_history(client, user, django_assert
     fill_drafts(user, 4)
 
     client.force_login(user)
-    with django_assert_max_num_queries(22):
+    with django_assert_max_num_queries(22 + SIDEBAR_QUERIES):
         client.get(reverse("dashboard"))
 
 
@@ -99,7 +100,7 @@ def test_exercise_page_query_budget(client, user, django_assert_max_num_queries)
     # Седьмой запрос — заметки упражнения (один на всю историю), восьмой — список
     # групп мышц для чипов, девятый — позиции упражнения в тренировках («каким
     # по счёту делал»). Ни один не зависит от объёма истории.
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
@@ -110,7 +111,7 @@ def test_exercise_page_queries_do_not_scale_with_history(
     bench = fill_history(user, weeks=12)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
@@ -127,7 +128,7 @@ def test_catalog_query_budget(client, user, django_assert_max_num_queries):
     fill_history(user)
 
     client.force_login(user)
-    with django_assert_max_num_queries(7):
+    with django_assert_max_num_queries(7 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_list"))
 
 
@@ -141,7 +142,7 @@ def test_catalog_query_budget_with_both_facets(client, user, django_assert_max_n
     Exercise.objects.filter(pk=bench.pk).update(equipment="Штанга")
 
     client.force_login(user)
-    with django_assert_max_num_queries(7):
+    with django_assert_max_num_queries(7 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_list"), {"equipment": "Штанга", "group": bench.muscle_group})
 
 
@@ -152,7 +153,7 @@ def test_catalog_query_budget_with_sort(client, user, django_assert_max_num_quer
     fill_history(user)
 
     client.force_login(user)
-    with django_assert_max_num_queries(7):
+    with django_assert_max_num_queries(7 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_list"), {"sort": sort})
 
 
@@ -165,7 +166,7 @@ def test_live_screen_query_budget(client, user, django_assert_max_num_queries, q
         StrengthSetFactory(workout=active, exercise=exercise, set_number=number, done=False)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
         client.get(reverse("workout_live", args=[active.pk]))
 
 
@@ -183,7 +184,7 @@ def test_live_screen_with_notes_query_budget(client, user, django_assert_max_num
         ExerciseNoteFactory(workout=active, exercise=exercise, text="заметка очереди")
 
     client.force_login(user)
-    with django_assert_max_num_queries(11):
+    with django_assert_max_num_queries(11 + SIDEBAR_QUERIES):
         client.get(reverse("workout_live", args=[active.pk]))
 
 
@@ -196,7 +197,7 @@ def test_draft_screen_query_budget(client, user, django_assert_max_num_queries, 
         StrengthSetFactory(workout=planned, exercise=exercise, set_number=number, done=False)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
         client.get(reverse("workout_live", args=[planned.pk]))
 
 
@@ -258,7 +259,7 @@ def test_my_locations_query_budget(client, user, django_assert_max_num_queries, 
         WorkoutFactory(user=user, location=place)
 
     client.force_login(user)
-    with django_assert_max_num_queries(6):
+    with django_assert_max_num_queries(6 + SIDEBAR_QUERIES):
         client.get(reverse("my_locations"))
 
 
@@ -279,7 +280,7 @@ def test_workout_summary_query_budget(client, user, django_assert_max_num_querie
     # Восьмой — группы мышц для заголовка: на экране одной тренировки это один
     # запрос, зато правило подписи остаётся одно на все экраны.
     # Девятый — кардио-части вместе с их видами спорта: один запрос на блок.
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
         client.get(reverse("workout_summary", args=[workout.pk]))
 
 
@@ -295,7 +296,7 @@ def test_history_query_budget(client, user, django_assert_max_num_queries, weeks
     fill_history(user, weeks=weeks)
 
     client.force_login(user)
-    with django_assert_max_num_queries(10):
+    with django_assert_max_num_queries(10 + SIDEBAR_QUERIES):
         client.get(reverse("workout_history"))
 
 
@@ -321,7 +322,7 @@ def test_data_transfer_page_query_budget(client, user, django_assert_max_num_que
     fill_history(user, weeks=4)
     client.force_login(user)
 
-    with django_assert_max_num_queries(5):
+    with django_assert_max_num_queries(5 + SIDEBAR_QUERIES):
         client.get(reverse("data_transfer"))
 
 
@@ -357,5 +358,5 @@ def test_unchanged_exercise_import_query_budget(client, user, django_assert_max_
 
     # Семь: сессия, пользователь, транзакция запроса, два на справочник и шаги
     # и один — счётчик тренировок в ответной странице.
-    with django_assert_max_num_queries(7):
+    with django_assert_max_num_queries(7 + SIDEBAR_QUERIES):
         client.post(reverse("exercise_import"), {"exercises-file": upload})
