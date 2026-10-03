@@ -59,6 +59,13 @@
         </svg>
         <span class="app-sidebar-label">Профиль</span>
       </a>
+      <a class="app-side-link{% if url_name|slice:':5' == 'body_' %} is-active{% endif %}" href="{% url 'body_measurements' %}" title="Мои замеры">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>
+        </svg>
+        <span class="app-sidebar-label">Мои замеры</span>
+      </a>
       <a class="app-side-link{% if url_name == 'my_locations' %} is-active{% endif %}" href="{% url 'my_locations' %}" title="Мои места">
         {% include "includes/pin.html" with size=22 only %}
         <span class="app-sidebar-label">Мои места</span>

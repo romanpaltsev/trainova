@@ -12,6 +12,8 @@ import pytest
 from django.conf import settings
 from django.urls import reverse
 
+from workouts.tests.factories import BodyMetricFactory
+
 pytestmark = pytest.mark.django_db
 
 
@@ -52,6 +54,7 @@ def test_guest_page_has_no_sidebar(client):
         ("profile", "Профиль"),
         ("my_locations", "Мои места"),
         ("my_sports", "Мои виды спорта"),
+        ("body_measurements", "Мои замеры"),
         ("data_transfer", "Экспорт и импорт"),
         ("changelog", "Что нового"),
         # Страницы аккаунта открываются из профиля — за ним и числятся.
@@ -64,6 +67,15 @@ def test_sidebar_highlights_exactly_current_section(client, user, url_name, expe
     client.force_login(user)
 
     assert active_items(page(client, url_name)) == [expected]
+
+
+def test_metric_page_keeps_measurements_highlighted(client, user):
+    """Страница параметра — часть «Моих замеров»: подсветка идёт по префиксу
+    маршрута body_, а не по точному имени, иначе на ней не горело бы ничего."""
+    metric = BodyMetricFactory()
+    client.force_login(user)
+
+    assert active_items(page(client, "body_metric", metric.pk)) == ["Мои замеры"]
 
 
 def test_header_search_queries_exercise_catalog(client, user):

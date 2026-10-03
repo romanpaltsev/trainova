@@ -3,7 +3,8 @@
 from allauth.account.utils import has_verified_email
 from django.conf import settings
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Max, Q
+from django.db.models import Count, Max, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import render
 from django.template.loader import render_to_string
@@ -11,9 +12,11 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from accounts.forms import WeeklyGoalForm
+from accounts.models import User
 from workouts import stats
 from workouts.models import (
     REST_DELTAS,
+    BodyMeasurement,
     ChangelogEntry,
     Exercise,
     Location,
@@ -21,6 +24,35 @@ from workouts.models import (
     clamp_rest_seconds,
     rest_display,
 )
+
+
+def owned_counts(user):
+    """Число своих упражнений, видов спорта и замеров — одним запросом.
+
+    Подзапросами к строке пользователя, а не тремя .count(): бюджет профиля
+    упирался в потолок, и третий счётчик (замеры) пробил бы его. Каждый
+    подзапрос — GROUP BY по своей связи, поэтому строки не размножаются.
+    """
+
+    def count(model, field):
+        rows = (
+            model.objects.filter(**{field: OuterRef("pk")})
+            .order_by()
+            .values(field)
+            .annotate(total=Count("pk"))
+            .values("total")
+        )
+        return Coalesce(Subquery(rows), 0)
+
+    return (
+        User.objects.filter(pk=user.pk)
+        .values(
+            exercises_count=count(Exercise, "owner"),
+            sports_count=count(Sport, "owner"),
+            measurements_count=count(BodyMeasurement, "user"),
+        )
+        .get()
+    )
 
 
 def rest_context(user, *, oob=False):
@@ -53,8 +85,7 @@ class ProfileView(LoginRequiredMixin, TemplateView):
                 # Ветка «не подтверждён» почти недостижима (проверка почты
                 # обязательна), но админ может создать пользователя без адреса.
                 "email_verified": has_verified_email(user),
-                "exercises_count": Exercise.objects.filter(owner=user).count(),
-                "sports_count": Sport.objects.filter(owner=user).count(),
+                **owned_counts(user),
                 "changelog_unread": ChangelogEntry.objects.unread_for(user).exists(),
             }
         )

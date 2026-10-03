@@ -3540,9 +3540,11 @@ a.btn {
     white-space: nowrap;
     border: 0;
   }
+  /* Четыре плитки — 2×2, а не в ряд: рядом с боковой панелью пять плиток в
+     ряду дали бы ~150px, и «Мои упражнения» ломалось бы посреди слова. */
   .app-profile-catalogs .app-rows {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--app-space-6);
     height: 100%;
     margin-bottom: 0;

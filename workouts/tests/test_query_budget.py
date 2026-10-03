@@ -239,15 +239,14 @@ def test_start_modal_query_budget(client, user, django_assert_max_num_queries, d
 
 
 def test_profile_query_budget(client, user, django_assert_max_num_queries):
-    """Профиль упёрт в потолок: 9 запросов из 9, и любой новый счётчик его сломает.
-
-    Девятый — агрегат мест: он отдаёт и число, и название дефолта, потому что
-    двумя запросами лимит был бы уже пробит.
+    """Профиль: 8 запросов. Свои упражнения, виды спорта и замеры считаются одним
+    запросом подзапросами (owned_counts), места — одним агрегатом, который
+    отдаёт и число, и название дефолта.
     """
     fill_history(user)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(8):
         client.get(reverse("profile"))
 
 

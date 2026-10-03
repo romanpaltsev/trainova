@@ -101,6 +101,25 @@
         <span class="app-row-count num">{{ locations_count }}</span>
         {% include "includes/chevron.html" %}
       </a>
+      {% comment %}
+        Замеры — не справочник, но «моё» того же рода: личное, что ведётся
+        годами. Счётчик — число замеров, тем же запросом, что соседние
+        (accounts.views.owned_counts).
+      {% endcomment %}
+      <a class="app-row" href="{% url 'body_measurements' %}">
+        <span class="app-row-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>
+          </svg>
+        </span>
+        <span class="app-row-text">
+          <span class="app-row-name">Мои замеры</span>
+          <span class="app-row-meta">вес, рост, обхваты</span>
+        </span>
+        <span class="app-row-count num">{{ measurements_count }}</span>
+        {% include "includes/chevron.html" %}
+      </a>
     </div>
   </section>
 

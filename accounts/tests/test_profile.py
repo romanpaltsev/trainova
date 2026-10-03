@@ -5,6 +5,8 @@ from django.urls import reverse
 
 from workouts.models import Workout
 from workouts.tests.factories import (
+    BodyMeasurementFactory,
+    BodyMetricFactory,
     ChangelogEntryFactory,
     ExerciseFactory,
     LocationFactory,
@@ -59,27 +61,34 @@ def test_profile_shows_current_rest_default(client, user):
 
 
 def test_profile_shows_counts_of_personal_catalogs(client, user):
+    """Три счётчика считаются одним запросом — разные числа у каждого ловят
+    размножение строк, которое дал бы джойн вместо подзапросов (2 × 1 × 3)."""
     ExerciseFactory(owner=user)
     ExerciseFactory(owner=user)
     SportFactory(owner=user)
+    metric = BodyMetricFactory()
+    BodyMeasurementFactory.create_batch(3, user=user, metric=metric)
 
     client.force_login(user)
     response = client.get(reverse("profile"))
 
     assert response.context["exercises_count"] == 2
     assert response.context["sports_count"] == 1
+    assert response.context["measurements_count"] == 3
 
 
 def test_profile_counts_ignore_global_and_other_users_records(client, user, other_user):
     ExerciseFactory()  # глобальное
     ExerciseFactory(owner=other_user)
     SportFactory(owner=other_user)
+    BodyMeasurementFactory(user=other_user, metric=BodyMetricFactory())
 
     client.force_login(user)
     response = client.get(reverse("profile"))
 
     assert response.context["exercises_count"] == 0
     assert response.context["sports_count"] == 0
+    assert response.context["measurements_count"] == 0
 
 
 def test_profile_shows_locations_count_and_default_name(client, user):
@@ -121,6 +130,15 @@ def test_profile_links_to_my_locations(client, user):
     content = client.get(reverse("profile")).content.decode()
 
     assert reverse("my_locations") in content
+
+
+def test_profile_links_to_body_measurements(client, user):
+    client.force_login(user)
+
+    content = client.get(reverse("profile")).content.decode()
+
+    assert reverse("body_measurements") in content
+    assert "Мои замеры" in content
 
 
 def test_profile_links_to_password_change_and_logout(client, user):
