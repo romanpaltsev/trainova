@@ -1,0 +1,24 @@
+{% comment %}
+  Карточка новости — одна на страницу «Что нового» и на ответ ChangelogReadView.
+
+  Метка «Новое» — «эту новость вы ещё не открывали» (ChangelogEntry.is_new_for),
+  а не тип: тип показывает только серый ярлык «Исправлено» у исправлений, и он
+  остаётся всегда. Пока метка горит, нажатие на карточку отправляет «прочитано»,
+  и сервер присылает её же без метки (outerHTML) — повторное нажатие уже ничего
+  не делает. Сама метка — кнопка: так до отметки можно дойти с клавиатуры, а
+  её клик всплывает к карточке, и запрос уходит один.
+{% endcomment %}
+<article class="app-card app-news{% if entry.is_new %} is-new{% endif %}" id="news-{{ entry.pk }}"
+         {% if entry.is_new %}hx-post="{% url 'changelog_read' entry.pk %}" hx-trigger="click" hx-swap="outerHTML"{% endif %}>
+  <div class="app-news-head">
+    {% if entry.is_new %}
+      <button type="button" class="app-badge app-badge-new" aria-label="Новое — отметить прочитанным">Новое</button>
+    {% endif %}
+    {% if entry.kind == "fix" %}
+      <span class="app-badge app-badge-fix">{{ entry.get_kind_display }}</span>
+    {% endif %}
+    <span class="app-news-date">{{ entry.date_label }}</span>
+  </div>
+  <h2 class="app-news-title">{{ entry.title }}</h2>
+  <p class="app-news-body">{{ entry.body|linebreaksbr }}</p>
+</article>

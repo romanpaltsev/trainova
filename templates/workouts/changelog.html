@@ -21,14 +21,7 @@
 {% endcomment %}
 <div class="app-news-list">
 {% for entry in entries %}
-  <article class="app-card app-news">
-    <div class="app-news-head">
-      <span class="app-badge app-badge-{{ entry.kind }}">{{ entry.get_kind_display }}</span>
-      <span class="app-news-date">{{ entry.date_label }}</span>
-    </div>
-    <h2 class="app-news-title">{{ entry.title }}</h2>
-    <p class="app-news-body">{{ entry.body|linebreaksbr }}</p>
-  </article>
+  {% include "workouts/_changelog_entry.html" %}
 {% empty %}
   {% include "includes/empty_state.html" with text="Пока никаких новостей." %}
 {% endfor %}

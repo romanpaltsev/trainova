@@ -2015,9 +2015,14 @@ a.btn {
   text-transform: uppercase;
 }
 
-.app-badge-feature {
+/* «Новое» — метка непрочитанной новости, а не тип: гаснет по нажатию на
+   карточку. Это кнопка (до неё можно дойти с клавиатуры), поэтому снимаем
+   обвязку кнопки: фон и высоту строки. */
+.app-badge-new {
   border-color: var(--app-accent-text);
+  background-color: transparent;
   color: var(--app-accent-text);
+  line-height: inherit;
 }
 
 .app-badge-fix {
@@ -2029,6 +2034,9 @@ a.btn {
   padding: var(--app-space-4) var(--app-card-inset);
   margin-bottom: 0.75rem;
 }
+
+/* Непрочитанная новость кликабельна целиком: нажатие гасит «Новое». */
+.app-news.is-new { cursor: pointer; }
 
 /* Обёртка ленты новостей: на телефоне бокса не образует, на ПК — доска. */
 .app-news-list { display: contents; }
@@ -2225,6 +2233,7 @@ a.btn {
 .app-cardio-part,
 .app-workout,
 .app-latest-row,
+.app-news,
 .app-records-item,
 .app-spotlight,
 .app-queue-row,
@@ -2248,6 +2257,8 @@ a.btn {
   }
 
   .app-tab:not(.is-active):hover { color: var(--app-text); }
+
+  .app-news.is-new:hover { border-color: var(--app-text-muted); }
 
   .app-catalog-table tbody tr:hover > td { background-color: var(--app-raised); }
   .app-catalog-sort:hover { color: var(--app-text); }

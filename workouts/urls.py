@@ -64,6 +64,7 @@ urlpatterns = [
     ),
     path("profile/data/exercises/", views.ExerciseImportView.as_view(), name="exercise_import"),
     path("changelog/", views.ChangelogView.as_view(), name="changelog"),
+    path("changelog/<int:pk>/read/", views.ChangelogReadView.as_view(), name="changelog_read"),
     path("history/", views.WorkoutHistoryView.as_view(), name="workout_history"),
     path("workouts/cardio/new/", views.CardioWorkoutFormView.as_view(), name="cardio_create"),
     # Подготовка кардио заранее: та же вьюха и та же форма без даты, длительности

@@ -2474,23 +2474,34 @@ class LocationDeleteView(CatalogDeleteView):
         return Workout.objects.filter(location=item)
 
 
+def decorate_news(entry, user, today):
+    """Подпись даты и метка «Новое» карточки новости.
+
+    Одна на страницу и на ответ отметки «прочитано»: карточка в обоих местах
+    обязана выглядеть одинаково. Ждёт пометку is_read (with_read_mark).
+    """
+    moment = timezone.localtime(entry.published_at)
+    entry.date_label = formats.date_format(moment, "j E" if moment.year == today.year else "j E Y")
+    entry.is_new = entry.is_new_for(user)
+    return entry
+
+
 class ChangelogView(LoginRequiredMixin, View):
-    """«Что нового». Открытие страницы отмечает новости прочитанными.
+    """«Что нового». Открытие страницы гасит точку-бейдж в профиле.
 
     GET меняет состояние осознанно: это обычный «прочитано при открытии» —
     пишется одна колонка своей же строки, повторные открытия просто сдвигают
     отметку вперёд, а при ошибке рендера транзакция откатится и новости
-    останутся непрочитанными.
+    останутся непрочитанными. Метка «Новое» у карточек — другое: она гаснет по
+    нажатию на конкретную новость (ChangelogReadView).
     """
 
     def get(self, request):
-        entries = list(ChangelogEntry.objects.published())
         today = timezone.localdate()
-        for entry in entries:
-            moment = timezone.localtime(entry.published_at)
-            entry.date_label = formats.date_format(
-                moment, "j E" if moment.year == today.year else "j E Y"
-            )
+        entries = [
+            decorate_news(entry, request.user, today)
+            for entry in ChangelogEntry.objects.published().with_read_mark(request.user)
+        ]
         request.user.changelog_seen_at = timezone.now()
         request.user.save(update_fields=["changelog_seen_at"])
         return render(
@@ -2498,6 +2509,22 @@ class ChangelogView(LoginRequiredMixin, View):
             "workouts/changelog.html",
             {"entries": entries, "nav_active": "profile"},
         )
+
+
+class ChangelogReadView(LoginRequiredMixin, View):
+    """Нажатие на карточку новости: «прочитано», метка «Новое» гаснет.
+
+    Ответ — та же карточка уже без метки (outerHTML). Отметка у каждого своя:
+    read_by.add(request.user), чужую поставить нельзя; add повторную пару не
+    дублирует. Черновик и отложенная новость — 404, как на самой странице.
+    """
+
+    def post(self, request, pk):
+        entry = get_object_or_404(ChangelogEntry.objects.published(), pk=pk)
+        entry.read_by.add(request.user)
+        entry.is_read = True
+        decorate_news(entry, request.user, timezone.localdate())
+        return render(request, "workouts/_changelog_entry.html", {"entry": entry})
 
 
 # Префикс формы справочника: у двух форм загрузки на одной странице иначе был бы

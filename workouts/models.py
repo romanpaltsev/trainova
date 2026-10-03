@@ -1242,6 +1242,17 @@ class ChangelogQuerySet(models.QuerySet):
             return entries
         return entries.filter(published_at__gt=user.changelog_seen_at)
 
+    def with_read_mark(self, user):
+        """Пометка is_read у каждой записи: открывал ли её user.
+
+        Подзапросом EXISTS в том же запросе, а не read_by.all() у каждой
+        карточки: страница новостей иначе стоила бы запроса на запись.
+        """
+        read = ChangelogEntry.read_by.through.objects.filter(
+            changelogentry=models.OuterRef("pk"), user=user
+        )
+        return self.annotate(is_read=models.Exists(read))
+
 
 class ChangelogEntry(models.Model):
     """Новость проекта. Создаёт и правит только админ через Django admin."""
@@ -1264,6 +1275,16 @@ class ChangelogEntry(models.Model):
     is_published = models.BooleanField(
         "опубликовано", default=True, help_text="Снято — черновик, в приложении не виден."
     )
+    # Кто открыл новость — по нему гаснет метка «Новое» у карточки. Это не точка-
+    # бейдж в профиле (та гаснет от открытия страницы, changelog_seen_at): метка
+    # говорит про конкретную новость, и прочитанное на телефоне прочитано и на ПК.
+    # Пишет только приложение (ChangelogReadView), в админке поля нет.
+    read_by = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="read_changelog_entries",
+        blank=True,
+        verbose_name="прочитали",
+    )
 
     objects = models.Manager.from_queryset(ChangelogQuerySet)()
 
@@ -1277,3 +1298,12 @@ class ChangelogEntry(models.Model):
 
     def __str__(self):
         return self.title
+
+    def is_new_for(self, user):
+        """Горит ли метка «Новое»: запись не прочитана и вышла после регистрации.
+
+        Ждёт пометку is_read (with_read_mark). Вышедшее до регистрации новым не
+        считается: приглашённый друг иначе увидел бы «Новое» на всей истории
+        проекта.
+        """
+        return not self.is_read and self.published_at > user.date_joined
