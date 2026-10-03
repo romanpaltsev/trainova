@@ -1,0 +1,59 @@
+{% comment %}
+  Карточка «Цель на неделю» (stats.week_goal) — только ПК, приём TailAdmin
+  «Monthly Target»: полукруглая шкала, под ней фраза и три числа. Шкала — SVG
+  с pathLength="100": длина дуги задаётся прямо процентом, цвета — токенами из
+  CSS, и ни строчки JS. Модалка цели (accounts:profile_goal) после сохранения
+  присылает эту же карточку out-of-band.
+{% endcomment %}
+<section class="app-card app-goal" id="week-goal" aria-labelledby="week-goal-title"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <div class="app-goal-head">
+    <div>
+      <h2 class="app-goal-title" id="week-goal-title">Цель на неделю</h2>
+      <p class="app-goal-sub">
+        {% if goal.start|date:"m" == goal.end|date:"m" %}
+          {{ goal.start|date:"j" }} — {{ goal.end|date:"j b" }}
+        {% else %}
+          {{ goal.start|date:"j b" }} — {{ goal.end|date:"j b" }}
+        {% endif %}
+      </p>
+    </div>
+    {% if goal.target %}
+      <button type="button" class="app-icon-btn" aria-label="Изменить цель"
+              hx-get="{% url 'profile_goal' %}" hx-target="#modal" hx-swap="innerHTML">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>
+        </svg>
+      </button>
+    {% endif %}
+  </div>
+
+  {% if goal.target %}
+    <div class="app-goal-gauge">
+      <svg viewBox="0 0 200 110" role="img" aria-label="Выполнено {{ goal.percent }}% цели">
+        <path class="app-goal-track" d="M 15 100 A 85 85 0 0 1 185 100" pathLength="100"/>
+        {% if goal.arc %}
+          <path class="app-goal-bar" d="M 15 100 A 85 85 0 0 1 185 100" pathLength="100"
+                stroke-dasharray="{{ goal.arc }} 100"/>
+        {% endif %}
+      </svg>
+      <div class="app-goal-value" aria-hidden="true">
+        <span class="app-goal-percent num">{{ goal.percent }}%</span>
+        <span class="app-goal-caption">{{ goal.done_display }} из {{ goal.target_display }}</span>
+      </div>
+    </div>
+    <p class="app-goal-message">{{ goal.message }}</p>
+    <dl class="app-goal-facts">
+      <div><dt>Цель</dt><dd class="num">{{ goal.target_display }}</dd></div>
+      <div><dt>Сделано</dt><dd class="num">{{ goal.done_display }}</dd></div>
+      <div><dt>Прошлая неделя</dt><dd class="num">{{ goal.last_display }}</dd></div>
+    </dl>
+  {% else %}
+    <p class="app-goal-message">
+      Задайте, сколько часов в неделю хотите тренироваться, — здесь появится прогресс
+      недели: силовые, кардио и смешанные считаются вместе.
+    </p>
+    <button type="button" class="btn btn-accent" hx-get="{% url 'profile_goal' %}"
+            hx-target="#modal" hx-swap="innerHTML">Задать цель</button>
+  {% endif %}
+</section>

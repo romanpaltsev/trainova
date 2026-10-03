@@ -1524,6 +1524,9 @@ a.btn {
 .app-latest-cell,
 .app-recent-head { display: none; }
 
+/* Карточка «Цель на неделю» — только ПК (блок 768) */
+.app-goal { display: none; }
+
 /* Текст шапки встаёт на общий отступ карточки (у шапки и легенды свои 4px),
    а полотно графика — на 4px шире: подписям осей это место нужнее. */
 .app-chart-card {
@@ -2935,6 +2938,126 @@ a.btn {
     }
   }
   .app-spotlight { display: block; }
+
+  /* До 1200 боковая часть не образует бокса, и её карточки встают в сетку
+     дашборда: цель и прожектор — рядом сразу под плитками, на виду, рекорды —
+     внизу во всю ширину. Порядок задаёт order, DOM прежний (на нём держится
+     телефон). Без прожектора цель занимает ряд целиком. На 1200 боковая
+     часть снова колонка справа. */
+  .app-dash {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app-dash-side { display: contents; }
+  .app-dash-stats,
+  .app-dash-main,
+  .app-records { grid-column: 1 / -1; }
+  .app-goal,
+  .app-spotlight { order: 1; }
+  .app-dash-main { order: 2; }
+  .app-records { order: 3; }
+  .app-dash:not(:has(.app-spotlight)) .app-goal { grid-column: 1 / -1; }
+
+  /* «Цель на неделю» — приём TailAdmin «Monthly Target»: полукруглая шкала
+     с процентом, фраза и полоса из трёх чисел по низу карточки. */
+  .app-goal {
+    display: flex;
+    flex-direction: column;
+    padding: var(--app-space-5) var(--app-card-inset);
+  }
+  .app-goal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--app-space-3);
+  }
+  .app-goal-title {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .app-goal-sub {
+    margin: var(--app-space-1) 0 0;
+    color: var(--app-text-muted);
+    font-size: 0.875rem;
+  }
+  .app-goal-gauge {
+    position: relative;
+    width: 100%;
+    max-width: var(--app-measure-goal);
+    margin: var(--app-space-4) auto 0;
+  }
+  .app-goal-gauge svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .app-goal-track,
+  .app-goal-bar {
+    fill: none;
+    stroke-width: 16;
+    stroke-linecap: round;
+  }
+  .app-goal-track { stroke: var(--app-raised); }
+  /* «Чернильный» акцент, как у логотипа: сам лайм на белой карточке почти
+     не виден, а в тёмной теме токены совпадают. */
+  .app-goal-bar { stroke: var(--app-accent-text); }
+  .app-goal-value {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .app-goal-percent {
+    font-size: 2rem;
+    line-height: 1.1;
+  }
+  .app-goal-caption {
+    color: var(--app-text-secondary);
+    font-size: 0.875rem;
+  }
+  .app-goal-message {
+    margin: var(--app-space-4) 0 0;
+    color: var(--app-text-secondary);
+    text-align: center;
+  }
+  .app-goal > .btn {
+    align-self: center;
+    margin-top: var(--app-space-4);
+  }
+  /* Полоса чисел — во всю ширину карточки, по её нижнему краю: отступы
+     карточки вычитаются полями, скругление повторяет её углы. */
+  .app-goal-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--app-space-2);
+    margin: var(--app-space-5) calc(-1 * var(--app-card-inset)) calc(-1 * var(--app-space-5));
+    padding: var(--app-space-4) var(--app-card-inset);
+    border-top: 1px solid var(--app-line);
+    border-radius: 0 0 var(--app-radius-card) var(--app-radius-card);
+    background-color: var(--app-raised);
+    text-align: center;
+  }
+  /* Подпись может уйти в две строки («Прошлая неделя» в узкой колонке) —
+     значения всё равно стоят на одной линии по низу полосы. */
+  .app-goal-facts > div {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .app-goal-facts dt {
+    color: var(--app-text-muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+  .app-goal-facts dd {
+    margin: var(--app-space-1) 0 0;
+    font-size: 1.0625rem;
+  }
+
   /* Первый силовой рекорд живёт в прожекторе — плитку прячем */
   .app-records-item.is-spotlight { display: none; }
   /* Если он был единственным, прячем и саму карточку: она стала бы пустой */
@@ -3375,7 +3498,12 @@ a.btn {
 
   .app-dash-stats { grid-area: stats; }
   .app-dash-main { grid-area: main; }
-  .app-dash-side { grid-area: side; }
+  /* Колонка справа снова бокс (до 1200 она растворена в сетке): цель,
+     прожектор и рекорды столбиком. */
+  .app-dash-side {
+    grid-area: side;
+    display: flex;
+  }
 
   /* ---------- История: плотные строки ----------
 

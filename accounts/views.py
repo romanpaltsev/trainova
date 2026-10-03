@@ -7,8 +7,11 @@ from django.db.models import Count, Max, Q
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import render
 from django.template.loader import render_to_string
+from django.utils import timezone
 from django.views.generic import TemplateView, View
 
+from accounts.forms import WeeklyGoalForm
+from workouts import stats
 from workouts.models import (
     REST_DELTAS,
     ChangelogEntry,
@@ -77,3 +80,40 @@ class ProfileRestView(LoginRequiredMixin, View):
         html = render_to_string("accounts/_rest_value.html", context, request=request)
         html += render_to_string("accounts/_rest_row_value.html", context, request=request)
         return HttpResponse(html)
+
+
+class ProfileGoalView(LoginRequiredMixin, View):
+    """Модалка «Цель на неделю»: часы в неделю или «убрать цель».
+
+    Открывается из карточки цели на дашборде. Ответ на сохранение — карточка
+    out-of-band и пустая модалка, которая поэтому закрывается сама: та же схема,
+    что у дня черновика. Ошибка ввода — модалка с подсказкой. Цель — поле самого
+    пользователя, поэтому чужой цели по адресу не достать: адрес без id.
+    """
+
+    template_name = "accounts/_goal_modal.html"
+
+    def get(self, request):
+        minutes = request.user.weekly_goal_minutes
+        initial = {"hours": stats.hours_display(minutes)} if minutes else {}
+        return self.modal(request, WeeklyGoalForm(initial=initial))
+
+    def post(self, request):
+        user = request.user
+        if request.POST.get("clear"):
+            user.weekly_goal_minutes = None
+        else:
+            form = WeeklyGoalForm(request.POST)
+            if not form.is_valid():
+                return self.modal(request, form)
+            user.weekly_goal_minutes = form.cleaned_data["hours"]
+        user.save(update_fields=["weekly_goal_minutes"])
+        # Минуты недели — тем же счётом, что у графика на дашборде: иначе
+        # карточка после сохранения могла бы разойтись с соседним столбцом.
+        chart = stats.weekly_chart(user)
+        goal = stats.week_goal(user.weekly_goal_minutes, chart["totals"], timezone.localdate())
+        return render(request, "workouts/_week_goal.html", {"goal": goal, "oob": True})
+
+    def modal(self, request, form):
+        has_goal = request.user.weekly_goal_minutes is not None
+        return render(request, self.template_name, {"form": form, "has_goal": has_goal})

@@ -4,7 +4,13 @@ allauth рендерит поля своими виджетами, поэтом�
 и placeholder'ы задаём здесь — один раз для всех auth-форм.
 """
 
+import re
+from decimal import Decimal, InvalidOperation
+
 from allauth.account import forms as allauth_forms
+from django import forms
+
+from accounts.models import WEEKLY_GOAL_MAX_MINUTES, WEEKLY_GOAL_MIN_MINUTES
 
 LABELS = {
     "email": "Email",
@@ -60,3 +66,32 @@ class ChangePasswordForm(StyledFormMixin, allauth_forms.ChangePasswordForm):
 
 class SetPasswordForm(StyledFormMixin, allauth_forms.SetPasswordForm):
     pass
+
+
+class WeeklyGoalForm(forms.Form):
+    """Цель на неделю в часах: «4», «4,5» или «4:30» — как человеку удобнее.
+
+    Хранится в минутах (User.weekly_goal_minutes): в них же считаются
+    длительности тренировок, и карточка цели делит одно на другое без
+    преобразований.
+    """
+
+    hours = forms.CharField(label="Часов в неделю", max_length=8)
+
+    def clean_hours(self):
+        raw = self.cleaned_data["hours"].strip()
+        match = re.fullmatch(r"(\d{1,2}):([0-5]\d)", raw)
+        if match:
+            minutes = int(match[1]) * 60 + int(match[2])
+        else:
+            try:
+                hours = Decimal(raw.replace(",", "."))
+            except InvalidOperation:
+                hours = None
+            # NaN и Infinity Decimal принимает, а round() на них падает.
+            if hours is None or not hours.is_finite():
+                raise forms.ValidationError("Введите часы: 4, 4,5 или 4:30.")
+            minutes = round(hours * 60)
+        if not WEEKLY_GOAL_MIN_MINUTES <= minutes <= WEEKLY_GOAL_MAX_MINUTES:
+            raise forms.ValidationError("Цель — от 0:30 до 40:00 в неделю.")
+        return minutes

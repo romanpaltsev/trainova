@@ -179,6 +179,7 @@
   </div>
 
   <aside class="app-dash-side">
+    {% include "workouts/_week_goal.html" %}
     {% if spotlight %}
       <a class="app-card app-spotlight" href="{% url 'exercise_detail' spotlight.exercise.pk %}">
         <div class="app-spotlight-head">

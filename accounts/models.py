@@ -28,6 +28,12 @@ class UserManager(BaseUserManager):
         return user
 
 
+# Цель на неделю: от получаса до сорока часов. Шире не бывает осмысленно, а
+# ноль — это «цели нет», и он хранится пустым значением, а не нулём.
+WEEKLY_GOAL_MIN_MINUTES = 30
+WEEKLY_GOAL_MAX_MINUTES = 40 * 60
+
+
 class User(AbstractUser):
     """Пользователь приложения: вход по email, username и имя/фамилия не используются."""
 
@@ -46,6 +52,12 @@ class User(AbstractUser):
         blank=True,
         help_text="Пусто — пользователь ещё не открывал «Что нового».",
     )
+    weekly_goal_minutes = models.PositiveSmallIntegerField(
+        "цель на неделю, мин",
+        null=True,
+        blank=True,
+        help_text="Сколько минут в неделю тренироваться. Пусто — цель не задана.",
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -55,6 +67,18 @@ class User(AbstractUser):
     class Meta:
         verbose_name = "пользователь"
         verbose_name_plural = "пользователи"
+        constraints = [
+            # Границы цели держит и база, а не только форма: цель правят и
+            # через админку, а нулевая цель дала бы деление на ноль в карточке.
+            models.CheckConstraint(
+                condition=models.Q(weekly_goal_minutes__isnull=True)
+                | models.Q(
+                    weekly_goal_minutes__gte=WEEKLY_GOAL_MIN_MINUTES,
+                    weekly_goal_minutes__lte=WEEKLY_GOAL_MAX_MINUTES,
+                ),
+                name="weekly_goal_in_range",
+            ),
+        ]
 
     def __str__(self):
         return self.email

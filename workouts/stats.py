@@ -263,11 +263,13 @@ def weekly_chart(user, today=None, weeks=12):
 
     index = {monday: position for position, monday in enumerate(mondays)}
     minutes = {}  # (sport_id, позиция недели) -> минуты
+    totals = [0] * weeks  # минуты недели целиком — для карточки цели
     for workout_id, started_at, duration, sport_id in rows:
         # Неделя определяется по локальной дате: started_at хранится в UTC,
         # и тренировка в понедельник 00:10 МСК — это ещё воскресенье по UTC.
         monday = week_start(timezone.localtime(started_at).date())
         position = index[monday]
+        totals[position] += duration
         parts = parts_by_workout.get(workout_id, [])
         for part_sport_id, part_duration in parts:
             key = (part_sport_id, position)
@@ -298,6 +300,43 @@ def weekly_chart(user, today=None, weeks=12):
         "starts": [monday.isoformat() for monday in mondays],
         "titles": [week_title(monday, today) for monday in mondays],
         "datasets": datasets,
+        "totals": totals,
+    }
+
+
+def week_goal(target, week_totals, today):
+    """Карточка «Цель на неделю»: прогресс календарной недели к цели в минутах.
+
+    Минуты недель приходят из weekly_chart (последний столбец — эта неделя,
+    предпоследний — прошлая): тот же счёт, что у графика рядом, и ни одного
+    запроса сверху. Процент может перевалить за сотню — дуга при этом просто
+    полная, а число честное.
+    """
+    monday = week_start(today)
+    done, last = week_totals[-1], week_totals[-2]
+    goal = {
+        "start": monday,
+        "end": monday + timedelta(days=6),
+        "target": target,
+        "done_display": hours_display(done),
+        "last_display": hours_display(last),
+    }
+    if not target:
+        return goal
+    percent = round(done * 100 / target)
+    if done >= target:
+        over = done - target
+        message = "Цель недели выполнена!"
+        if over:
+            message += f" Сверх цели — {hours_display(over)}."
+    else:
+        message = f"До цели осталось {hours_display(target - done)}."
+    return goal | {
+        "target_display": hours_display(target),
+        "percent": percent,
+        # Длина дуги в долях пути (pathLength="100" у SVG-полукруга).
+        "arc": min(percent, 100),
+        "message": message,
     }
 
 

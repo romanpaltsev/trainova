@@ -1500,6 +1500,8 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         user = self.request.user
         chart = stats.weekly_chart(user)
+        # Цель недели — из минут того же графика: ни одного запроса сверху.
+        goal = stats.week_goal(user.weekly_goal_minutes, chart["totals"], timezone.localdate())
         # Рекорды считаются один раз: прожектору нужен тот же топ, что и плиткам.
         strength = stats.strength_records(user, limit=STRENGTH_RECORDS_LIMIT)
         # Подготовленное — первым делом: смысл плана на неделю в том, чтобы он
@@ -1510,6 +1512,7 @@ class DashboardView(LoginRequiredMixin, TemplateView):
             {
                 "planned": drafts,
                 "summary": stats.seven_day_summary(user),
+                "goal": goal,
                 "chart": chart,
                 "has_chart": bool(chart["datasets"]),
                 "latest": stats.latest_workouts(user),

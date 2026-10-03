@@ -12,7 +12,7 @@ class UserAdmin(DjangoUserAdmin):
     ordering = ("email",)
     fieldsets = (
         (None, {"fields": ("email", "password")}),
-        ("Тренировки", {"fields": ("rest_seconds_default",)}),
+        ("Тренировки", {"fields": ("rest_seconds_default", "weekly_goal_minutes")}),
         (
             "Права",
             {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")},
