@@ -16,6 +16,12 @@
   --app-accent-text: #4F6B00;
   --app-success: #006300;
   --app-danger: #C4342B;
+  /* Подложки с оттенком акцента и статусов (приём TailAdmin): активный пункт
+     боковой панели, бейджи динамики. На белом лайм бледнеет, поэтому
+     прозрачность светлой темы выше, чем тёмной. */
+  --app-accent-soft: rgba(198, 241, 62, 0.30);
+  --app-success-soft: rgba(0, 99, 0, 0.10);
+  --app-danger-soft: rgba(196, 52, 43, 0.10);
 
   /* Виды спорта — цвет закреплён за видом, а не за порядком в наборе */
   --app-sport-strength: #2a78d6;
@@ -46,6 +52,9 @@
   --app-accent-text: #C6F13E;
   --app-success: #0ca30c;
   --app-danger: #E5645C;
+  --app-accent-soft: rgba(198, 241, 62, 0.12);
+  --app-success-soft: rgba(12, 163, 12, 0.16);
+  --app-danger-soft: rgba(229, 100, 92, 0.16);
 
   --app-sport-strength: #3987e5;
   --app-sport-bike: #d95926;
@@ -116,6 +125,10 @@
   /* Широкое окно — там, где у содержимого две колонки: выбор упражнения,
      новая тренировка рядом с подготовленными. */
   --app-measure-wide: 56rem;
+  /* Боковая панель ПК: развёрнутая — с подписями, «рельс» — одни иконки
+     (с 768 до 1200 и в свёрнутом состоянии). */
+  --app-measure-sidebar: 17.5rem;
+  --app-measure-rail: 5.5rem;
   /* Минимальная плитка в сетках auto-fill. Уже ~210px двухстрочные имена
      справочника не помещаются (см. .app-trained-name). */
   --app-measure-tile: 14rem;
@@ -198,7 +211,9 @@
 
 @media (min-width: 1200px) {
   :root {
-    --app-gutter: var(--app-space-14);
+    /* 2rem, а не 3.5: рядом с боковой панелью широкие поля съедали бы ширину
+       контента — у 1440 и так 17.5rem уходит на навигацию. */
+    --app-gutter: var(--app-space-8);
     --app-board-cols: 3;
     --app-header-pad: var(--app-space-4);
   }

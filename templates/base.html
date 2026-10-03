@@ -11,7 +11,85 @@
 {% endblock %}
 
 {% block body %}
-<header class="app-header">
+{% comment %}
+  Каркас ПК (с 768): боковая панель слева, справа шапка и страница — приём
+  TailAdmin. На телефоне обёртки app-shell не образуют боксов (display: contents),
+  панель скрыта, и там прежние шапка и нижняя навигация.
+{% endcomment %}
+<div class="app-shell">
+{% if user.is_authenticated %}
+  {% with url_name=request.resolver_match.url_name %}
+  <aside class="app-sidebar" aria-label="Разделы">
+    <a class="app-logo app-sidebar-logo" href="{% url 'dashboard' %}">
+      {% include "includes/logo.html" %}
+      <span class="app-sidebar-label">Дневник</span>
+    </a>
+    <nav class="app-sidebar-nav">
+      <div class="app-sidebar-group"><span class="app-sidebar-label">Меню</span></div>
+      <a class="app-side-link{% if nav_active == 'dashboard' %} is-active{% endif %}" href="{% url 'dashboard' %}" title="Дашборд">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+        </svg>
+        <span class="app-sidebar-label">Дашборд</span>
+      </a>
+      <a class="app-side-link{% if nav_active == 'history' %} is-active{% endif %}" href="{% url 'workout_history' %}" title="История">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>
+        </svg>
+        <span class="app-sidebar-label">История</span>
+      </a>
+      <a class="app-side-link{% if nav_active == 'exercises' %} is-active{% endif %}" href="{% url 'exercise_list' %}" title="Упражнения">
+        {% include "includes/logo.html" %}
+        <span class="app-sidebar-label">Упражнения</span>
+      </a>
+
+      {% comment %}
+        Пункты «Моё» различает имя маршрута: nav_active у них общий («profile»),
+        иначе подсветилась бы вся группа разом. Страницы аккаунта allauth
+        (смена пароля, почта, выход) открываются из профиля — за ним и числятся.
+      {% endcomment %}
+      <div class="app-sidebar-group"><span class="app-sidebar-label">Моё</span></div>
+      <a class="app-side-link{% if url_name == 'profile' or url_name|slice:':8' == 'account_' %} is-active{% endif %}" href="{% url 'profile' %}" title="Профиль">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/>
+        </svg>
+        <span class="app-sidebar-label">Профиль</span>
+      </a>
+      <a class="app-side-link{% if url_name == 'my_locations' %} is-active{% endif %}" href="{% url 'my_locations' %}" title="Мои места">
+        {% include "includes/pin.html" with size=22 only %}
+        <span class="app-sidebar-label">Мои места</span>
+      </a>
+      <a class="app-side-link{% if url_name == 'my_sports' %} is-active{% endif %}" href="{% url 'my_sports' %}" title="Мои виды спорта">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15 0 18M12 3c-2.5 2.5-2.5 15 0 18"/>
+        </svg>
+        <span class="app-sidebar-label">Мои виды спорта</span>
+      </a>
+      <a class="app-side-link{% if url_name == 'data_transfer' or url_name == 'exercise_import' %} is-active{% endif %}" href="{% url 'data_transfer' %}" title="Экспорт и импорт">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>
+        </svg>
+        <span class="app-sidebar-label">Экспорт и импорт</span>
+      </a>
+      <a class="app-side-link{% if url_name == 'changelog' %} is-active{% endif %}" href="{% url 'changelog' %}" title="Что нового">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 4l2.4 5 5.6.8-4 3.9 1 5.5-5-2.7-5 2.7 1-5.5-4-3.9 5.6-.8z"/>
+        </svg>
+        <span class="app-sidebar-label">Что нового</span>
+      </a>
+    </nav>
+  </aside>
+  {% endwith %}
+{% endif %}
+<div class="app-shell-main">
+<header class="app-header{% if user.is_authenticated %} has-sidebar{% endif %}">
   <a class="app-logo" href="{% url 'dashboard' %}">
     {% include "includes/logo.html" %}
     <span>Дневник</span>
@@ -22,6 +100,30 @@
     <a href="{% url 'workout_history' %}" class="{% if nav_active == 'history' %}is-active{% endif %}">История</a>
     <a href="{% url 'exercise_list' %}" class="{% if nav_active == 'exercises' %}is-active{% endif %}">Упражнения</a>
   </nav>
+
+  {% if user.is_authenticated %}
+    {% comment %}
+      Только на ПК: свернуть панель до иконок (с 1200) и поиск по справочнику
+      упражнений — обычная GET-форма каталога, «/» ставит в неё курсор
+      (shell.js). На телефоне оба скрыты.
+    {% endcomment %}
+    <button type="button" class="app-icon-btn app-sidebar-toggle" data-sidebar-toggle
+            aria-label="Свернуть или развернуть панель" aria-expanded="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>
+      </svg>
+    </button>
+    <form class="app-header-search" action="{% url 'exercise_list' %}" method="get" role="search">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>
+      </svg>
+      <input type="search" name="q" class="app-header-search-input" placeholder="Поиск упражнений"
+             aria-label="Поиск упражнений" autocomplete="off" data-header-search>
+      <kbd class="app-header-kbd" aria-hidden="true">/</kbd>
+    </form>
+  {% endif %}
 
   <div class="d-flex align-items-center gap-2 ms-auto">
     {% if user.is_authenticated %}
@@ -55,6 +157,8 @@
   {% endif %}
   {% block content %}{% endblock %}
 </main>
+</div>{# .app-shell-main #}
+</div>{# .app-shell #}
 
 <div id="modal"></div>
 
@@ -97,4 +201,5 @@
 </nav>
 {% endif %}
 {% endblock %}
+<script src="{% static 'js/shell.js' %}" defer></script>
 {% endblock %}

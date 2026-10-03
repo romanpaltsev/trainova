@@ -109,6 +109,19 @@ body {
 [data-bs-theme="dark"] .app-theme-icon-light,
 [data-bs-theme="light"] .app-theme-icon-dark { display: none; }
 
+/* ---------- Каркас ПК ----------
+   Боковая панель и инструменты шапки появляются только на ПК (блок 768). На
+   телефоне обёртки каркаса не образуют боксов, и дерево страницы прежнее.
+   Правило стоит после .app-icon-btn: тот задаёт display и, будучи ниже,
+   снова показал бы кнопку сворачивания. */
+
+.app-shell,
+.app-shell-main { display: contents; }
+
+.app-sidebar,
+.app-sidebar-toggle,
+.app-header-search { display: none; }
+
 /* ---------- Основная область ---------- */
 
 .app-main {
@@ -2213,6 +2226,11 @@ a.btn {
 /* Наведение — только там, где есть настоящий курсор. На тапе :hover залипает до
    следующего тапа, и строка остаётся подсвеченной уже после перехода. */
 @media (hover: hover) and (pointer: fine) {
+  .app-side-link:not(.is-active):hover {
+    background-color: var(--app-raised);
+    color: var(--app-text);
+  }
+
   /* Карточки и строки, кликабельные целиком: рамка, подъём и тень */
   .app-workout-link:hover,
   .app-row:hover,
@@ -2464,6 +2482,143 @@ a.btn {
     min-height: calc(100dvh - var(--app-header-height));
   }
   .app-main-dialog > * { width: 100%; }
+
+  /* ---------- Каркас ПК: боковая панель (приём TailAdmin) ----------
+
+     Сетка «панель | шапка и страница». С 768 до 1200 панель — «рельс» из одних
+     иконок (подписи — в title), с 1200 — развёрнутая с подписями, и её можно
+     свернуть кнопкой в шапке (shell.js ставит data-sidebar-collapsed на <html>).
+     Панель липкая на всю высоту окна со своей прокруткой. */
+  .app-shell {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 100dvh;
+  }
+  .app-sidebar {
+    grid-column: 1;
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    width: var(--app-measure-rail);
+    height: 100dvh;
+    overflow-y: auto;
+    padding: 0 var(--app-space-4) var(--app-space-6);
+    border-right: 1px solid var(--app-line);
+    background-color: var(--app-card);
+  }
+  .app-shell-main {
+    grid-column: 2;
+    display: block;
+    min-width: 0;
+  }
+  .app-sidebar-label { display: none; }
+  .app-sidebar-logo {
+    justify-content: center;
+    min-height: var(--app-header-height);
+    margin-bottom: var(--app-space-2);
+  }
+  .app-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--app-space-1);
+  }
+  /* Подпись группы в «рельсе» — короткая черта: текст не помещается. Под
+     логотипом черта лишняя, поэтому первая группа в рельсе не видна. */
+  .app-sidebar-group {
+    margin: var(--app-space-3) var(--app-space-2);
+    border-top: 1px solid var(--app-line);
+    color: var(--app-text-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .app-sidebar-group:first-child { display: none; }
+  .app-side-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--app-space-3);
+    min-height: var(--app-tap-target);
+    padding: var(--app-space-2) var(--app-space-3);
+    border-radius: var(--app-radius-field);
+    color: var(--app-text-secondary);
+    font-weight: 600;
+    text-decoration: none;
+    transition: var(--app-transition-ui);
+  }
+  .app-side-link svg {
+    flex: 0 0 auto;
+    width: 22px;
+    height: 22px;
+  }
+  .app-side-link.is-active {
+    background-color: var(--app-accent-soft);
+    color: var(--app-accent-text);
+  }
+
+  /* Шапка рядом с панелью: логотип и разделы переехали в панель, вместо них —
+     поиск по справочнику. Фон и линия идут во всю колонку, как у TailAdmin,
+     а содержимое стоит по краю страницы: отступ добирает половину того, что
+     колонка шире --app-measure-page, — ровно на столько .app-main сдвигает
+     контент своим margin auto. Линия — тенью, а не рамкой: рамка прибавила бы
+     пиксель к высоте, и липкие блоки (top: --app-header-height) заезжали бы
+     под шапку. */
+  .app-header.has-sidebar {
+    max-width: none;
+    padding-inline: max(
+      var(--app-gutter),
+      calc((100% - var(--app-measure-page)) / 2 + var(--app-gutter))
+    );
+    background-color: var(--app-card);
+    box-shadow: inset 0 -1px 0 var(--app-line);
+  }
+  .app-header.has-sidebar .app-logo,
+  .app-header.has-sidebar .app-nav { display: none; }
+  /* Круглые кнопки шапки — с рамкой, как в TailAdmin: на фоне карточки
+     прозрачная кнопка без рамки читалась бы просто иконкой. */
+  .app-header.has-sidebar .app-icon-btn { border: 1px solid var(--app-line); }
+  .app-header.has-sidebar .app-sidebar-toggle { border-radius: var(--app-radius-field); }
+  .app-header-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 0 1 var(--app-measure-narrow);
+    min-width: 0;
+    color: var(--app-text-muted);
+  }
+  .app-header-search > svg {
+    position: absolute;
+    left: var(--app-space-3);
+    pointer-events: none;
+  }
+  .app-header-search-input {
+    width: 100%;
+    min-height: var(--app-tap-target);
+    padding-inline: calc(var(--app-space-8) + var(--app-space-2));
+    border: 1px solid var(--app-line);
+    border-radius: var(--app-radius-field);
+    background-color: var(--app-card);
+    color: var(--app-text);
+    font-size: 0.9375rem;
+  }
+  .app-header-search-input::placeholder { color: var(--app-text-muted); }
+  .app-header-search-input:focus {
+    border-color: var(--app-accent-text);
+    outline: none;
+    box-shadow: 0 0 0 0.2rem var(--bs-focus-ring-color);
+  }
+  .app-header-kbd {
+    position: absolute;
+    right: var(--app-space-3);
+    padding: 0 var(--app-space-2);
+    border: 1px solid var(--app-line);
+    border-radius: var(--bs-border-radius-sm);
+    background-color: var(--app-raised);
+    color: var(--app-text-muted);
+    font: 600 0.75rem/1.6 var(--app-font-sans);
+  }
 
   /* ---------- Форма кардио и плана: две колонки ----------
 
@@ -2826,6 +2981,24 @@ a.btn {
 }
 
 @media (min-width: 1200px) {
+  /* Каркас ПК с 1200: панель развёрнута с подписями, пока её не свернули —
+     свёрнутая остаётся тем же «рельсом», что с 768. */
+  :root:not([data-sidebar-collapsed]) .app-sidebar {
+    width: var(--app-measure-sidebar);
+    padding-inline: var(--app-space-5);
+  }
+  :root:not([data-sidebar-collapsed]) .app-sidebar-label { display: inline; }
+  :root:not([data-sidebar-collapsed]) .app-sidebar-logo,
+  :root:not([data-sidebar-collapsed]) .app-side-link { justify-content: flex-start; }
+  :root:not([data-sidebar-collapsed]) .app-sidebar-logo { padding-inline: var(--app-space-3); }
+  :root:not([data-sidebar-collapsed]) .app-sidebar-group {
+    display: block;
+    margin: var(--app-space-6) var(--app-space-3) var(--app-space-2);
+    border-top: 0;
+  }
+  :root:not([data-sidebar-collapsed]) .app-sidebar-group:first-child { margin-top: 0; }
+  .app-sidebar-toggle { display: inline-flex; }
+
   /* Отступ шапки растёт токеном --app-header-pad (tokens.css): вместе с ним
      пересчитывается и --app-header-height, от которого встают липкие блоки. */
   .app-main { padding-bottom: var(--app-space-16); }

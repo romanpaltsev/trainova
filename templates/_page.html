@@ -92,6 +92,11 @@
         : (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
       var root = document.documentElement;
       root.setAttribute("data-bs-theme", theme);
+      // Свёрнутая боковая панель ПК — тоже до первой отрисовки, иначе она мигает
+      // развёрнутой и сдвигает страницу.
+      try {
+        if (localStorage.getItem("app-sidebar") === "collapsed") root.setAttribute("data-sidebar-collapsed", "");
+      } catch (e) {}
       var meta = document.getElementById("theme-color");
       if (meta) {
         meta.setAttribute("content", getComputedStyle(root).getPropertyValue("--app-bg").trim());
