@@ -2679,17 +2679,47 @@ a.btn {
   }
   .app-form-col { display: block; min-width: 0; }
 
-  /* ---------- «Что нового»: доска карточек ----------
+  /* ---------- «Что нового»: лента строк ----------
 
-     По рядам, а не колонками: новое слева сверху, дальше по строке —
-     хронология читается от новой к старой. Карточки ряда одной высоты. */
+     Новость — строка во всю ширину, по одной в ряд (решение 03.10.2026: доску
+     плиток неудобно читать подряд): слева дата и ярлыки, справа заголовок и
+     текст. Хронология читается сверху вниз, как на телефоне. Текст держит меру
+     строки (--app-measure-text): во всю ширину 1600px абзац растянулся бы на
+     полторы сотни знаков. Ярлык «Новое» остаётся в колонке слева — его кнопка
+     и клик по строке работают как раньше. */
   .app-news-list {
-    display: grid;
-    grid-template-columns: repeat(var(--app-board-cols), minmax(0, 1fr));
-    gap: var(--app-space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--app-space-3);
   }
   .app-news-list > .app-news { margin-bottom: 0; }
-  .app-news-list > .app-empty { grid-column: 1 / -1; }
+  .app-news {
+    display: grid;
+    grid-template-columns: var(--app-measure-meta) minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "head title"
+      "head body";
+    column-gap: var(--app-space-6);
+    padding-block: var(--app-space-5);
+  }
+  .app-news-head {
+    grid-area: head;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--app-space-2);
+    margin-bottom: 0;
+  }
+  /* Дата — первой в колонке: по ней новость ищут, ярлыки — уточнение */
+  .app-news-date { order: -1; }
+  .app-news-title {
+    grid-area: title;
+    max-width: var(--app-measure-text);
+  }
+  .app-news-body {
+    grid-area: body;
+    max-width: var(--app-measure-text);
+  }
 
   /* ---------- Справочники и обмен данными ----------
 
