@@ -25,8 +25,8 @@ from workouts.models import (
     Workout,
     cardio_parts_prefetch,
     decimal_display,
-    exercise_order_key,
     metric_display,
+    order_exercises,
     ru_plural,
 )
 
@@ -739,29 +739,41 @@ def muscle_groups_by_workout(user, workout_ids):
     запрос на каждую тренировку. Агрегат сразу по `muscle_group`, а не выборка
     подходов, — соседние подходы одной группы для подписи не нужны.
 
-    Порядок — общий `exercise_order_key`: сначала то, что реально делали (по
-    самой ранней метке выполнения), потом непройденное в порядке добавления.
-    Поэтому по `done` не фильтруем: у записанной тренировки невыполненных
-    подходов уже нет, а у черновика все подходы плановые, и он подписывается по
-    плану. Упражнения без группы мышц в подпись не попадают: группа
-    необязательная, и пустая строка была бы не «нет данных», а мусором.
+    Порядок — общий `order_exercises`: сначала то, что реально делали (по самой
+    ранней метке выполнения), потом непройденное в порядке добавления, а члены
+    круга — подряд. Поэтому по `done` не фильтруем: у записанной тренировки
+    невыполненных подходов уже нет, а у черновика все подходы плановые, и он
+    подписывается по плану. Агрегат по упражнению, а не по группе мышц: порядок
+    с кругами считается по упражнениям, и только потом группы схлопываются.
+    Упражнения без группы мышц в подпись не попадают — но в сортировке
+    участвуют: выкинутый до неё член круга сдвинул бы порядок блоков.
     """
     rows = (
         # Фильтр по user избыточен (id пришли из своей выборки), но правило
         # «каждый queryset пользовательских данных фильтруется по user» дороже
         # экономии одного условия — то же решение, что в exercise_positions.
         StrengthSet.objects.filter(workout_id__in=workout_ids, workout__user=user)
-        .exclude(exercise__muscle_group="")
-        .values("workout_id", "exercise__muscle_group")
-        .annotate(first_done_at=Min("done_at"), first_set_id=Min("id"))
+        .values("workout_id", "exercise_id", "exercise__muscle_group")
+        .annotate(
+            first_done_at=Min("done_at"),
+            first_set_id=Min("id"),
+            # Не «circuit»: такое имя аннотации конфликтует с полем модели.
+            first_circuit=Min("circuit"),
+        )
     )
     by_workout = {}
     for row in rows:
+        row["circuit"] = row["first_circuit"]
         by_workout.setdefault(row["workout_id"], []).append(row)
     labels = {}
     for workout_id, items in by_workout.items():
-        items.sort(key=lambda item: exercise_order_key(item["first_done_at"], item["first_set_id"]))
-        groups = [item["exercise__muscle_group"] for item in items]
+        groups = []
+        for item in order_exercises(items):
+            group = item["exercise__muscle_group"]
+            if group and group not in groups:
+                groups.append(group)
+        if not groups:
+            continue
         label = " · ".join(groups[:MUSCLE_GROUPS_SHOWN])
         hidden = len(groups) - MUSCLE_GROUPS_SHOWN
         if hidden > 0:
@@ -793,8 +805,8 @@ def exercise_positions(user, workout_ids, exercise):
     подходов: тянуть все подходы всех соседних упражнений было бы дороже самой
     страницы.
 
-    Правило сортировки общее (`exercise_order_key`) именно поэтому: номер здесь
-    обязан совпасть с номером той же тренировки на её итоге.
+    Правило сортировки общее (`order_exercises`) именно поэтому: номер здесь
+    обязан совпасть с номером той же тренировки на её итоге — и с кругами тоже.
     """
     rows = (
         # Фильтр по user избыточен (id пришли из своей выборки), но правило
@@ -802,18 +814,20 @@ def exercise_positions(user, workout_ids, exercise):
         # экономии одного условия.
         StrengthSet.objects.filter(workout_id__in=workout_ids, workout__user=user)
         .values("workout_id", "exercise_id")
-        .annotate(first_done_at=Min("done_at"), first_set_id=Min("id"))
+        .annotate(
+            first_done_at=Min("done_at"), first_set_id=Min("id"), first_circuit=Min("circuit")
+        )
     )
     by_workout = {}
     for row in rows:
+        row["circuit"] = row["first_circuit"]
         by_workout.setdefault(row["workout_id"], []).append(row)
     positions = {}
     for workout_id, items in by_workout.items():
-        items.sort(key=lambda item: exercise_order_key(item["first_done_at"], item["first_set_id"]))
         positions[workout_id] = next(
             (
                 number
-                for number, item in enumerate(items, start=1)
+                for number, item in enumerate(order_exercises(items), start=1)
                 if item["exercise_id"] == exercise.pk
             ),
             None,

@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import NamedTuple
@@ -814,6 +815,13 @@ class StrengthSet(models.Model):
     # появления поля: бэкфилл невозможен, времени выполнения в старых данных
     # не существует ни в каком виде.
     done_at = models.DateTimeField("выполнен в", null=True, blank=True)
+    # Номер круга (суперсет, трисет, круг из N) внутри тренировки — одинаковый у
+    # всех подходов упражнения. Круг — два и больше упражнений с одним номером:
+    # номер, оставшийся у одного, кругом не считается (order_exercises), а
+    # services.drop_lone_circuits его стирает. Хранится у подхода, а не в
+    # отдельной таблице «упражнение в тренировке»: такой сущности в модели нет
+    # (группы строятся из подходов), и лишний запрос на каждом экране не нужен.
+    circuit = models.PositiveSmallIntegerField("круг", null=True, blank=True)
 
     class Meta:
         verbose_name = "подход"
@@ -853,6 +861,11 @@ class StrengthSet(models.Model):
                 condition=Q(done=True) | Q(done_at__isnull=True),
                 name="set_done_at_only_when_done",
                 violation_error_message="Время выполнения бывает только у выполненного подхода.",
+            ),
+            models.CheckConstraint(
+                condition=Q(circuit__isnull=True) | Q(circuit__gte=1),
+                name="set_circuit_is_positive",
+                violation_error_message="Номер круга начинается с единицы.",
             ),
         ]
 
@@ -999,6 +1012,48 @@ def exercise_order_key(first_done_at, first_set_id):
     упражнению на разных экранах и разный порядок групп мышц в подписи тренировки.
     """
     return (first_done_at or NEVER_DONE, first_set_id)
+
+
+def order_exercises(items):
+    """Порядок упражнений тренировки с учётом кругов — одно правило на все экраны.
+
+    `items` — словари с first_done_at, first_set_id и circuit (номер круга
+    упражнения или None). Возвращает их в порядке показа и проставляет каждому:
+    - circuit: номер круга или None — номер, оставшийся у одного упражнения,
+      кругом уже не считается (его разобрали удалением подходов);
+    - circuit_no: порядковый номер круга в тренировке (1..k) — для подписи и
+      выгрузки, чтобы «Круг 2» не зависел от того, какие номера лежат в базе.
+
+    Члены круга идут подряд: ключ блока — наименьший exercise_order_key его
+    членов, внутри блока — собственные ключи. Тренировка без кругов поэтому
+    упорядочена ровно как раньше. Потребителей три — services.group_sets,
+    stats.exercise_positions и stats.muscle_groups_by_workout, — и все они
+    обязаны сортировать здесь, иначе номер упражнения на итоге, его номер на
+    странице упражнения и порядок групп мышц в подписи разошлись бы.
+    """
+    sizes = Counter(item["circuit"] for item in items if item["circuit"] is not None)
+    keyed = []
+    for item in items:
+        circuit = item["circuit"]
+        if circuit is not None and sizes[circuit] < 2:
+            circuit = None
+        keyed.append(
+            (item, circuit, exercise_order_key(item["first_done_at"], item["first_set_id"]))
+        )
+    block_keys = {}
+    for _item, circuit, key in keyed:
+        if circuit is not None:
+            block_keys[circuit] = min(block_keys.get(circuit, key), key)
+    keyed.sort(key=lambda entry: (block_keys.get(entry[1], entry[2]), entry[2]))
+    numbers = {}
+    ordered = []
+    for item, circuit, _key in keyed:
+        if circuit is not None and circuit not in numbers:
+            numbers[circuit] = len(numbers) + 1
+        item["circuit"] = circuit
+        item["circuit_no"] = numbers.get(circuit)
+        ordered.append(item)
+    return ordered
 
 
 def exercise_usage(user):

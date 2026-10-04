@@ -8,7 +8,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import F
+from django.db.models import Count, F, Max
 from django.utils import timezone
 
 from workouts.models import (
@@ -21,8 +21,8 @@ from workouts.models import (
     StrengthSet,
     collapse_spaces,
     decimal_display,
-    exercise_order_key,
     metric_display,
+    order_exercises,
     rest_display,
     ru_plural,
     with_weight_step,
@@ -172,7 +172,7 @@ def last_sets(user, exercise):
     )
 
 
-def create_planned_sets(workout, exercise, *, done=False):
+def create_planned_sets(workout, exercise, *, done=False, circuit=None):
     """Подходы нового упражнения: копия прошлого раза или один пустой.
 
     Номера проставляются заново с единицы — в источнике могли быть пропуски.
@@ -181,6 +181,8 @@ def create_planned_sets(workout, exercise, *, done=False):
 
     done=True — для записанной тренировки (экран правки): в ней плановых
     подходов не бывает. Метки done_at у таких нет — когда их сделали, неизвестно.
+    circuit — номер круга, в который упражнение добавляется («+ Упражнение в
+    круг», «Повторить» с кругами).
     """
     previous = last_sets(workout.user, exercise)
     rows = [
@@ -190,6 +192,7 @@ def create_planned_sets(workout, exercise, *, done=False):
             set_number=number,
             measurement=exercise.measurement,
             done=done,
+            circuit=circuit,
             **set_values(exercise.measurement, source),
         )
         for number, source in enumerate(previous, start=1)
@@ -200,6 +203,7 @@ def create_planned_sets(workout, exercise, *, done=False):
             set_number=1,
             measurement=exercise.measurement,
             done=done,
+            circuit=circuit,
             **set_values(exercise.measurement, None),
         )
     ]
@@ -273,7 +277,12 @@ def group_sets(rows, notes=None):
         group["first_done_at"] = min(
             (row.done_at for row in group["sets"] if row.done_at is not None), default=None
         )
-    groups.sort(key=lambda g: exercise_order_key(g["first_done_at"], g["first_set_id"]))
+        # Номер круга у всех подходов упражнения один; min терпит расхождение
+        # (как Min в SQL у двух других потребителей) — правило то же.
+        group["circuit"] = min(
+            (row.circuit for row in group["sets"] if row.circuit is not None), default=None
+        )
+    groups = order_exercises(groups)
     for position, group in enumerate(groups, start=1):
         # Номер упражнения на экране. Считается здесь, а не в шаблоне: живой экран
         # разрезает этот список на «сейчас / дальше / выполнено», и forloop.counter
@@ -319,6 +328,141 @@ def drop_orphan_notes(workout):
     ).delete()
 
 
+# ---------- Круги: суперсет, трисет, круг из N ----------
+
+
+def circuit_label(size):
+    """Подпись круга по числу упражнений: «Суперсет», «Трисет», «Круг · 5 упражнений»."""
+    if size == 2:
+        return "Суперсет"
+    if size == 3:
+        return "Трисет"
+    return f"Круг · {size} {ru_plural(size, 'упражнение', 'упражнения', 'упражнений')}"
+
+
+def round_scan(members):
+    """Следующий подход круга: (группа, индекс раунда) или None, если круг пройден.
+
+    Раунд — позиция подхода внутри упражнения, члены — в порядке круга:
+    A1 → B1 → C1 → A2 → … Упражнение с меньшим числом подходов в поздних
+    раундах просто пропускается.
+    """
+    rounds = max((len(member["sets"]) for member in members), default=0)
+    for index in range(rounds):
+        for member in members:
+            sets = member["sets"]
+            if index < len(sets) and not sets[index].done:
+                return member, index
+    return None
+
+
+def blocks(groups):
+    """Упорядоченные группы, сложенные в блоки: одно упражнение или круг.
+
+    Члены круга уже стоят подряд (order_exercises), поэтому блок — это просто
+    подряд идущие группы с одним номером круга.
+    """
+    result = []
+    for group in groups:
+        circuit = group.get("circuit")
+        if circuit is not None and result and result[-1]["circuit"] == circuit:
+            result[-1]["members"].append(group)
+            continue
+        result.append(
+            {"circuit": circuit, "circuit_no": group.get("circuit_no"), "members": [group]}
+        )
+    for block in result:
+        if block["circuit"] is None:
+            continue
+        members = block["members"]
+        block["label"] = circuit_label(len(members))
+        block["rounds"] = max(len(member["sets"]) for member in members)
+        found = round_scan(members)
+        # «круг 2 из 3»: раунд следующего подхода, а у пройденного круга — последний.
+        block["round"] = found[1] + 1 if found else block["rounds"]
+    return result
+
+
+def drop_lone_circuits(workout):
+    """Стереть номера кругов, в которых осталось меньше двух упражнений.
+
+    Такой номер кругом уже не считается (order_exercises), но, оставшись в
+    базе, неожиданно «склеил» бы упражнение с будущим кругом того же номера.
+    """
+    lone = list(
+        workout.sets.exclude(circuit=None)
+        .values("circuit")
+        .annotate(members=Count("exercise", distinct=True))
+        .filter(members__lt=2)
+        .values_list("circuit", flat=True)
+    )
+    if lone:
+        workout.sets.filter(circuit__in=lone).update(circuit=None)
+
+
+def link_with_next(workout, exercise_id, next_id):
+    """Связать упражнение со следующим в круг. False — пара уже не соседняя.
+
+    Оба id приходят из окна «Круги»: если вкладка устарела — между ними что-то
+    появилось или они уже в одном круге, — ничего не меняем, окно перерисуется
+    с настоящим порядком. Иначе: новый круг, присоединение к кругу соседа или
+    слияние двух кругов в первый.
+    """
+    groups = exercise_groups(workout)
+    order = [group["exercise"].pk for group in groups]
+    if exercise_id not in order:
+        return False
+    index = order.index(exercise_id)
+    if index + 1 >= len(order) or order[index + 1] != next_id:
+        return False
+    first, second = groups[index], groups[index + 1]
+    if first["circuit"] is not None and first["circuit"] == second["circuit"]:
+        return False
+    if first["circuit"] is not None and second["circuit"] is not None:
+        workout.sets.filter(circuit=second["circuit"]).update(circuit=first["circuit"])
+    elif first["circuit"] is not None:
+        workout.sets.filter(exercise_id=next_id).update(circuit=first["circuit"])
+    elif second["circuit"] is not None:
+        workout.sets.filter(exercise_id=exercise_id).update(circuit=second["circuit"])
+    else:
+        # Новый номер — после всех, что есть, включая одинокие остатки: так
+        # остаток не склеится с новым кругом.
+        number = (workout.sets.aggregate(top=Max("circuit"))["top"] or 0) + 1
+        workout.sets.filter(exercise_id__in=[exercise_id, next_id]).update(circuit=number)
+    return True
+
+
+def unlink(workout, exercise_id):
+    """Убрать упражнение из круга; круг из одного упражнения разбирается."""
+    workout.sets.filter(exercise_id=exercise_id).update(circuit=None)
+    drop_lone_circuits(workout)
+
+
+def add_round(workout, circuit):
+    """«+ Круг»: по подходу каждому упражнению круга — копия его последнего.
+
+    На записанной тренировке подходы сразу выполненные, без метки времени, —
+    как у «+ подход» на экране правки. False — такого круга уже нет.
+    """
+    members = [group for group in exercise_groups(workout) if group["circuit"] == circuit]
+    if len(members) < 2:
+        return False
+    with transaction.atomic():
+        for member in members:
+            exercise = member["exercise"]
+            last = member["sets"][-1]
+            StrengthSet.objects.create(
+                workout=workout,
+                exercise=exercise,
+                set_number=max(row.set_number for row in member["sets"]) + 1,
+                measurement=exercise.measurement,
+                done=workout.is_finished,
+                circuit=circuit,
+                **set_values(exercise.measurement, last),
+            )
+    return True
+
+
 def live_groups(workout):
     """Группы для живого экрана: у каждой статус current / queue / done и подсказка."""
     groups = exercise_groups(workout)
@@ -329,10 +473,17 @@ def live_groups(workout):
         if workout.current_exercise_id in pending_ids:
             current_id = workout.current_exercise_id
         else:
-            # Первое в порядке exercise_order_key, то есть «раньше начатое
-            # незакрытое, а если начатых нет — первое по плану»: возвращает
-            # к тому, что не доделал, а не к первому добавленному.
+            # Первое по общему порядку, то есть «раньше начатое незакрытое, а
+            # если начатых нет — первое по плану»: возвращает к тому, что не
+            # доделал, а не к первому добавленному. У круга — тот, чья очередь
+            # в раунде (A1 → B1 → A2 …), а не первый незакрытый.
+            first = next(g for g in groups if g["exercise"].pk == pending_ids[0])
             current_id = pending_ids[0]
+            if first["circuit"] is not None:
+                members = [g for g in groups if g["circuit"] == first["circuit"]]
+                found = round_scan(members)
+                if found is not None:
+                    current_id = found[0]["exercise"].pk
 
     for group in groups:
         sets = group["sets"]
@@ -358,13 +509,26 @@ def live_groups(workout):
 
 
 def live_context(workout):
-    """Контекст региона упражнений: группы, разложенные по статусам."""
+    """Контекст региона упражнений: группы и блоки, разложенные по статусам.
+
+    Блок — одно упражнение или круг. Круг стоит в разделе своего самого
+    «живого» члена: с текущим — в «Сейчас», с невыполненными — в «Дальше»,
+    пройденный целиком — в «Выполнено»; внутри члены рисуются по своему статусу.
+    """
     groups = live_groups(workout)
+    all_blocks = blocks(groups)
+    for block in all_blocks:
+        states = {member["state"] for member in block["members"]}
+        block["state"] = next(state for state in ("current", "queue", "done") if state in states)
     return {
         "workout": workout,
         "current_group": next((g for g in groups if g["state"] == "current"), None),
         "queue_groups": [g for g in groups if g["state"] == "queue"],
         "done_groups": [g for g in groups if g["state"] == "done"],
+        "current_block": next((b for b in all_blocks if b["state"] == "current"), None),
+        "queue_blocks": [b for b in all_blocks if b["state"] == "queue"],
+        "done_blocks": [b for b in all_blocks if b["state"] == "done"],
+        "exercises_count": len(groups),
     }
 
 

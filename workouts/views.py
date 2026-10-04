@@ -980,6 +980,9 @@ class LiveSetAddView(LoginRequiredMixin, View):
                     # пуст: когда его сделали, неизвестно — как у тренировки,
                     # внесённой задним числом.
                     done=workout.is_finished,
+                    # Подход упражнения из круга — тоже в круге: номер у всех
+                    # подходов упражнения один.
+                    circuit=last.circuit if last else None,
                     **services.set_values(exercise.measurement, last),
                 )
         except IntegrityError:
@@ -1191,6 +1194,7 @@ class SetDeleteView(LoginRequiredMixin, View):
         # Если это был последний подход упражнения, его заметке в тренировке
         # больше не место — иначе она всплыла бы при повторном добавлении.
         services.drop_orphan_notes(workout)
+        services.drop_lone_circuits(workout)
         return live_region_response(request, workout)
 
 
@@ -1547,6 +1551,7 @@ class WorkoutFinishView(LoginRequiredMixin, View):
         # Упражнение, которое так и не сделали, уходит вместе с плановыми
         # подходами — и его заметка тоже.
         services.drop_orphan_notes(workout)
+        services.drop_lone_circuits(workout)
         # Кардио-части считаются содержимым наравне с подходами: иначе
         # завершение тренировки, где успели только пробежку, стёрло бы её.
         if not workout.sets.exists() and not workout.cardio_parts.exists():
@@ -1678,7 +1683,8 @@ class WorkoutRepeatView(LoginRequiredMixin, View):
                 raise
             return redirect("workout_live", pk=active.pk)
         for group in services.exercise_groups(source):
-            services.create_planned_sets(workout, group["exercise"])
+            # Круги переносятся: «повторить» — сделать то же, а суперсет — часть «того же».
+            services.create_planned_sets(workout, group["exercise"], circuit=group["circuit_no"])
         return redirect("workout_live", pk=workout.pk)
 
 
