@@ -14,20 +14,6 @@
   <div class="app-live-now">
   {% if current_block %}
     {% include "workouts/_live_block.html" with block=current_block %}
-    {% comment %}
-      Пара «Начать тренировку»: та же подготовка, но тренировка уже была — так
-      в приложение переезжает бумажная тетрадка. Дата, время и длительность у
-      всей тренировки, поэтому кнопка стоит под карточкой текущего упражнения
-      (и под рамкой суперсета), а не в ней: внутри казалось, что дату ставят
-      упражнению. Не в шапке — там на 375px уже заголовок, статус, место и день.
-    {% endcomment %}
-    {% if workout.is_planned %}
-      <button type="button" class="btn btn-quiet w-100 app-backdate-btn"
-              hx-get="{% url 'workout_backdate' workout.pk %}"
-              hx-target="#modal" hx-swap="innerHTML">
-        Записать тренировку задним числом
-      </button>
-    {% endif %}
   {% endif %}
 
   </div>

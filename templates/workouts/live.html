@@ -9,7 +9,8 @@
 {% comment %}
   Один экран на черновик и на идущую тренировку: различие — есть ли started_at.
   У черновика таймер не рендерится вовсе (пустой data-started дал бы «NaN:NaN»),
-  карточки отдыха тоже нет — отдыхать до старта нечего.
+  карточки отдыха тоже нет — отдыхать до старта нечего; на её месте блок
+  старта (_draft_start.html).
 {% endcomment %}
 {% comment %}
   На ПК экран идёт во всю ширину: с 768 две колонки (слева текущее упражнение
@@ -64,7 +65,11 @@
   {% endif %}
 </div>
 
-{% if not workout.is_planned %}{% include "workouts/_live_rest.html" %}{% endif %}
+{% if workout.is_planned %}
+  {% include "workouts/_draft_start.html" %}
+{% else %}
+  {% include "workouts/_live_rest.html" %}
+{% endif %}
 {% include "workouts/_live_exercises.html" %}
 {% comment %}
   Кардио этой же тренировки: разминка до подходов или заминка после — одна

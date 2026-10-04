@@ -9,14 +9,13 @@
   время с весом. Больше двух полей не бывает — на 375px три степпера (две кнопки
   по 44px плюс значение) не помещаются.
 
-  У текущего подхода внизу «Подход выполнен», в черновике на его месте «Начать
-  тренировку»: рука в зале уже там. Признак берём у модели (workout.is_planned),
-  а не из контекста — партиал рендерится и из live.html, и из
-  live_region_response. Её пара — «Записать тренировку задним числом» — стоит
-  не здесь, а под карточкой (_live_exercises.html): здесь казалось, что дату
-  ставят упражнению. У открытого планового подхода вместо них «Готово»:
-  выполнять подходы не по порядку нельзя, иначе номера и порядок разъехались бы.
-  Ждёт set, group и workout.
+  У текущего подхода внизу «Подход выполнен». В черновике кнопки нет вовсе:
+  «Начать тренировку» и «Записать тренировку задним числом» — действия всей
+  тренировки и стоят наверху экрана (_draft_start.html); здесь они выглядели
+  настройками упражнения. Признак берём у модели (workout.is_planned), а не из
+  контекста — партиал рендерится и из live.html, и из live_region_response. У
+  открытого планового подхода внизу «Готово»: выполнять подходы не по порядку
+  нельзя, иначе номера и порядок разъехались бы. Ждёт set, group и workout.
 {% endcomment %}
 <div class="app-live-current">
   <div class="app-live-current-head">
@@ -39,12 +38,7 @@
         Готово
       </button>
     </div>
-  {% elif workout.is_planned %}
-    <form method="post" action="{% url 'draft_start' workout.pk %}">
-      {% csrf_token %}
-      <button type="submit" class="btn btn-accent w-100 app-btn-big">Начать тренировку</button>
-    </form>
-  {% else %}
+  {% elif not workout.is_planned %}
     <button type="button" class="btn btn-accent w-100 app-btn-big"
             hx-post="{% url 'set_done' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
             hx-sync="closest .app-live-exercise:queue all" hx-disabled-elt="this">

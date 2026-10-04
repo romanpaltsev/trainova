@@ -1112,9 +1112,20 @@ a.btn {
   grid-template-columns: 1fr;
 }
 
-/* «Записать тренировку задним числом» — под карточкой текущего упражнения, а не
-   в ней: дата у тренировки. Отступ снизу — как у карточки над ней. */
-.app-backdate-btn {
+/* У текущего подхода черновика под степперами ничего нет: «Начать тренировку»
+   ушла наверх экрана. Поле сетки снизу с паддингом панели дало бы двойной
+   отступ. */
+.app-live-current .app-field-grid:last-child {
+  margin-bottom: 0;
+}
+
+/* Старт черновика — «Начать тренировку» и «Записать тренировку задним
+   числом» — на месте карточки отдыха, которая появится после старта:
+   действия всей тренировки, а не упражнения. Отступ снизу — как у отдыха. */
+.app-draft-start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
   margin-bottom: var(--app-space-4);
 }
 
@@ -3628,7 +3639,8 @@ a.btn {
      тренировки, и там он — колонки итога (.app-summary-list). */
   .app-live-screen > #exercises { display: contents; }
   .app-live-now { grid-column: 1; grid-row: 3 / -1; }
-  .app-live-screen > .app-rest { grid-column: 2; grid-row: 3; }
+  /* Старт черновика занимает слот отдыха — там после старта встанет таймер. */
+  .app-live-screen > :is(.app-rest, .app-draft-start) { grid-column: 2; grid-row: 3; }
   .app-live-plan { grid-column: 2; grid-row: 4; }
   .app-live-done { grid-column: 2; grid-row: 5; }
   .app-live-screen > .app-cardio-parts,
@@ -3636,7 +3648,8 @@ a.btn {
   /* Текущего упражнения нет (новый черновик, всё выполнено) — рабочая колонка
      пуста, и блоки встают во всю ширину, а не жмутся вправо. */
   .app-live-screen:not(:has(.app-live-now *))
-    :is(.app-rest, .app-live-plan, .app-live-done, .app-cardio-parts, .app-cardio-add-tile) {
+    :is(.app-rest, .app-draft-start, .app-live-plan, .app-live-done, .app-cardio-parts,
+      .app-cardio-add-tile) {
     grid-column: 1 / -1;
   }
 }
@@ -3866,14 +3879,14 @@ a.btn {
     grid-template-rows: repeat(5, auto) 1fr;
   }
   .app-live-plan { grid-column: 2; grid-row: 3 / -1; }
-  .app-live-screen > .app-rest { grid-column: 3; grid-row: 3; }
+  .app-live-screen > :is(.app-rest, .app-draft-start) { grid-column: 3; grid-row: 3; }
   .app-live-done { grid-column: 3; grid-row: 4; }
   .app-live-screen > .app-cardio-parts,
   .app-live-screen > .app-cardio-add-tile { grid-column: 3; grid-row: 5; }
   /* Без текущего упражнения «Дальше» забирает и рабочую колонку. */
   .app-live-screen:not(:has(.app-live-now *)) .app-live-plan { grid-column: 1 / span 2; }
   .app-live-screen:not(:has(.app-live-now *))
-    :is(.app-rest, .app-live-done, .app-cardio-parts, .app-cardio-add-tile) {
+    :is(.app-rest, .app-draft-start, .app-live-done, .app-cardio-parts, .app-cardio-add-tile) {
     grid-column: 3;
   }
 

@@ -1562,7 +1562,9 @@ class WorkoutBackdateView(LoginRequiredMixin, View):
 
     def get(self, request, pk):
         workout = self.get_workout()
-        return self.render_modal(request, workout, StrengthTimeForm())
+        # Кнопка стоит наверху любого черновика, и пустого тоже: что записать
+        # нельзя, окно говорит сразу, а не после заполнения даты и длительности.
+        return self.render_modal(request, workout, StrengthTimeForm(), self.content_error(workout))
 
     def post(self, request, pk):
         workout = self.get_workout()

@@ -5,15 +5,18 @@
 определению: когда это было и сколько длилось.
 """
 
+import importlib
 from datetime import datetime, timedelta
 
 import pytest
+from django.apps import apps as django_apps
 from django.urls import reverse
 from django.utils import timezone
 
 from workouts import services, stats
-from workouts.models import Exercise, Sport, Workout
+from workouts.models import ChangelogEntry, Exercise, Sport, Workout
 from workouts.tests.factories import (
+    ChangelogEntryFactory,
     ExerciseFactory,
     SportFactory,
     StrengthSetFactory,
@@ -214,10 +217,10 @@ def test_today_with_a_future_time_is_rejected(client, user, strength, monkeypatc
 
 
 @pytest.mark.parametrize("superset", [False, True], ids=["single", "superset"])
-def test_button_stands_under_the_exercise_card_not_in_it(client, user, strength, superset):
-    """Дата у тренировки, а не у упражнения: внутри карточки текущего
-    упражнения кнопка выглядела настройкой упражнения. Всё, что в «Сейчас»
-    обёрнуто в section, — это текущий блок: карточка или рамка суперсета."""
+def test_start_and_backdate_stand_above_the_exercises(client, user, strength, superset):
+    """«Начать тренировку» и «Записать задним числом» — действия всей тренировки:
+    они стоят наверху черновика, на месте карточки отдыха, а не в карточке
+    упражнения и не в рамке суперсета, где выглядели его настройками."""
     workout = draft(user, strength)
     for name in ("A", "B"):
         StrengthSetFactory(
@@ -227,13 +230,66 @@ def test_button_stands_under_the_exercise_card_not_in_it(client, user, strength,
             circuit=1 if superset else None,
         )
     client.force_login(user)
+    url = reverse("workout_live", args=[workout.pk])
+    start = reverse("draft_start", args=[workout.pk])
+    backdate = reverse("workout_backdate", args=[workout.pk])
 
-    content = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+    page = client.get(url).content.decode()
+    region = client.get(url, headers={"HX-Request": "true"}).content.decode()
 
-    now = content[content.index('class="app-live-now"') : content.index('class="app-live-plan"')]
-    button = now.index(reverse("workout_backdate", args=[workout.pk]))
-    assert now.rindex("</section>") < button
-    assert "Записать тренировку задним числом" in now
+    top = page[page.index('class="app-draft-start"') : page.index('<div id="exercises"')]
+    assert start in top and backdate in top
+    assert "Записать тренировку задним числом" in top
+    assert start not in region and backdate not in region
+
+
+def test_empty_draft_can_be_started_but_not_backdated(client, user, strength):
+    """Начать пустую тренировку можно — упражнения добавят по ходу. Записать
+    задним числом нельзя, и окно говорит это сразу при открытии, а не после
+    заполнения даты и длительности."""
+    workout = draft(user, strength)
+    client.force_login(user)
+
+    page = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+    modal = client.get(reverse("workout_backdate", args=[workout.pk]))
+    client.post(reverse("draft_start", args=[workout.pk]))
+
+    assert reverse("draft_start", args=[workout.pk]) in page
+    assert "нет упражнений" in modal.context["error"]
+    workout.refresh_from_db()
+    assert not workout.is_planned
+
+
+def test_live_workout_has_rest_card_instead_of_start(client, user, strength):
+    workout = WorkoutFactory(user=user, sport=strength, duration_min=None)
+    StrengthSetFactory(workout=workout, done=False)
+    client.force_login(user)
+
+    page = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+
+    assert 'class="app-draft-start"' not in page
+    assert 'id="rest-card"' in page
+
+
+def test_migration_announces_start_and_fixes_backdate_news():
+    """Вышедшая час назад новость говорила «под карточкой» — правим её текст,
+    дату не трогаем; новая запись — про «Начать тренировку»."""
+    migration = importlib.import_module("workouts.migrations.0063_announce_draft_start")
+    ChangelogEntry.objects.filter(title__in=[migration.TITLE, migration.BACKDATE_TITLE]).delete()
+    backdate_news = ChangelogEntryFactory(
+        title=migration.BACKDATE_TITLE, body=migration.BACKDATE_OLD_BODY
+    )
+
+    migration.add_entry(django_apps, None)
+    added = ChangelogEntry.objects.get(title=migration.TITLE)
+    fixed = ChangelogEntry.objects.get(pk=backdate_news.pk)
+    migration.remove_entry(django_apps, None)
+
+    assert (added.kind, added.is_published) == ("fix", True)
+    assert fixed.body == migration.BACKDATE_BODY and "под карточкой" not in fixed.body
+    assert fixed.published_at == backdate_news.published_at
+    assert ChangelogEntry.objects.get(pk=backdate_news.pk).body == migration.BACKDATE_OLD_BODY
+    assert not ChangelogEntry.objects.filter(title=migration.TITLE).exists()
 
 
 def test_draft_without_sets_is_not_recorded_and_not_deleted(client, user, strength):
