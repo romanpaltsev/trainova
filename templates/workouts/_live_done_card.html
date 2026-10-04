@@ -1,0 +1,20 @@
+{% comment %}
+  Карточка выполненного упражнения: подходы можно вернуть в работу тапом. Ждёт group.
+{% endcomment %}
+<section class="app-card app-live-exercise">
+  <div class="app-live-exercise-head">
+    <div class="app-live-exercise-title">
+      <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
+      <h2 class="app-live-exercise-name">
+        <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
+      </h2>
+    </div>
+    <span class="app-live-exercise-meta">{{ group.hint }}</span>
+  </div>
+  {% include "workouts/_live_note.html" with group=group %}
+  <div class="app-live-sets">
+    {% for set in group.done_sets %}
+      {% include "workouts/_live_done_set.html" %}
+    {% endfor %}
+  </div>
+</section>

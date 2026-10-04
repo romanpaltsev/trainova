@@ -1,0 +1,58 @@
+{% comment %}
+  Карточка текущего упражнения живого режима: подходы, панель текущего подхода,
+  план и ссылки. Ждёт group (state=current) и workout.
+{% endcomment %}
+<section class="app-card app-live-exercise">
+  <div class="app-live-exercise-head">
+    <div class="app-live-exercise-title">
+      <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
+      <h2 class="app-live-exercise-name">
+        <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
+      </h2>
+    </div>
+    <span class="app-sport-dot" style="--dot: var(--app-sport-strength)"></span>
+  </div>
+  <p class="app-live-last">{{ group.hint }}</p>
+  {% comment %}
+    Заметка стоит под заголовком, а не в ряду ссылок про подходы: она про
+    упражнение, и третья ссылка в том ряду переносилась бы на 375px.
+  {% endcomment %}
+  {% include "workouts/_live_note.html" with group=group %}
+
+  {% if group.done_sets %}
+    <div class="app-live-sets">
+      {% for set in group.done_sets %}
+        {% include "workouts/_live_done_set.html" %}
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% include "workouts/_live_current_set.html" with set=group.current_set %}
+
+  {% if group.upcoming %}
+    <div class="app-live-sets">
+      {% for set in group.upcoming %}
+        <div class="app-live-set is-planned">
+          <span class="app-live-set-num">{{ set.display_number }}</span>
+          <span class="app-live-set-value">
+            <span class="num">{{ set.value_display }}</span>
+          </span>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="app-live-links">
+    <button type="button" class="app-live-link is-accent"
+            hx-post="{% url 'live_set_add' workout.pk %}"
+            hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
+            hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+      + Добавить подход
+    </button>
+    <button type="button" class="app-live-link"
+            hx-post="{% url 'set_delete' group.current_set.pk %}"
+            hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+      Убрать подход
+    </button>
+  </div>
+</section>

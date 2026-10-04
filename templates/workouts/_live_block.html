@@ -1,0 +1,6 @@
+{% comment %}
+  Блок живого экрана: одно упражнение или круг. Ждёт block и workout.
+{% endcomment %}
+{% for group in block.members %}
+  {% include "workouts/_live_member.html" %}
+{% endfor %}

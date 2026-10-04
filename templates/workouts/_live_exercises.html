@@ -12,88 +12,17 @@
     на телефоне ничего не меняется; на десктопе CSS разводит их по колонкам.
   {% endcomment %}
   <div class="app-live-now">
-  {% if current_group %}
-    <section class="app-card app-live-exercise">
-      <div class="app-live-exercise-head">
-        <div class="app-live-exercise-title">
-          <span class="app-exercise-num" aria-hidden="true">{{ current_group.position }}</span>
-          <h2 class="app-live-exercise-name">
-            <span class="visually-hidden">упражнение {{ current_group.position }}: </span>{{ current_group.exercise.name }}
-          </h2>
-        </div>
-        <span class="app-sport-dot" style="--dot: var(--app-sport-strength)"></span>
-      </div>
-      <p class="app-live-last">{{ current_group.hint }}</p>
-      {% comment %}
-        Заметка стоит под заголовком, а не в ряду ссылок про подходы: она про
-        упражнение, и третья ссылка в том ряду переносилась бы на 375px.
-      {% endcomment %}
-      {% include "workouts/_live_note.html" with group=current_group %}
-
-      {% if current_group.done_sets %}
-        <div class="app-live-sets">
-          {% for set in current_group.done_sets %}
-            {% include "workouts/_live_done_set.html" %}
-          {% endfor %}
-        </div>
-      {% endif %}
-
-      {% include "workouts/_live_current_set.html" with set=current_group.current_set %}
-
-      {% if current_group.upcoming %}
-        <div class="app-live-sets">
-          {% for set in current_group.upcoming %}
-            <div class="app-live-set is-planned">
-              <span class="app-live-set-num">{{ set.display_number }}</span>
-              <span class="app-live-set-value">
-                <span class="num">{{ set.value_display }}</span>
-              </span>
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-
-      <div class="app-live-links">
-        <button type="button" class="app-live-link is-accent"
-                hx-post="{% url 'live_set_add' workout.pk %}"
-                hx-vals='{"exercise": "{{ current_group.exercise.pk }}"}'
-                hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
-          + Добавить подход
-        </button>
-        <button type="button" class="app-live-link"
-                hx-post="{% url 'set_delete' current_group.current_set.pk %}"
-                hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
-          Убрать подход
-        </button>
-      </div>
-    </section>
+  {% if current_block %}
+    {% include "workouts/_live_block.html" with block=current_block %}
   {% endif %}
 
   </div>
 
   <div class="app-live-plan">
-  {% if queue_groups %}
+  {% if queue_blocks %}
     <h2 class="app-section-title">Дальше</h2>
-    {% for group in queue_groups %}
-      <button type="button" class="app-card app-queue-row"
-              hx-post="{% url 'live_exercise_select' workout.pk %}"
-              hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
-              hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
-        <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
-        <span class="app-queue-text">
-          <span class="app-queue-name">
-            <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
-          </span>
-          <span class="app-queue-hint">{{ group.hint }}</span>
-          {% comment %}Только текст: сама строка очереди — button, вложенная кнопка невалидна.{% endcomment %}
-          {% if group.note %}
-            <span class="app-queue-hint">{{ group.note|truncatechars:60 }}</span>
-          {% endif %}
-        </span>
-        <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-             aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-      </button>
+    {% for block in queue_blocks %}
+      {% include "workouts/_live_block.html" %}
     {% endfor %}
   {% endif %}
 
@@ -108,26 +37,10 @@
   </div>
 
   <div class="app-live-done">
-  {% if done_groups %}
+  {% if done_blocks %}
     <h2 class="app-section-title">Выполнено</h2>
-    {% for group in done_groups %}
-      <section class="app-card app-live-exercise">
-        <div class="app-live-exercise-head">
-          <div class="app-live-exercise-title">
-            <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
-            <h2 class="app-live-exercise-name">
-              <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
-            </h2>
-          </div>
-          <span class="app-live-exercise-meta">{{ group.hint }}</span>
-        </div>
-        {% include "workouts/_live_note.html" with group=group %}
-        <div class="app-live-sets">
-          {% for set in group.done_sets %}
-            {% include "workouts/_live_done_set.html" %}
-          {% endfor %}
-        </div>
-      </section>
+    {% for block in done_blocks %}
+      {% include "workouts/_live_block.html" %}
     {% endfor %}
   {% endif %}
   </div>

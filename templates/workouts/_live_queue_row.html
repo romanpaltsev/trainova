@@ -1,0 +1,22 @@
+{% comment %}
+  Строка очереди «Дальше»: тап делает упражнение текущим. Ждёт group и workout.
+{% endcomment %}
+  <button type="button" class="app-card app-queue-row"
+          hx-post="{% url 'live_exercise_select' workout.pk %}"
+          hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
+          hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+    <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
+    <span class="app-queue-text">
+      <span class="app-queue-name">
+        <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
+      </span>
+      <span class="app-queue-hint">{{ group.hint }}</span>
+      {% comment %}Только текст: сама строка очереди — button, вложенная кнопка невалидна.{% endcomment %}
+      {% if group.note %}
+        <span class="app-queue-hint">{{ group.note|truncatechars:60 }}</span>
+      {% endif %}
+    </span>
+    <svg class="app-pick-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none"
+         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+  </button>

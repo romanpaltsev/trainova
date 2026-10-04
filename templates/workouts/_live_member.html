@@ -1,0 +1,12 @@
+{% comment %}
+  Упражнение живого экрана по его статусу: текущее, в очереди или выполненное.
+  Ждёт group и workout. Отдельно от блока, потому что и круг рисует своих членов
+  этими же карточками.
+{% endcomment %}
+{% if group.state == "current" %}
+  {% include "workouts/_live_current_card.html" %}
+{% elif group.state == "queue" %}
+  {% include "workouts/_live_queue_row.html" %}
+{% else %}
+  {% include "workouts/_live_done_card.html" %}
+{% endif %}
