@@ -52,7 +52,7 @@
         (смена пароля, почта, выход) открываются из профиля — за ним и числятся.
       {% endcomment %}
       <div class="app-sidebar-group"><span class="app-sidebar-label">Моё</span></div>
-      <a class="app-side-link{% if url_name == 'profile' or url_name|slice:':8' == 'account_' %} is-active{% endif %}" href="{% url 'profile' %}" title="Профиль">
+      <a class="app-side-link{% if url_name == 'profile' or url_name == 'workout_trash' or url_name|slice:':8' == 'account_' %} is-active{% endif %}" href="{% url 'profile' %}" title="Профиль">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.3 3.1-5.5 7-5.5s7 2.2 7 5.5"/>
@@ -167,8 +167,16 @@
 {% endcomment %}
 <main class="app-main {% block main_class %}{% endblock %}">
   {% if messages %}
+    {% comment %}
+      Класс — по level_tag, а не по tags: в tags идут и extra_tags, и метка
+      «restore:<id>» сломала бы app-alert-success. По этой метке у сообщения об
+      удалении тренировки появляется кнопка «Восстановить» (workouts.trash);
+      сам текст остаётся простым текстом.
+    {% endcomment %}
     {% for message in messages %}
-      <div class="app-alert app-alert-{{ message.tags|default:'info' }}" role="alert">{{ message }}</div>
+      {% with action=message.extra_tags|slice:':8' %}
+        <div class="app-alert app-alert-{{ message.level_tag|default:'info' }}{% if action == 'restore:' %} has-action{% endif %}" role="alert">{{ message }}{% if action == 'restore:' %}<form method="post" action="{% url 'workout_restore' message.extra_tags|slice:'8:' %}">{% csrf_token %}<button type="submit" class="app-alert-action">Восстановить</button></form>{% endif %}</div>
+      {% endwith %}
     {% endfor %}
   {% endif %}
   {% block content %}{% endblock %}

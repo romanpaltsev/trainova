@@ -16,7 +16,9 @@
     {# У черновика даты нет: фильтр date отдал бы пустоту и точка повисла бы в воздухе. #}
     {% if workout.is_planned %}{{ plan_label }}{% else %}{{ workout.started_at|date:"j E Y, H:i" }}{% endif %}
   </p>
-  <p class="text-secondary-app">Действие нельзя отменить.</p>
+  <p class="text-secondary-app">
+    30 дней {% if workout.is_planned %}его{% else %}её{% endif %} можно будет вернуть из «Недавно удалённых».
+  </p>
 
   <form method="post">
     {% csrf_token %}

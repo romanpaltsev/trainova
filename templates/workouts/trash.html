@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}Недавно удалённые · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Недавно удалённые</h1>
+</div>
+
+<p class="text-secondary-app app-trash-lead">
+  Удалённые тренировки лежат здесь 30 дней, потом удаляются насовсем.
+</p>
+
+{% comment %}
+  Строки — та же доска, что у справочников. Форма внутри строки растворяется
+  (.app-rows form { display: contents }), и кнопка встаёт в ряд с текстом.
+{% endcomment %}
+<div class="app-rows app-rows-board">
+  {% for entry in entries %}
+    <div class="app-row app-trash-row">
+      <span class="app-sport-dot" style="--dot: var(--app-sport-{{ entry.color_key }})"></span>
+      <span class="app-row-text">
+        <span class="app-row-name">{{ entry.title }}</span>
+        <span class="app-row-meta">{{ entry.subtitle }} · удалено {{ entry.deleted_label }} · {{ entry.left_label }}</span>
+      </span>
+      <form method="post" action="{% url 'workout_restore' entry.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-quiet app-trash-restore">Восстановить</button>
+      </form>
+    </div>
+  {% empty %}
+    {% include "includes/empty_state.html" with title="Здесь пусто" text="Удалённые тренировки 30 дней лежат здесь — их можно вернуть." %}
+  {% endfor %}
+</div>
+{% endblock %}

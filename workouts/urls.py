@@ -40,6 +40,12 @@ urlpatterns = [
     path("profile/locations/", views.MyLocationsView.as_view(), name="my_locations"),
     # Мои замеры: имена маршрутов начинаются с body_ — по префиксу подсвечивается
     # пункт боковой панели.
+    path("profile/trash/", views.WorkoutTrashView.as_view(), name="workout_trash"),
+    path(
+        "profile/trash/<int:pk>/restore/",
+        views.WorkoutRestoreView.as_view(),
+        name="workout_restore",
+    ),
     path("profile/body/", views.BodyMeasurementsView.as_view(), name="body_measurements"),
     path("profile/body/new/", views.BodyMetricEditView.as_view(), name="body_metric_create"),
     path("profile/body/<int:pk>/", views.BodyMetricView.as_view(), name="body_metric"),

@@ -142,7 +142,7 @@
         {% include "includes/chevron.html" %}
       </a>
 
-      {# Без счётчика намеренно: он стоил бы запроса, а бюджет профиля уже 9 из 9. #}
+      {# Без счётчика намеренно: он стоил бы запроса сверх бюджета профиля (8). #}
       <a class="app-row" href="{% url 'data_transfer' %}">
         <span class="app-row-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -156,6 +156,22 @@
           <span class="app-row-name">Экспорт и импорт</span>
           <span class="app-row-meta">история и справочник в Excel</span>
         </span>
+        {% include "includes/chevron.html" %}
+      </a>
+
+      {# Счётчик — тем же запросом, что «моё» (accounts.views.owned_counts). #}
+      <a class="app-row" href="{% url 'workout_trash' %}">
+        <span class="app-row-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>
+          </svg>
+        </span>
+        <span class="app-row-text">
+          <span class="app-row-name">Недавно удалённые</span>
+          <span class="app-row-meta">30 дней можно вернуть</span>
+        </span>
+        {% if trash_count %}<span class="app-row-count num">{{ trash_count }}</span>{% endif %}
         {% include "includes/chevron.html" %}
       </a>
     </div>

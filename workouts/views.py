@@ -24,7 +24,7 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
-from workouts import excel, excel_import, exercise_excel, services, stats
+from workouts import excel, excel_import, exercise_excel, services, stats, trash
 from workouts.forms import (
     MAX_DURATION_HOURS,
     BodyMeasurementForm,
@@ -311,8 +311,25 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
         )
 
 
+def trash_subtitle(workout):
+    """Подзаголовок строки корзины: когда была тренировка — или что за черновик."""
+    if workout.is_planned:
+        return f"Черновик · {plan_label(workout)}"
+    started = timezone.localtime(workout.started_at)
+    # Год — только у прошлых лет: строка корзины и так в две строки на телефоне.
+    when = formats.date_format(
+        started, "j E, H:i" if started.year == timezone.localdate().year else "j E Y, H:i"
+    )
+    return when if workout.is_finished else f"Не завершена · начата {when}"
+
+
 class WorkoutDeleteView(LoginRequiredMixin, DeleteView):
-    """Удаление своей тренировки или черновика с подтверждением."""
+    """Удаление своей тренировки или черновика с подтверждением.
+
+    Удаляется по-настоящему, но снимок ложится в корзину на 30 дней
+    (workouts.trash): сообщение несёт кнопку «Восстановить», а «Недавно
+    удалённые» — в профиле и внизу истории.
+    """
 
     template_name = "workouts/workout_confirm_delete.html"
     context_object_name = "workout"
@@ -336,12 +353,61 @@ class WorkoutDeleteView(LoginRequiredMixin, DeleteView):
         return reverse("dashboard") if self.planned else reverse("workout_history")
 
     def form_valid(self, form):
-        # Запоминаем до удаления: после super() объект уже без строки в базе.
+        # Запоминаем до удаления: после него объекта в базе уже нет.
         self.planned = self.object.is_planned
-        messages.success(
-            self.request, "Черновик удалён." if self.planned else "Тренировка удалена."
+        stats.attach_muscle_groups(self.request.user, [self.object])
+        entry = trash.move_to_trash(
+            self.object,
+            title=self.object.muscle_groups or self.object.sport.name,
+            subtitle=trash_subtitle(self.object),
         )
-        return super().form_valid(form)
+        # Текст простой — кнопку «Восстановить» рисует base.html по метке.
+        messages.success(
+            self.request,
+            "Черновик удалён." if self.planned else "Тренировка удалена.",
+            extra_tags=trash.restore_tag(entry),
+        )
+        return redirect(self.get_success_url())
+
+
+class WorkoutTrashView(LoginRequiredMixin, TemplateView):
+    """«Недавно удалённые»: тренировки за 30 дней с кнопкой «Восстановить»."""
+
+    template_name = "workouts/trash.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        today = timezone.localdate()
+        entries = list(trash.recent_for(self.request.user))
+        for entry in entries:
+            deleted_on = timezone.localtime(entry.deleted_at).date()
+            left = max((timezone.localtime(entry.expires_at).date() - today).days, 0)
+            entry.deleted_label = measure_day_label(deleted_on, today)
+            entry.left_label = (
+                f"ещё {left} {ru_plural(left, 'день', 'дня', 'дней')}" if left else "последний день"
+            )
+        context.update({"entries": entries, "nav_active": "profile"})
+        return context
+
+
+class WorkoutRestoreView(LoginRequiredMixin, View):
+    """Вернуть тренировку из корзины (только POST): из сообщения или со страницы.
+
+    Чужой или уже возвращённый снимок — 404, как у любых чужих данных.
+    """
+
+    def post(self, request, pk):
+        try:
+            workout = trash.restore(pk, request.user)
+        except trash.RestoreRefused as refusal:
+            messages.error(request, str(refusal))
+            return redirect("workout_trash")
+        if workout is None:
+            raise Http404
+        messages.success(
+            request, "Черновик восстановлен." if workout.is_planned else "Тренировка восстановлена."
+        )
+        return redirect(trash.restored_url(workout))
 
 
 # ---------- Живой режим силовой тренировки ----------

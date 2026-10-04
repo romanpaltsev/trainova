@@ -67,4 +67,10 @@
     {% endif %}
   {% endif %}
 </div>
+
+{% comment %}
+  Корзина — там, откуда тренировки удаляют. Ссылка без счётчика: число стоило
+  бы запроса на каждой странице истории, а оно есть в профиле.
+{% endcomment %}
+<p class="app-trash-link"><a class="app-link" href="{% url 'workout_trash' %}">Недавно удалённые</a></p>
 {% endblock %}

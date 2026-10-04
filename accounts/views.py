@@ -13,11 +13,12 @@ from django.views.generic import TemplateView, View
 
 from accounts.forms import WeeklyGoalForm
 from accounts.models import User
-from workouts import stats
+from workouts import stats, trash
 from workouts.models import (
     REST_DELTAS,
     BodyMeasurement,
     ChangelogEntry,
+    DeletedWorkout,
     Exercise,
     Location,
     Sport,
@@ -27,16 +28,16 @@ from workouts.models import (
 
 
 def owned_counts(user):
-    """Число своих упражнений, видов спорта и замеров — одним запросом.
+    """Число своих упражнений, видов спорта, замеров и корзины — одним запросом.
 
     Подзапросами к строке пользователя, а не тремя .count(): бюджет профиля
     упирался в потолок, и третий счётчик (замеры) пробил бы его. Каждый
     подзапрос — GROUP BY по своей связи, поэтому строки не размножаются.
     """
 
-    def count(model, field):
+    def count(model, field, **conditions):
         rows = (
-            model.objects.filter(**{field: OuterRef("pk")})
+            model.objects.filter(**{field: OuterRef("pk")}, **conditions)
             .order_by()
             .values(field)
             .annotate(total=Count("pk"))
@@ -50,6 +51,8 @@ def owned_counts(user):
             exercises_count=count(Exercise, "owner"),
             sports_count=count(Sport, "owner"),
             measurements_count=count(BodyMeasurement, "user"),
+            # Корзина за 30 дней — тем же запросом: бюджет профиля упёрт в 8.
+            trash_count=count(DeletedWorkout, "user", deleted_at__gte=trash.cutoff()),
         )
         .get()
     )

@@ -1,8 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import NamedTuple
 
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
@@ -1455,3 +1456,62 @@ def measurement_delta(current, previous, unit):
         return "без изменений"
     sign = "+" if difference > 0 else "−"
     return f"{sign}{measurement_display(abs(difference), unit)}"
+
+
+# ---------- Корзина: «Недавно удалённые» ----------
+
+# Сколько удалённая тренировка лежит в корзине. Потом её чистит команда
+# purge_deleted — её запускает ночной scripts/backup.sh после удачного дампа.
+TRASH_RETENTION = timedelta(days=30)
+
+
+class ExactJSONEncoder(DjangoJSONEncoder):
+    """JSON снимка корзины: время целиком, с микросекундами.
+
+    DjangoJSONEncoder обрезает datetime до миллисекунд, и восстановленный
+    done_at отличался бы от исходного — а по нему считается порядок упражнений.
+    """
+
+    def default(self, o):
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
+
+
+class DeletedWorkout(models.Model):
+    """Удалённая тренировка: снимок на 30 дней («Недавно удалённые»).
+
+    Не флаг deleted_at у Workout: тренировки читают ещё и через джойны от
+    подходов, частей, заметок и справочников (рекорды, подстановка прошлых
+    значений, счётчики каталога), и фильтр менеджера их не накрыл бы, а PROTECT
+    держал бы справочники удалённой тренировкой. Поэтому тренировка удаляется по-
+    настоящему, а сюда ложится её снимок — строки с исходными pk и имена
+    справочников (workouts.trash). Ссылок на справочники у снимка нет намеренно:
+    он ничего не блокирует, а пропавшее к восстановлению находится по имени.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="пользователь",
+        on_delete=models.CASCADE,
+        related_name="deleted_workouts",
+    )
+    deleted_at = models.DateTimeField("удалена", default=timezone.now)
+    # Подписи считаются при удалении: строк тренировки к показу корзины уже нет.
+    title = models.CharField("заголовок", max_length=200)
+    subtitle = models.CharField("подзаголовок", max_length=200, blank=True)
+    color_key = models.CharField("цвет вида спорта", max_length=32, blank=True)
+    payload = models.JSONField("снимок", encoder=ExactJSONEncoder)
+
+    class Meta:
+        ordering = ["-deleted_at", "-id"]
+        indexes = [models.Index(fields=["user", "-deleted_at"], name="deleted_workout_user_idx")]
+        verbose_name = "удалённая тренировка"
+        verbose_name_plural = "удалённые тренировки"
+
+    def __str__(self):
+        return f"{self.title} — удалена {localtime(self.deleted_at):%d.%m.%Y %H:%M}"
+
+    @property
+    def expires_at(self):
+        return self.deleted_at + TRASH_RETENTION
