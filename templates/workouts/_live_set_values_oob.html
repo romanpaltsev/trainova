@@ -1,0 +1,6 @@
+{% comment %}
+  Строки плановых подходов, куда перешёл новый вес (services.carry_weight), —
+  out-of-band к ответу степпера. id и разметка — как у значения в
+  _live_planned_set.html. Без переводов строк: остаток ответа htmx кладёт в
+  поле степпера, и лишний пробел попал бы туда.
+{% endcomment %}{% for set in sets %}<span class="num" id="set-{{ set.pk }}-value" hx-swap-oob="true">{{ set.value_display }}</span>{% endfor %}

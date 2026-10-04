@@ -1,23 +1,28 @@
 {% comment %}
-  Панель текущего подхода. Степперы сохраняют каждый тап сразу и свапают только
-  span со значением — кнопки не пересоздаются, серия быстрых тапов не теряется.
-  Общая sync-очередь сериализует тапы и «Подход выполнен».
+  Панель открытого подхода: по умолчанию текущего (первого невыполненного), а
+  тап по плановой строке открывает любой другой. Степперы сохраняют каждый тап
+  сразу и свапают только span со значением — кнопки не пересоздаются, серия
+  быстрых тапов не теряется. Общая sync-очередь карточки сериализует тапы,
+  «Подход выполнен», «Готово» и тапы по строкам подходов.
 
   Поля зависят от единицы упражнения: вес и повторы, только повторы, время или
   время с весом. Больше двух полей не бывает — на 375px три степпера (две кнопки
   по 44px плюс значение) не помещаются.
 
-  В черновике на месте «Подход выполнен» стоит «Начать тренировку»: рука в зале
-  уже там. Признак берём у модели (workout.is_planned), а не из контекста —
-  партиал рендерится и из live.html, и из live_region_response. Её пара —
-  «Записать тренировку задним числом» — стоит не здесь, а под карточкой
-  (_live_exercises.html): здесь казалось, что дату ставят упражнению.
+  У текущего подхода внизу «Подход выполнен», в черновике на его месте «Начать
+  тренировку»: рука в зале уже там. Признак берём у модели (workout.is_planned),
+  а не из контекста — партиал рендерится и из live.html, и из
+  live_region_response. Её пара — «Записать тренировку задним числом» — стоит
+  не здесь, а под карточкой (_live_exercises.html): здесь казалось, что дату
+  ставят упражнению. У открытого планового подхода вместо них «Готово»:
+  выполнять подходы не по порядку нельзя, иначе номера и порядок разъехались бы.
+  Ждёт set, group и workout.
 {% endcomment %}
 <div class="app-live-current">
   <div class="app-live-current-head">
     <span class="app-live-set-num">{{ set.display_number }}</span>
     <span class="text-secondary-app">
-      {% if workout.is_planned %}подход в плане{% else %}текущий подход{% endif %}
+      {% if workout.is_planned or set.pk != group.current_set.pk %}подход в плане{% else %}текущий подход{% endif %}
     </span>
   </div>
 
@@ -25,7 +30,16 @@
 
   {% include "workouts/_set_steppers.html" %}
 
-  {% if workout.is_planned %}
+  {% if set.pk != group.current_set.pk %}
+    <div class="app-live-links">
+      <button type="button" class="app-live-link is-accent"
+              hx-get="{% url 'workout_live' workout.pk %}"
+              hx-target="#exercises" hx-swap="outerHTML"
+              hx-sync="closest .app-live-exercise:queue all">
+        Готово
+      </button>
+    </div>
+  {% elif workout.is_planned %}
     <form method="post" action="{% url 'draft_start' workout.pk %}">
       {% csrf_token %}
       <button type="submit" class="btn btn-accent w-100 app-btn-big">Начать тренировку</button>
@@ -33,7 +47,7 @@
   {% else %}
     <button type="button" class="btn btn-accent w-100 app-btn-big"
             hx-post="{% url 'set_done' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
-            hx-sync="closest .app-live-current:queue all" hx-disabled-elt="this">
+            hx-sync="closest .app-live-exercise:queue all" hx-disabled-elt="this">
       Подход выполнен
     </button>
   {% endif %}

@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 from django.urls import reverse
 
-from workouts.models import StrengthSet
+from workouts.models import StrengthSet, Workout
 from workouts.tests.factories import ExerciseFactory, StrengthSetFactory, WorkoutFactory
 
 pytestmark = pytest.mark.django_db
@@ -293,3 +293,189 @@ def test_set_done_writes_mark_and_undo_clears_it(client, user):
     client.post(reverse("set_undo", args=[row.pk]))
     row.refresh_from_db()
     assert row.done_at is None
+
+
+# ---------- Любой плановый подход, перенос веса, «+ подход» у выполненного ----------
+
+
+def plan(workout, exercise, weights, *, done=0):
+    """Подходы упражнения по весам (по 10 повторов); done — сколько первых выполнено."""
+    return [
+        StrengthSetFactory(
+            workout=workout,
+            exercise=exercise,
+            set_number=number,
+            weight_kg=weight,
+            reps=10,
+            done=number <= done,
+        )
+        for number, weight in enumerate(weights, start=1)
+    ]
+
+
+def region(client, workout, **params):
+    response = client.get(
+        reverse("workout_live", args=[workout.pk]), params, headers={"HX-Request": "true"}
+    )
+    return response.content.decode()
+
+
+@pytest.mark.parametrize("started", [True, False], ids=["live", "draft"])
+def test_tap_on_planned_set_opens_its_steppers(client, user, started):
+    """Править можно любой подход плана, а не только текущий: в черновике и при
+    записи тетрадки задним числом иначе правился бы только первый."""
+    workout = WorkoutFactory(user=user, duration_min=None)
+    if not started:
+        Workout.objects.filter(pk=workout.pk).update(started_at=None)
+    first, second, third = plan(workout, ExerciseFactory(), [60, 60, 60])
+    client.force_login(user)
+
+    content = region(client, workout, set=third.pk)
+
+    assert '<div id="exercises"' in content and "<html" not in content
+    assert reverse("set_value", args=[third.pk]) in content
+    assert reverse("set_value", args=[first.pk]) not in content
+    assert f"?set={first.pk}" in content and f"?set={second.pk}" in content
+    assert "Готово" in content
+    # «Убрать подход» убирает открытый, а выполнить не по порядку нельзя.
+    assert reverse("set_delete", args=[third.pk]) in content
+    assert reverse("set_done", args=[third.pk]) not in content
+
+
+def test_stale_done_or_foreign_set_param_opens_current_set(client, user, other_user):
+    workout = WorkoutFactory(user=user, duration_min=None)
+    done_row, current, _later = plan(workout, ExerciseFactory(), [60, 60, 60], done=1)
+    alien = StrengthSetFactory(
+        workout=WorkoutFactory(user=other_user, duration_min=None), set_number=1, done=False
+    )
+    client.force_login(user)
+
+    for raw in (done_row.pk, alien.pk, "мусор"):
+        content = region(client, workout, set=raw)
+        assert reverse("set_done", args=[current.pk]) in content
+        assert "Готово" not in content
+        assert reverse("set_value", args=[alien.pk]) not in content
+
+
+def test_foreign_workout_region_is_404(client, user, other_user):
+    alien = WorkoutFactory(user=other_user, duration_min=None)
+    row = StrengthSetFactory(workout=alien, set_number=1, done=False)
+    client.force_login(user)
+
+    response = client.get(
+        reverse("workout_live", args=[alien.pk]), {"set": row.pk}, headers={"HX-Request": "true"}
+    )
+
+    assert response.status_code == 404
+
+
+def test_region_of_finished_workout_redirects_the_whole_page(client, user):
+    """Обычный 302 htmx прошёл бы сам и вставил итог внутрь региона упражнений."""
+    finished = WorkoutFactory(user=user)
+    StrengthSetFactory(workout=finished, set_number=1)
+    client.force_login(user)
+
+    response = client.get(
+        reverse("workout_live", args=[finished.pk]), headers={"HX-Request": "true"}
+    )
+
+    assert response.headers["HX-Redirect"] == reverse("workout_summary", args=[finished.pk])
+
+
+def test_new_weight_carries_to_following_sets_with_the_same_weight(client, user):
+    """Поменял вес текущего — следующие с тем же весом идут за ним. Добивка с
+    другим весом, выполненный подход и другое упражнение не трогаются."""
+    workout = WorkoutFactory(user=user, duration_min=None)
+    done_row, current, second, third, backoff = plan(
+        workout, ExerciseFactory(), [60, 60, 60, 60, 40], done=1
+    )
+    other = plan(workout, ExerciseFactory(), [60])[0]
+    client.force_login(user)
+
+    response = adjust(client, current, "weight_kg", "up")
+
+    weights = dict(workout.sets.values_list("pk", "weight_kg"))
+    assert weights == {
+        done_row.pk: 60,
+        current.pk: Decimal("62.5"),
+        second.pk: Decimal("62.5"),
+        third.pk: Decimal("62.5"),
+        backoff.pk: 40,
+        other.pk: 60,
+    }
+    content = response.content.decode()
+    assert content.startswith("62,5<")
+    assert f'id="set-{second.pk}-value" hx-swap-oob="true">62,5 кг × 10<' in content
+    assert f"set-{backoff.pk}-value" not in content
+
+
+def test_pyramid_is_not_flattened(client, user):
+    workout = WorkoutFactory(user=user, duration_min=None)
+    first, _second, _third = plan(workout, ExerciseFactory(), [60, 70, 80])
+    client.force_login(user)
+
+    response = adjust(client, first, "weight_kg", "up")
+
+    weights = list(workout.sets.order_by("set_number").values_list("weight_kg", flat=True))
+    assert weights == [Decimal("62.5"), 70, 80]
+    assert response.content.decode() == "62,5"
+
+
+def test_typed_weight_carries_in_draft(client, user):
+    """Тетрадка задним числом: вес первого подхода набран руками — второй за ним."""
+    workout = WorkoutFactory(user=user, started_at=None, duration_min=None)
+    first, second = plan(workout, ExerciseFactory(), [0, 0])
+    client.force_login(user)
+
+    client.post(reverse("set_value", args=[first.pk]), {"field": "weight_kg", "value": "82,5"})
+
+    second.refresh_from_db()
+    assert second.weight_kg == Decimal("82.5")
+
+
+def test_reps_do_not_carry(client, user):
+    """Повторы — результат подхода: «10» из прошлого раза остаётся целью следующего."""
+    workout = WorkoutFactory(user=user, duration_min=None)
+    first, second = plan(workout, ExerciseFactory(), [60, 60])
+    client.force_login(user)
+
+    adjust(client, first, "reps", "down")
+
+    second.refresh_from_db()
+    assert second.reps == 10
+
+
+def test_correcting_finished_workout_does_not_touch_other_sets(client, user):
+    """Записанная тренировка — факт: правка одного подхода соседей не переписывает."""
+    finished = WorkoutFactory(user=user)
+    first, second = plan(finished, ExerciseFactory(), [60, 60], done=2)
+    client.force_login(user)
+
+    response = adjust(client, first, "weight_kg", "up")
+
+    second.refresh_from_db()
+    assert second.weight_kg == 60
+    assert response.content.decode() == "62,5"
+
+
+def test_add_set_to_finished_exercise_brings_it_back_to_now(client, user):
+    """Последний подход сделан — упражнение ушло в «Выполнено». «+ Добавить
+    подход» у его карточки добавляет копию последнего и возвращает упражнение
+    в «Сейчас», а не требует возвращать прошлый подход в работу."""
+    workout = WorkoutFactory(user=user, duration_min=None)
+    bench = ExerciseFactory(name="Жим лёжа")
+    squat = ExerciseFactory(name="Присед")
+    plan(workout, bench, [80, 82.5], done=2)
+    plan(workout, squat, [100])
+    client.force_login(user)
+    page = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+    assert f'"exercise": "{bench.pk}"' in page[page.index('class="app-live-done"') :]
+
+    response = client.post(reverse("live_set_add", args=[workout.pk]), {"exercise": bench.pk})
+
+    added = workout.sets.get(exercise=bench, set_number=3)
+    workout.refresh_from_db()
+    assert (added.weight_kg, added.done) == (Decimal("82.5"), False)
+    assert workout.current_exercise == bench
+    now = response.content.decode().split('class="app-live-plan"')[0]
+    assert reverse("set_done", args=[added.pk]) in now

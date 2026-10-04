@@ -831,7 +831,13 @@ class WorkoutDraftStartView(LoginRequiredMixin, View):
 
 
 class LiveWorkoutView(LoginRequiredMixin, View):
-    """Экран живого режима силовой тренировки."""
+    """Экран живого режима силовой тренировки.
+
+    ?set=<id> открывает степперы планового подхода текущего упражнения —
+    приём экрана правки: тап по строке плана и «Готово» запрашивают регион
+    упражнений (HTMX), а не страницу. Чужой, выполненный или устаревший id
+    ничего не ломает: открывается текущий подход.
+    """
 
     def get(self, request, pk):
         workout = get_object_or_404(
@@ -845,9 +851,17 @@ class LiveWorkoutView(LoginRequiredMixin, View):
         if not workout.sport.is_strength and not owns_sets(workout):
             raise Http404("Живой режим есть только у силовых тренировок")
         if workout.is_finished:
-            return redirect("workout_summary", pk=workout.pk)
-        context = services.live_context(workout) | live_rest_context(workout)
-        return render(request, "workouts/live.html", context)
+            summary = reverse("workout_summary", args=[workout.pk])
+            if request.headers.get("HX-Request"):
+                # Устаревшая вкладка: обычный 302 htmx прошёл бы сам и вставил
+                # страницу итога внутрь региона упражнений.
+                return HttpResponse(headers={"HX-Redirect": summary})
+            return redirect(summary)
+        raw = request.GET.get("set", "")
+        context = services.live_context(workout, int(raw) if raw.isdecimal() else None)
+        if request.headers.get("HX-Request"):
+            return render(request, "workouts/_live_exercises.html", context)
+        return render(request, "workouts/live.html", context | live_rest_context(workout))
 
 
 class LiveExerciseView(LoginRequiredMixin, View):
@@ -1007,6 +1021,11 @@ class LiveSetAddView(LoginRequiredMixin, View):
                 )
         except IntegrityError:
             pass  # даблтап — второй подход не нужен
+        if not workout.is_finished:
+            # Подход добавляют, чтобы сделать его сейчас: выполненное упражнение
+            # возвращается в «Сейчас», как после «вернуть подход в работу».
+            workout.current_exercise = exercise
+            workout.save(update_fields=["current_exercise"])
         # На экране правки новый подход сразу раскрыт: его добавили, чтобы поправить.
         return live_region_response(
             request, workout, open_set_id=created.pk if created and workout.is_finished else None
@@ -1179,6 +1198,26 @@ class LiveRestView(LoginRequiredMixin, View):
         return HttpResponse(status=204)
 
 
+def save_set_field(request, row, field, value):
+    """Сохранить поле подхода; ответ — его значение для степпера.
+
+    Новый вес переходит на следующие плановые подходы (services.carry_weight),
+    и их строки обновляются out-of-band тем же ответом: регион не
+    перерисовывается, кнопки степпера не пересоздаются, и серия быстрых тапов
+    по-прежнему не теряется.
+    """
+    old = row.weight_kg
+    setattr(row, field, value)
+    row.save(update_fields=[field])
+    html = row.field_display(field)
+    carried = services.carry_weight(row, old) if field == "weight_kg" else []
+    if carried:
+        html += render_to_string(
+            "workouts/_live_set_values_oob.html", {"sets": carried}, request=request
+        )
+    return HttpResponse(html)
+
+
 class SetAdjustView(LoginRequiredMixin, View):
     """Степперы веса, повторов и времени: каждый тап сохраняется сразу."""
 
@@ -1200,9 +1239,7 @@ class SetAdjustView(LoginRequiredMixin, View):
             value = min(MAX_WEIGHT_KG, max(Decimal(0), Decimal(str(row.weight_kg)) + step))
         else:
             value = min(SET_LIMITS[field], max(0, getattr(row, field) + step))
-        setattr(row, field, value)
-        row.save(update_fields=[field])
-        return HttpResponse(row.field_display(field))
+        return save_set_field(request, row, field, value)
 
 
 class SetValueView(LoginRequiredMixin, View):
@@ -1224,9 +1261,7 @@ class SetValueView(LoginRequiredMixin, View):
         except ValueError as error:
             # 400 с человеческим текстом: его показывает клиент рядом со полем.
             return HttpResponseBadRequest(str(error))
-        setattr(row, field, value)
-        row.save(update_fields=[field])
-        return HttpResponse(row.field_display(field))
+        return save_set_field(request, row, field, value)
 
 
 class SetDoneView(LoginRequiredMixin, View):

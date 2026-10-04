@@ -4,7 +4,10 @@
   повторы, время или время с весом). Один партиал на панель текущего подхода
   живого режима и на панель правки подхода записанной тренировки: правила шага,
   ввод руками и пометка «не сохранено» обязаны быть одинаковыми. Ждёт `set`;
-  очередь hx-sync — ближайшая .app-live-current, она есть у обеих панелей.
+  очередь hx-sync — карточка упражнения .app-live-exercise, она есть у обоих
+  экранов. В ту же очередь встают «Подход выполнен», «Готово» и тапы по
+  строкам подходов: открыть соседний подход сразу после «+» нельзя раньше,
+  чем доедет шаг, — иначе на экране осталось бы промежуточное значение.
 {% endcomment %}
   {% with fields=set.stepper_fields %}
   <div class="app-field-grid{% if fields|length == 1 %} is-single{% endif %}">
@@ -23,7 +26,7 @@
                   hx-post="{% url 'set_adjust' set.pk %}"
                   hx-vals='{"field": "{{ field.name }}", "dir": "down"}'
                   hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
-                  hx-sync="closest .app-live-current:queue all">−</button>
+                  hx-sync="closest .app-live-exercise:queue all">−</button>
           <span id="cs-{{ field.name }}" class="num app-stepper-value" x-ref="value"
                 x-show="!editing" role="button" tabindex="0"
                 aria-label="{{ field.label }} — ввести значение"
@@ -36,7 +39,7 @@
                   hx-post="{% url 'set_adjust' set.pk %}"
                   hx-vals='{"field": "{{ field.name }}", "dir": "up"}'
                   hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
-                  hx-sync="closest .app-live-current:queue all">+</button>
+                  hx-sync="closest .app-live-exercise:queue all">+</button>
           <input type="text" class="form-control app-stepper-input" x-ref="input" x-cloak
                  x-show="editing" inputmode="{{ field.inputmode }}"
                  aria-label="{{ field.label }}"
@@ -44,7 +47,7 @@
                  hx-vals='{"field": "{{ field.name }}"}'
                  hx-trigger="keyup[key=='Enter'], blur"
                  hx-target="#cs-{{ field.name }}" hx-swap="innerHTML"
-                 hx-sync="closest .app-live-current:queue all"
+                 hx-sync="closest .app-live-exercise:queue all"
                  @keydown.escape.stop="close()"
                  @htmx:after-request="$event.detail.successful ? close() : failed($event.detail)">
         </div>

@@ -19,39 +19,48 @@
   {% endcomment %}
   {% include "workouts/_live_note.html" with group=group %}
 
-  {% if group.done_sets %}
+  {% comment %}
+    Подходы по порядку: выполненные (тап — вернуть в работу), плановые до
+    открытого, панель степперов открытого подхода и плановые после него.
+    Открыт по умолчанию текущий подход; тап по плановой строке открывает её
+    (?set=<id>, приём экрана правки). Все запросы карточки стоят в одной
+    очереди hx-sync с тапами степперов: тап по строке сразу после «+» не
+    обгонит недоехавший шаг.
+  {% endcomment %}
+  {% if group.done_sets or group.before_open %}
     <div class="app-live-sets">
       {% for set in group.done_sets %}
         {% include "workouts/_live_done_set.html" %}
       {% endfor %}
-    </div>
-  {% endif %}
-
-  {% include "workouts/_live_current_set.html" with set=group.current_set %}
-
-  {% if group.upcoming %}
-    <div class="app-live-sets">
-      {% for set in group.upcoming %}
-        <div class="app-live-set is-planned">
-          <span class="app-live-set-num">{{ set.display_number }}</span>
-          <span class="app-live-set-value">
-            <span class="num">{{ set.value_display }}</span>
-          </span>
-        </div>
+      {% for set in group.before_open %}
+        {% include "workouts/_live_planned_set.html" %}
       {% endfor %}
     </div>
   {% endif %}
 
+  {% include "workouts/_live_current_set.html" with set=group.open_set %}
+
+  {% if group.after_open %}
+    <div class="app-live-sets">
+      {% for set in group.after_open %}
+        {% include "workouts/_live_planned_set.html" %}
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% comment %}«Убрать подход» убирает открытый — тот, что сейчас на панели.{% endcomment %}
   <div class="app-live-links">
     <button type="button" class="app-live-link is-accent"
             hx-post="{% url 'live_set_add' workout.pk %}"
             hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
-            hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+            hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this"
+            hx-sync="closest .app-live-exercise:queue all">
       + Добавить подход
     </button>
     <button type="button" class="app-live-link"
-            hx-post="{% url 'set_delete' group.current_set.pk %}"
-            hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+            hx-post="{% url 'set_delete' group.open_set.pk %}"
+            hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this"
+            hx-sync="closest .app-live-exercise:queue all">
       Убрать подход
     </button>
   </div>

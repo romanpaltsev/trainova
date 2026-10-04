@@ -224,6 +224,40 @@ def set_values(measurement, source):
     return values
 
 
+def carry_weight(row, old):
+    """Новый вес планового подхода — следующим плановым с тем же весом.
+
+    Поменял 60 на 65 у первого подхода — второй и третий идут за ним, а не
+    остаются на 60. Переносится только на подряд идущие подходы с прежним
+    весом: пирамида 60, 70, 80 при правке первого не сплющивается. Повторы и
+    время не переносятся — это результат подхода, а «10» из прошлого раза
+    остаётся целью следующего. Выполненный подход и записанная тренировка —
+    факт, и правка факта соседей не трогает. Возвращает подходы с новым весом.
+    """
+    if row.done or row.workout.is_finished or row.weight_kg == old:
+        return []
+    later = StrengthSet.objects.filter(
+        workout_id=row.workout_id,
+        exercise_id=row.exercise_id,
+        # Другая единица (упражнение переводили посреди тренировки) веса может
+        # не иметь вовсе — запись упёрлась бы в set_fields_match_measurement.
+        measurement=row.measurement,
+        done=False,
+        set_number__gt=row.set_number,
+    ).order_by("set_number")
+    carried = []
+    for other in later:
+        if other.weight_kg != old:
+            break
+        other.weight_kg = row.weight_kg
+        carried.append(other)
+    if carried:
+        StrengthSet.objects.filter(pk__in=[other.pk for other in carried]).update(
+            weight_kg=row.weight_kg
+        )
+    return carried
+
+
 def exercise_groups(workout):
     """Упражнения тренировки в порядке фактического выполнения, со своими подходами.
 
@@ -504,8 +538,13 @@ def add_round(workout, circuit):
     return True
 
 
-def live_groups(workout):
-    """Группы для живого экрана: у каждой статус current / queue / done и подсказка."""
+def live_groups(workout, open_set_id=None):
+    """Группы для живого экрана: у каждой статус current / queue / done и подсказка.
+
+    open_set_id — плановый подход текущего упражнения, открытый тапом по его
+    строке (приём экрана правки). Чужой, выполненный или устаревший id просто
+    не найдётся среди невыполненных, и откроется текущий подход.
+    """
     groups = exercise_groups(workout)
     pending_ids = [g["exercise"].pk for g in groups if any(not s.done for s in g["sets"])]
     current_id = None
@@ -533,8 +572,13 @@ def live_groups(workout):
             group["state"] = "current"
             pending = [s for s in sets if not s.done]
             group["current_set"] = pending[0]
-            # Остальные плановые подходы показываются как план под текущим.
-            group["upcoming"] = pending[1:]
+            # Панель степперов одна на карточку — у открытого подхода, по
+            # умолчанию у текущего: две панели на 375px растянули бы карточку на
+            # весь экран. Остальные плановые — строки до и после неё.
+            index = next((i for i, s in enumerate(pending) if s.pk == open_set_id), 0)
+            group["open_set"] = pending[index]
+            group["before_open"] = pending[:index]
+            group["after_open"] = pending[index + 1 :]
             previous = last_sets(workout.user, group["exercise"])
             group["hint"] = last_time_hint(previous)
             # Заметка только у текущего упражнения: у строк очереди подсказка
@@ -549,14 +593,14 @@ def live_groups(workout):
     return groups
 
 
-def live_context(workout):
+def live_context(workout, open_set_id=None):
     """Контекст региона упражнений: группы и блоки, разложенные по статусам.
 
     Блок — одно упражнение или круг. Круг стоит в разделе своего самого
     «живого» члена: с текущим — в «Сейчас», с невыполненными — в «Дальше»,
     пройденный целиком — в «Выполнено»; внутри члены рисуются по своему статусу.
     """
-    groups = live_groups(workout)
+    groups = live_groups(workout, open_set_id)
     all_blocks = blocks(groups)
     for block in all_blocks:
         states = {member["state"] for member in block["members"]}

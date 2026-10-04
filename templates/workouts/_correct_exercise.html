@@ -20,7 +20,8 @@
       {% else %}
         <button type="button" class="app-live-set" aria-label="Изменить подход {{ set.display_number }}: {{ set.value_display }}"
                 hx-get="{% url 'workout_correct' workout.pk %}?set={{ set.pk }}"
-                hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
+                hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this"
+                hx-sync="closest .app-live-exercise:queue all">
           <span class="app-live-set-num">{{ set.display_number }}</span>
           <span class="app-live-set-value">
             <span class="num">{{ set.value_display }}</span>

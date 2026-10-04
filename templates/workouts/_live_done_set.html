@@ -1,7 +1,7 @@
 {% comment %}Строка выполненного подхода; тап возвращает подход в работу.{% endcomment %}
 <button type="button" class="app-live-set is-done" title="Вернуть подход в работу"
         hx-post="{% url 'set_undo' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
-        hx-disabled-elt="this">
+        hx-disabled-elt="this" hx-sync="closest .app-live-exercise:queue all">
   <span class="app-live-set-num">{{ set.display_number }}</span>
   <span class="app-live-set-value">
     <span class="num">{{ set.value_display }}</span>

@@ -1,5 +1,9 @@
 {% comment %}
-  Карточка выполненного упражнения: подходы можно вернуть в работу тапом. Ждёт group.
+  Карточка выполненного упражнения: подходы можно вернуть в работу тапом, а
+  «+ Добавить подход» добавляет ещё один (копию последнего) и делает
+  упражнение текущим — подход добавляют, чтобы сделать его сейчас. Раньше
+  после последнего подхода «ещё один» делался только через возврат прошлого
+  в работу. Ждёт group и workout.
 {% endcomment %}
 <section class="app-card app-live-exercise">
   <div class="app-live-exercise-head">
@@ -16,5 +20,14 @@
     {% for set in group.done_sets %}
       {% include "workouts/_live_done_set.html" %}
     {% endfor %}
+  </div>
+  <div class="app-live-links">
+    <button type="button" class="app-live-link is-accent"
+            hx-post="{% url 'live_set_add' workout.pk %}"
+            hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
+            hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this"
+            hx-sync="closest .app-live-exercise:queue all">
+      + Добавить подход
+    </button>
   </div>
 </section>
