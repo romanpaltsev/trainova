@@ -204,6 +204,12 @@ function restTimer() {
       };
       document.addEventListener("visibilitychange", this.onVisible);
 
+      if (this.$el.dataset.stop) {
+        // Подход посреди раунда круга: отдыха нет. Отсчёт, оставшийся с прошлого
+        // раунда, гасим — иначе он пискнул бы посреди следующего упражнения.
+        this.clearSaved();
+        return;
+      }
       if (this.$el.dataset.autostart) {
         // «Подход выполнен»: отдых всегда начинается заново, даже если прошлый
         // отсчёт ещё тикал — сохранённый остаток здесь не восстанавливается.

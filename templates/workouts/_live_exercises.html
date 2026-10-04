@@ -34,6 +34,16 @@
           hx-get="{% url 'live_exercises' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
     + Упражнение
   </button>
+  {% comment %}
+    Круг собирается из уже добавленных упражнений — поэтому плитка появляется
+    со второго. Окно «Круги»: связать соседние, убрать из круга, добавить в круг.
+  {% endcomment %}
+  {% if exercises_count > 1 %}
+    <button type="button" class="app-live-add-tile"
+            hx-get="{% url 'live_circuits' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
+      Связать в круг
+    </button>
+  {% endif %}
   </div>
 
   <div class="app-live-done">

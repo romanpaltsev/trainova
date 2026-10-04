@@ -256,6 +256,8 @@ def _create_sets(catalog, report, workout, group):
         exercise = catalog.exercise(lines[0].exercise, measurement=measurement_for(lines))
         measurement = exercise.measurement
         field_name, message = REQUIRED_FIELD[measurement]
+        # Номер круга один на упражнение: первый заполненный из его строк.
+        circuit = next((row.circuit for row in lines if row.circuit), None)
         number = 0
         for row in lines:
             values = services.set_values(measurement, row)
@@ -275,6 +277,7 @@ def _create_sets(catalog, report, workout, group):
                     # подхода как раз и значит «времени не знаем».
                     done=True,
                     done_at=None,
+                    circuit=circuit,
                     **values,
                 )
             )
@@ -287,6 +290,9 @@ def _create_sets(catalog, report, workout, group):
             )
     StrengthSet.objects.bulk_create(sets)
     ExerciseNote.objects.bulk_create(notes)
+    if any(row.circuit for row in sets):
+        # Номер, оказавшийся у одного упражнения, — не круг: стираем сразу.
+        services.drop_lone_circuits(workout)
     return len(sets)
 
 

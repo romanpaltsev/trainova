@@ -540,6 +540,8 @@ def correct_context(workout, *, open_set_id=None):
     return {
         "workout": workout,
         "groups": groups,
+        # Блоки — те же группы, где круг собран в одну обёртку (запросов нет).
+        "blocks": services.blocks(groups),
         "open_set_id": open_set_id,
         # Последний подход записанной тренировки не убирается: пустая силовая
         # перестала бы быть силовой. Убрать всё — это «Удалить тренировку».
@@ -569,19 +571,28 @@ def live_set_or_404(request, pk, *, undone_only=False, for_update=False, started
     return get_object_or_404(queryset, pk=pk)
 
 
-def live_rest_context(workout, *, autostart=False, oob=False):
+def live_rest_context(workout, *, autostart=False, stop=False, oob=False):
     seconds = workout.effective_rest_seconds
     return {
         "workout": workout,
         "rest_seconds": seconds,
         "rest_display": rest_display(seconds),
         "autostart": autostart,
+        # Посреди раунда круга: отдыха нет, тикающий отсчёт гасится (live.js).
+        "stop": stop,
         "oob": oob,
     }
 
 
 def live_region_response(
-    request, workout, *, oob=False, restart_timer=False, error=None, open_set_id=None
+    request,
+    workout,
+    *,
+    oob=False,
+    restart_timer=False,
+    stop_timer=False,
+    error=None,
+    open_set_id=None,
 ):
     """Регион упражнений; при выполненном подходе — плюс OOB-карточка отдыха.
 
@@ -598,10 +609,10 @@ def live_region_response(
         )
     context = services.live_context(workout) | {"oob": oob, "error": error}
     html = render_to_string("workouts/_live_exercises.html", context, request=request)
-    if restart_timer:
+    if restart_timer or stop_timer:
         html += render_to_string(
             "workouts/_live_rest.html",
-            live_rest_context(workout, autostart=True, oob=True),
+            live_rest_context(workout, autostart=restart_timer, stop=stop_timer, oob=True),
             request=request,
         )
     return HttpResponse(html)
@@ -867,11 +878,16 @@ class LiveExerciseView(LoginRequiredMixin, View):
             exercise = form.save_for_user()
 
         if not workout.sets.filter(exercise=exercise).exists():
+            # «+ Упражнение в круг»: номер проверяется — у разобранного круга
+            # упражнение просто встаёт отдельно.
+            circuit = services.valid_circuit(workout, request.POST.get("circuit"))
             try:
                 with transaction.atomic():
                     # В записанной тренировке подходы сразу выполненные: в ней
                     # плановых не бывает (их удаляет завершение).
-                    services.create_planned_sets(workout, exercise, done=workout.is_finished)
+                    services.create_planned_sets(
+                        workout, exercise, done=workout.is_finished, circuit=circuit
+                    )
             except IntegrityError:
                 pass  # даблтап: упражнение уже добавил параллельный запрос
         # Пустое тело закрывает модалку, регион упражнений обновляется out-of-band —
@@ -902,6 +918,10 @@ class LiveExerciseView(LoginRequiredMixin, View):
         facets = facets_for(request.user) if offer_create else None
         return {
             "workout": workout,
+            # Номер круга едет через поиск и создание скрытым полем результатов.
+            "circuit": services.valid_circuit(
+                workout, request.GET.get("circuit") or request.POST.get("circuit")
+            ),
             "exercises": found[:EXERCISE_RESULTS_LIMIT],
             "results_truncated": len(found) > EXERCISE_RESULTS_LIMIT,
             "q": query,
@@ -991,6 +1011,86 @@ class LiveSetAddView(LoginRequiredMixin, View):
         return live_region_response(
             request, workout, open_set_id=created.pk if created and workout.is_finished else None
         )
+
+
+def circuit_modal_response(request, workout, *, refresh=False):
+    """Окно «Круги»; после правки — плюс регион упражнений out-of-band.
+
+    Между соседними блоками — «связать»: последний член предыдущего с первым
+    следующего. Пары считаются здесь, а не в шаблоне: шаблону соседей не видно.
+    """
+    all_blocks = services.blocks(services.exercise_groups(workout))
+    items = []
+    for index, block in enumerate(all_blocks):
+        if index:
+            items.append(
+                {
+                    "kind": "link",
+                    "exercise": all_blocks[index - 1]["members"][-1]["exercise"].pk,
+                    "next": block["members"][0]["exercise"].pk,
+                }
+            )
+        items.append({"kind": "block", "block": block})
+    html = render_to_string(
+        "workouts/_circuit_modal.html",
+        # Связывать есть что, пока в тренировке два упражнения и больше —
+        # даже если все они уже в одном круге (тогда связок просто нет).
+        {
+            "workout": workout,
+            "items": items,
+            "can_link": sum(len(block["members"]) for block in all_blocks) > 1,
+        },
+        request=request,
+    )
+    if refresh:
+        html += live_region_response(request, workout, oob=True).content.decode()
+    return HttpResponse(html)
+
+
+class LiveCircuitView(LoginRequiredMixin, View):
+    """Окно «Круги»: связать соседние упражнения в круг или убрать из него.
+
+    Работает в идущей, в черновике и на правке записанной тренировки — круг
+    можно отметить и после. «Связать» шлёт оба id: устаревшая вкладка с уже
+    не соседней парой ничего не меняет, окно перерисуется с настоящим порядком.
+    Упражнение не из этой тренировки — 404, как любые чужие данные.
+    """
+
+    def get(self, request, pk):
+        return circuit_modal_response(request, editable_workout_or_404(request, pk))
+
+    def post(self, request, pk):
+        workout = editable_workout_or_404(request, pk)
+        mine = set(workout.sets.values_list("exercise_id", flat=True))
+        ids = [request.POST.get("exercise", ""), request.POST.get("next", "")]
+        action = request.POST.get("action")
+        if action == "link":
+            if not all(raw.isdecimal() and int(raw) in mine for raw in ids):
+                raise Http404("Упражнение не найдено")
+            services.link_with_next(workout, int(ids[0]), int(ids[1]))
+        elif action == "unlink":
+            if not (ids[0].isdecimal() and int(ids[0]) in mine):
+                raise Http404("Упражнение не найдено")
+            services.unlink(workout, int(ids[0]))
+        else:
+            return HttpResponseBadRequest("Неизвестное действие")
+        return circuit_modal_response(request, workout, refresh=True)
+
+
+class LiveRoundAddView(LoginRequiredMixin, View):
+    """«+ Круг»: ещё по подходу каждому упражнению круга."""
+
+    def post(self, request, pk):
+        workout = editable_workout_or_404(request, pk)
+        circuit = services.valid_circuit(workout, request.POST.get("circuit"))
+        if circuit is None:
+            raise Http404("Круга нет")
+        try:
+            with transaction.atomic():
+                services.add_round(workout, circuit)
+        except IntegrityError:
+            pass  # даблтап — второй раунд не нужен
+        return live_region_response(request, workout)
 
 
 class ExerciseNoteView(LoginRequiredMixin, View):
@@ -1149,7 +1249,10 @@ class SetDoneView(LoginRequiredMixin, View):
         # запрос выходит выше на охраннике row.done.
         row.done_at = timezone.now()
         row.save(update_fields=["done", "done_at"])
-        return live_region_response(request, row.workout, restart_timer=True)
+        # В круге отдых — только после раунда, и текущим становится следующий
+        # член круга (A1 → B1 → A2); вне круга — прежнее поведение.
+        restart, stop = services.advance_circuit(row.workout, row)
+        return live_region_response(request, row.workout, restart_timer=restart, stop_timer=stop)
 
 
 class SetUndoView(LoginRequiredMixin, View):
@@ -1606,6 +1709,7 @@ class WorkoutSummaryView(LoginRequiredMixin, View):
             {
                 "workout": workout,
                 "groups": groups,
+                "blocks": services.blocks(groups),
                 "nav_active": "history",
             },
         )

@@ -180,6 +180,8 @@ def test_history_hides_active_workout(client, user):
         pytest.param("live_exercises", {"name": "Жим лёжа"}, id="attach"),
         pytest.param("live_note", {"exercise": "1", "text": "подмена"}, id="note"),
         pytest.param("workout_finish", {}, id="finish"),
+        pytest.param("live_circuits", {"action": "unlink", "exercise": "1"}, id="circuits"),
+        pytest.param("live_round_add", {"circuit": "1"}, id="round"),
     ],
 )
 def test_foreign_workout_actions_are_404(client, user, other_user, url_name, payload):

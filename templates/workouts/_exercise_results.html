@@ -4,11 +4,17 @@
   Найденное и подписи к нему — в обёртке app-picker-list: на ПК это левая
   колонка со своей прокруткой, на телефоне обёртка не образует бокса.
 {% endcomment %}
+{% comment %}
+  Номер круга («+ Упражнение в круг») живёт скрытым полем здесь, внутри
+  перерисовываемых результатов: поиск шлёт этот контейнер (hx-include), поэтому
+  номер переживает каждую набранную букву, а выбор и создание его отправляют.
+{% endcomment %}
+{% if circuit %}<input type="hidden" name="circuit" value="{{ circuit }}">{% endif %}
 <div class="app-picker-list">
 {% for exercise in exercises %}
   <button type="button" class="app-pick-row"
           hx-post="{% url 'live_exercises' workout.pk %}"
-          hx-vals='{"exercise": "{{ exercise.pk }}"}'
+          hx-vals='{"exercise": "{{ exercise.pk }}"{% if circuit %}, "circuit": "{{ circuit }}"{% endif %}}'
           hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
     {% comment %}
       is-wrap: имена стали точными, и вся добавленная точность сидит в хвосте —
@@ -40,6 +46,7 @@
   <form hx-post="{% url 'live_exercises' workout.pk %}" hx-target="#modal" hx-swap="innerHTML"
         hx-disabled-elt="find button">
     <input type="hidden" name="name" value="{{ q }}">
+    {% if circuit %}<input type="hidden" name="circuit" value="{{ circuit }}">{% endif %}
     <div class="app-stepper-label mt-2">Измерение</div>
     <div class="app-chips mb-2" role="group" aria-label="Измерение упражнения">
       {% for value, label in measurement_choices %}

@@ -1,0 +1,34 @@
+{% comment %}
+  Упражнение в итоге тренировки: номер, название-ссылка, сумма, заметка и подходы.
+  Ждёт group. Отдельно — потому что круг рисует своих членов этой же карточкой.
+{% endcomment %}
+<section class="app-card app-live-exercise">
+  <div class="app-live-exercise-head">
+    <div class="app-live-exercise-title">
+      {% comment %}
+        Номер приходит из данных (services.exercise_groups), а не из
+        forloop.counter: он же нужен живому экрану, где список разрезан на
+        «сейчас / дальше / выполнено».
+      {% endcomment %}
+      <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
+      <h2 class="app-live-exercise-name">
+        <span class="visually-hidden">упражнение {{ group.position }}: </span>
+        <a class="app-exercise-link" href="{% url 'exercise_detail' group.exercise.pk %}">
+          {{ group.exercise.name }}
+        </a>
+      </h2>
+    </div>
+    <span class="app-live-exercise-meta">{{ group.total }}</span>
+  </div>
+  {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}
+  <div class="app-live-sets">
+    {% for set in group.sets %}
+      <div class="app-live-set">
+        <span class="app-live-set-num">{{ set.display_number }}</span>
+        <span class="app-live-set-value">
+          <span class="num">{{ set.value_display }}</span>
+        </span>
+      </div>
+    {% endfor %}
+  </div>
+</section>

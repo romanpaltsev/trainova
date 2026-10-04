@@ -57,37 +57,23 @@
   CSS columns — они заполняются сверху вниз, и 1, 2, 3 идут по первой.
 {% endcomment %}
 <div class="app-summary-list">
-{% for group in groups %}
-  <section class="app-card app-live-exercise">
-    <div class="app-live-exercise-head">
-      <div class="app-live-exercise-title">
-        {% comment %}
-          Номер приходит из данных (services.exercise_groups), а не из
-          forloop.counter: он же нужен живому экрану, где список разрезан на
-          «сейчас / дальше / выполнено».
-        {% endcomment %}
-        <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
-        <h2 class="app-live-exercise-name">
-          <span class="visually-hidden">упражнение {{ group.position }}: </span>
-          <a class="app-exercise-link" href="{% url 'exercise_detail' group.exercise.pk %}">
-            {{ group.exercise.name }}
-          </a>
-        </h2>
+{% for block in blocks %}
+  {% if block.circuit is None %}
+    {% for group in block.members %}
+      {% include "workouts/_summary_exercise.html" %}
+    {% endfor %}
+  {% else %}
+    {% comment %}Круг — одна обёртка: в колонках ПК (break-inside: avoid) он не рвётся.{% endcomment %}
+    <section class="app-circuit" aria-label="{{ block.label }}">
+      <div class="app-circuit-head">
+        <span class="app-circuit-label">{{ block.label }}</span>
+        <span class="app-circuit-round">{{ block.rounds_label }}</span>
       </div>
-      <span class="app-live-exercise-meta">{{ group.total }}</span>
-    </div>
-    {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}
-    <div class="app-live-sets">
-      {% for set in group.sets %}
-        <div class="app-live-set">
-          <span class="app-live-set-num">{{ set.display_number }}</span>
-          <span class="app-live-set-value">
-            <span class="num">{{ set.value_display }}</span>
-          </span>
-        </div>
+      {% for group in block.members %}
+        {% include "workouts/_summary_exercise.html" %}
       {% endfor %}
-    </div>
-  </section>
+    </section>
+  {% endif %}
 {% empty %}
   {% include "includes/empty_state.html" with text="В этой тренировке нет записанных подходов." %}
 {% endfor %}

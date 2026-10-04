@@ -380,7 +380,44 @@ def blocks(groups):
         found = round_scan(members)
         # «круг 2 из 3»: раунд следующего подхода, а у пройденного круга — последний.
         block["round"] = found[1] + 1 if found else block["rounds"]
+        rounds = block["rounds"]
+        block["rounds_label"] = f"{rounds} {ru_plural(rounds, 'круг', 'круга', 'кругов')}"
     return result
+
+
+def valid_circuit(workout, raw):
+    """Номер круга из запроса, если в тренировке есть такой круг (≥ 2 упражнений).
+
+    Иначе None: устаревшая вкладка («+ в круг» к уже разобранному кругу) просто
+    добавляет упражнение отдельно, а не заводит круг из одного.
+    """
+    if not str(raw or "").isdecimal():
+        return None
+    number = int(raw)
+    members = workout.sets.filter(circuit=number).values("exercise").distinct().count()
+    return number if members >= 2 else None
+
+
+def advance_circuit(workout, row):
+    """После подхода в круге: кто следующий и закрыт ли раунд.
+
+    Возвращает (restart_timer, stop_timer). Отдых — только когда раунд закрыт
+    (или круг пройден); посреди раунда идущий с прошлого раунда отсчёт гасится,
+    иначе он пискнул бы посреди следующего упражнения. Текущим становится
+    следующий по обходу раундов — ручной выбор члена круга действует на один
+    подход. Подход вне круга — прежнее поведение: (True, False).
+    """
+    groups = exercise_groups(workout)
+    members = [group for group in groups if group["circuit"] == row.circuit]
+    if row.circuit is None or len(members) < 2:
+        return True, False
+    member = next(group for group in members if group["exercise"].pk == row.exercise_id)
+    index = next(position for position, item in enumerate(member["sets"]) if item.pk == row.pk)
+    round_closed = all(group["sets"][index].done for group in members if index < len(group["sets"]))
+    found = round_scan(members)
+    workout.current_exercise_id = found[0]["exercise"].pk if found else None
+    workout.save(update_fields=["current_exercise"])
+    return round_closed, not round_closed
 
 
 def drop_lone_circuits(workout):

@@ -8,47 +8,32 @@
   (.app-summary-list), на телефоне обёртка не образует бокса.
 {% endcomment %}
 <div id="exercises" class="app-summary-list"{% if oob %} hx-swap-oob="true"{% endif %}>
-{% for group in groups %}
-  <section class="app-card app-live-exercise">
-    <div class="app-live-exercise-head">
-      <div class="app-live-exercise-title">
-        <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
-        <h2 class="app-live-exercise-name">
-          <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
-        </h2>
+{% for block in blocks %}
+  {% if block.circuit is None %}
+    {% for group in block.members %}
+      {% include "workouts/_correct_exercise.html" %}
+    {% endfor %}
+  {% else %}
+    <section class="app-circuit" aria-label="{{ block.label }}">
+      <div class="app-circuit-head">
+        <span class="app-circuit-label">{{ block.label }}</span>
+        <span class="app-circuit-round">{{ block.rounds_label }}</span>
       </div>
-      <span class="app-live-exercise-meta">{{ group.total }}</span>
-    </div>
-    {% include "workouts/_live_note.html" with group=group %}
-    <div class="app-live-sets">
-      {% for set in group.sets %}
-        {% if set.pk == open_set_id %}
-          {% include "workouts/_correct_set.html" %}
-        {% else %}
-          <button type="button" class="app-live-set" aria-label="Изменить подход {{ set.display_number }}: {{ set.value_display }}"
-                  hx-get="{% url 'workout_correct' workout.pk %}?set={{ set.pk }}"
-                  hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
-            <span class="app-live-set-num">{{ set.display_number }}</span>
-            <span class="app-live-set-value">
-              <span class="num">{{ set.value_display }}</span>
-            </span>
-            <span class="app-live-set-icon" aria-hidden="true">{% include "includes/pencil.html" %}</span>
-          </button>
-        {% endif %}
+      {% for group in block.members %}
+        {% include "workouts/_correct_exercise.html" %}
       {% endfor %}
-    </div>
-    <div class="app-live-links">
-      <button type="button" class="app-live-link is-accent"
-              hx-post="{% url 'live_set_add' workout.pk %}"
-              hx-vals='{"exercise": "{{ group.exercise.pk }}"}'
-              hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
-        + Добавить подход
-      </button>
-    </div>
-  </section>
+      {% include "workouts/_circuit_actions.html" %}
+    </section>
+  {% endif %}
 {% endfor %}
 <button type="button" class="app-live-add-tile"
         hx-get="{% url 'live_exercises' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
   + Упражнение
 </button>
+{% if groups|length > 1 %}
+  <button type="button" class="app-live-add-tile"
+          hx-get="{% url 'live_circuits' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
+    Связать в круг
+  </button>
+{% endif %}
 </div>

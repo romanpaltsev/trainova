@@ -59,8 +59,8 @@ COLUMNS: tuple[Column, ...] = (
     Column("location", "Место", 18),
     # 34, а не 28: имена справочника стали точными, и самое длинное —
     # «Жим штанги на наклонной скамье» — в прежнюю ширину не помещалось.
-    # Новой колонки под снаряд нет намеренно: состав колонок — контракт
-    # выгрузки и загрузки, и лишняя сломала бы файлы, скачанные раньше.
+    # Колонки под снаряд нет намеренно: он свойство справочника, а не подхода,
+    # и живёт в книге справочника (exercise_excel).
     Column("exercise", "Упражнение", 34),
     Column("set_number", "Подход", 9, "0"),
     Column("weight", "Вес, кг", 10, "0.00"),
@@ -71,6 +71,10 @@ COLUMNS: tuple[Column, ...] = (
     Column("duration", "Длительность, мин", 18, "0"),
     Column("workout_note", "Заметка к тренировке", 30),
     Column("exercise_note", "Заметка к упражнению", 30),
+    # Номер круга (суперсет, трисет) внутри тренировки: 1..k по порядку кругов.
+    # В конце и необязательная: колонки ищутся по заголовку, поэтому файлы,
+    # скачанные до неё, загружаются как прежде — без кругов.
+    Column("circuit", "Круг", 8, "0"),
 )
 # Без этих трёх строка не значит ничего: дата и вид спорта опознают тренировку,
 # длительность делает её записанной, а не «идущей».
@@ -97,6 +101,9 @@ HELP_LINES = (
     "",
     "Тренировку, которая в дневнике уже есть (тот же день и вид спорта), приложение",
     "пропустит — исправленный файл можно загружать повторно без опаски.",
+    "",
+    "«Круг» — номер круга внутри тренировки: упражнения с одним номером идут",
+    "суперсетом (трисетом и так далее). Пустой — упражнение само по себе.",
     "",
     "Упражнение с повторами без веса приложение заводит как «вес × повторы»: вес 0",
     "у него значит «со своим весом». Если это чистые повторы — поменяйте единицу",
@@ -202,6 +209,7 @@ def _workout_rows(workout, sets, notes):
             # превратили бы лист в стену повторов.
             if index == 0:
                 row["exercise_note"] = group["note"]
+            row["circuit"] = group["circuit_no"]
             rows.append(row)
     if rows:
         rows[0]["workout_note"] = workout.note
@@ -336,6 +344,7 @@ class SheetRow:
     duration_min: int | None = None
     workout_note: str = ""
     exercise_note: str = ""
+    circuit: int | None = None
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -430,6 +439,14 @@ def _cell_int(value, *, what):
         return int(float(cell_text(value).replace(",", ".")))
     except (ValueError, OverflowError) as error:
         raise ValueError(f"{what} — это целое число.") from error
+
+
+def _cell_circuit(value):
+    """Номер круга: пусто — упражнение само по себе, иначе 1..99."""
+    number = _cell_int(value, what="Круг")
+    if number is not None and not 1 <= number <= 99:
+        raise ValueError("Круг — номер от 1 до 99.")
+    return number
 
 
 def _cell_decimal(value, *, what):
@@ -584,4 +601,5 @@ def _sheet_row(number, values, index):
     read("duration", lambda value: _cell_int(value, what="Длительность"), "duration_min")
     row.workout_note = cell_text(cell("workout_note"))
     row.exercise_note = cell_text(cell("exercise_note"))
+    read("circuit", _cell_circuit, "circuit")
     return row

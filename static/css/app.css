@@ -1411,6 +1411,76 @@ a.btn {
    прямо в карточке, поэтому селектор потомка. */
 .app-workout .app-pick-chevron { display: none; }
 
+/* ---------- Круги: суперсет, трисет, круг из N ----------
+
+   Круг — обёртка над карточками своих упражнений (теми же, что у одиночных):
+   полоса акцентом слева и подпись сверху. Отступы между карточками дают сами
+   карточки, у обёртки — только снизу, после ряда действий. */
+.app-circuit {
+  padding-left: var(--app-space-2);
+  border-left: 2px solid var(--app-accent-text);
+}
+
+.app-circuit-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  margin-bottom: var(--app-space-2);
+}
+
+.app-circuit-label { font-weight: 800; }
+
+.app-circuit-round {
+  color: var(--app-text-secondary);
+  font-size: 0.875rem;
+}
+
+.app-circuit-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  margin-bottom: var(--app-space-4);
+}
+
+/* Окно «Круги»: строки упражнений, между соседними — «связать». */
+.app-circuit-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+.app-circuit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-3);
+  min-height: var(--app-tap-target);
+}
+
+.app-circuit-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.app-circuit-remove { flex: none; }
+
+.app-circuit.is-modal { padding-block: var(--app-space-1); }
+
+.app-circuit-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  gap: var(--app-space-2);
+  min-height: var(--app-tap-target);
+  padding: 0 var(--app-space-4);
+  border: 1px dashed var(--app-line);
+  border-radius: var(--app-radius-pill);
+  background: none;
+  color: var(--app-accent-text);
+  font-weight: 700;
+}
+
 /* ---------- Справочник упражнений ---------- */
 
 /* Шторка упражнения живёт только на ≥1200px, поверх таблицы. По умолчанию её

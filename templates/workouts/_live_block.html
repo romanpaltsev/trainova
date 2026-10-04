@@ -1,6 +1,21 @@
 {% comment %}
-  Блок живого экрана: одно упражнение или круг. Ждёт block и workout.
+  Блок живого экрана: одно упражнение или круг. Ждёт block и workout. Круг —
+  обёртка над карточками своих упражнений (те же карточки, что у одиночных) с
+  подписью «Суперсет · круг 2 из 3» и действиями «+ Круг» и «Изменить круг».
 {% endcomment %}
-{% for group in block.members %}
-  {% include "workouts/_live_member.html" %}
-{% endfor %}
+{% if block.circuit is None %}
+  {% for group in block.members %}
+    {% include "workouts/_live_member.html" %}
+  {% endfor %}
+{% else %}
+  <section class="app-circuit" aria-label="{{ block.label }}">
+    <div class="app-circuit-head">
+      <span class="app-circuit-label">{{ block.label }}</span>
+      <span class="app-circuit-round">{% if block.state == "done" %}{{ block.rounds_label }}{% else %}круг {{ block.round }} из {{ block.rounds }}{% endif %}</span>
+    </div>
+    {% for group in block.members %}
+      {% include "workouts/_live_member.html" %}
+    {% endfor %}
+    {% include "workouts/_circuit_actions.html" %}
+  </section>
+{% endif %}

@@ -5,7 +5,7 @@
 {% endcomment %}
 <section id="rest-card" class="app-card app-rest"{% if oob %} hx-swap-oob="true"{% endif %}
          x-data="restTimer()" data-workout="{{ workout.pk }}"
-         data-duration="{{ rest_seconds }}"{% if autostart %} data-autostart="1"{% endif %}>
+         data-duration="{{ rest_seconds }}"{% if autostart %} data-autostart="1"{% endif %}{% if stop %} data-stop="1"{% endif %}>
   <div class="app-rest-top">
     <span class="app-rest-label">Отдых</span>
     <button type="button" class="app-rest-skip" x-show="running" x-cloak @click="skip()">

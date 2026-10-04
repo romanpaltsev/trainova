@@ -128,6 +128,12 @@ urlpatterns = [
     path("workouts/<int:pk>/live/", views.LiveWorkoutView.as_view(), name="workout_live"),
     path("workouts/<int:pk>/start/", views.WorkoutDraftStartView.as_view(), name="draft_start"),
     path(
+        "workouts/<int:pk>/live/circuits/",
+        views.LiveCircuitView.as_view(),
+        name="live_circuits",
+    ),
+    path("workouts/<int:pk>/live/round/", views.LiveRoundAddView.as_view(), name="live_round_add"),
+    path(
         "workouts/<int:pk>/live/exercises/",
         views.LiveExerciseView.as_view(),
         name="live_exercises",
