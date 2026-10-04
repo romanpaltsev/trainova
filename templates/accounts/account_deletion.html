@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Удалить аккаунт · Дневник тренировок{% endblock %}
+
+{% block main_class %}app-main-dialog{% endblock %}
+
+{% block content %}
+<h1 class="app-page-title">Удалить аккаунт?</h1>
+
+<div class="app-card p-4">
+  <p>
+    Аккаунт сразу перестанет работать на всех устройствах. Передумаете — просто
+    войдите до <strong>{{ deadline|date:"j E" }}</strong>, и всё вернётся.
+  </p>
+  <p class="text-secondary-app">
+    Потом насовсем удалятся тренировки, замеры, свои упражнения, места и виды спорта.
+  </p>
+
+  {% comment %}
+    Выгрузка — до удаления: после него входа нет. Честно о том, что файл не
+    несёт: замеры, черновики и идущая тренировка в Excel не попадают.
+  {% endcomment %}
+  <div class="app-deletion-export">
+    <p class="mb-2">Сначала можно скачать данные в Excel:</p>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-quiet" href="{% url 'workout_export' %}" download>История тренировок</a>
+      <a class="btn btn-quiet" href="{% url 'exercise_export' %}" download>Справочник упражнений</a>
+    </div>
+    <p class="text-muted-app app-deletion-note">
+      Замеры, черновики и идущая тренировка в файл не попадают. Копии базы для
+      восстановления после сбоев хранятся ещё до 90 дней.
+    </p>
+  </div>
+
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% include "includes/form.html" %}
+    <div class="d-flex flex-column gap-2 mt-3">
+      <button type="submit" class="btn btn-danger-quiet w-100">Удалить аккаунт</button>
+      <a class="btn btn-quiet w-100" href="{% url 'profile' %}">Отмена</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

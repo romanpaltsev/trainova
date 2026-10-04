@@ -716,6 +716,18 @@ body {
 /* Подпись строки корзины длинная, и флекс сжимал бы точку в полоску. */
 .app-trash-row > .app-sport-dot { flex: none; }
 
+/* «Удалить аккаунт»: блок выгрузки отделён от предупреждения и от пароля. */
+.app-deletion-export {
+  margin: var(--app-space-4) 0;
+  padding: var(--app-space-4) 0;
+  border-block: 1px solid var(--app-line);
+}
+
+.app-deletion-note {
+  margin: var(--app-space-3) 0 0;
+  font-size: 0.875rem;
+}
+
 /* ---------- Формы и кнопки ---------- */
 
 .form-control,

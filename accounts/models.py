@@ -58,6 +58,15 @@ class User(AbstractUser):
         blank=True,
         help_text="Сколько минут в неделю тренироваться. Пусто — цель не задана.",
     )
+    deletion_requested_at = models.DateTimeField(
+        "удаление запрошено",
+        null=True,
+        blank=True,
+        help_text=(
+            "Пусто — аккаунт живёт. Иначе он отключён и через 30 дней удалится "
+            "насовсем; вход до этого срока его возвращает (accounts.deletion)."
+        ),
+    )
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = []
@@ -77,6 +86,12 @@ class User(AbstractUser):
                     weekly_goal_minutes__lte=WEEKLY_GOAL_MAX_MINUTES,
                 ),
                 name="weekly_goal_in_range",
+            ),
+            # Аккаунт, ждущий удаления, не бывает активным: на is_active держится
+            # то, что его сессии на всех устройствах перестают работать сразу.
+            models.CheckConstraint(
+                condition=models.Q(deletion_requested_at__isnull=True) | models.Q(is_active=False),
+                name="pending_deletion_is_inactive",
             ),
         ]
 

@@ -1,0 +1,5 @@
+{% extends "account/email/base_notification.txt" %}
+
+{% block notification_message %}Запрошено удаление аккаунта. Он уже отключён, а насовсем удалится {{ deadline|date:"j E Y" }} вместе со всеми тренировками и замерами.
+
+Передумали — просто войдите до этой даты, и всё вернётся.{% endblock notification_message %}

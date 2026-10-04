@@ -204,6 +204,22 @@
           <span class="app-row-text"><span class="app-row-name">Выйти</span></span>
         </button>
       </form>
+      {% comment %}
+        Администратору строки нет: удалить себя одним нажатием и остаться без
+        админки — не та ошибка, которую стоит разрешать (AccountDeletionView).
+      {% endcomment %}
+      {% if not user.is_staff and not user.is_superuser %}
+        <a class="app-row is-danger" href="{% url 'account_deletion' %}">
+          <span class="app-row-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>
+            </svg>
+          </span>
+          <span class="app-row-text"><span class="app-row-name">Удалить аккаунт</span></span>
+          {% include "includes/chevron.html" %}
+        </a>
+      {% endif %}
     </div>
   </section>
 </div>

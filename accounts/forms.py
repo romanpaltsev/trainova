@@ -7,9 +7,13 @@ allauth рендерит поля своими виджетами, поэтом�
 import re
 from decimal import Decimal, InvalidOperation
 
+from allauth.account import app_settings as allauth_settings
 from allauth.account import forms as allauth_forms
+from allauth.account.adapter import get_adapter
+from allauth.account.utils import filter_users_by_email
 from django import forms
 
+from accounts import deletion
 from accounts.models import WEEKLY_GOAL_MAX_MINUTES, WEEKLY_GOAL_MIN_MINUTES
 
 LABELS = {
@@ -49,7 +53,22 @@ class SignupForm(StyledFormMixin, allauth_forms.SignupForm):
 
 
 class ResetPasswordForm(StyledFormMixin, allauth_forms.ResetPasswordForm):
-    pass
+    def clean_email(self):
+        """Как у allauth, но аккаунт в отсрочке удаления тоже получает письмо.
+
+        allauth ищет только активных, а ждущий удаления отключён — и человек,
+        забывший пароль, получил бы «такого аккаунта нет», хотя его данные ещё
+        30 дней живы. После сброса он входит, и вход возвращает аккаунт.
+        """
+        email = get_adapter().clean_email(self.cleaned_data["email"].lower())
+        self.users = [
+            user
+            for user in filter_users_by_email(email, prefer_verified=True)
+            if user.is_active or deletion.is_restorable(user)
+        ]
+        if not self.users and not allauth_settings.PREVENT_ENUMERATION:
+            raise get_adapter().validation_error("unknown_email")
+        return self.cleaned_data["email"]
 
 
 class ResetPasswordKeyForm(StyledFormMixin, allauth_forms.ResetPasswordKeyForm):
@@ -66,6 +85,21 @@ class ChangePasswordForm(StyledFormMixin, allauth_forms.ChangePasswordForm):
 
 class SetPasswordForm(StyledFormMixin, allauth_forms.SetPasswordForm):
     pass
+
+
+class DeleteAccountForm(StyledFormMixin, allauth_forms.ReauthenticateForm):
+    """Подтверждение удаления аккаунта паролем.
+
+    Проверку делает allauth (adapter.reauthenticate → authenticate): у неё уже
+    есть ограничение неудачных попыток входа и русская ошибка, а своя проверка
+    check_password дала бы перебирать пароль из украденной сессии без лимита.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["password"].label = "Пароль"
+        # Ссылку «Забыли пароль?» allauth кладёт в help_text — здесь она лишняя.
+        self.fields["password"].help_text = ""
 
 
 class WeeklyGoalForm(forms.Form):

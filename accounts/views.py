@@ -1,17 +1,21 @@
 """Экран профиля: аккаунт, тема, отдых по умолчанию, входы в справочники."""
 
+from allauth.account.adapter import get_adapter
 from allauth.account.utils import has_verified_email
 from django.conf import settings
+from django.contrib import messages
+from django.contrib.auth import logout
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Count, Max, OuterRef, Q, Subquery
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, HttpResponseBadRequest
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
-from django.utils import timezone
-from django.views.generic import TemplateView, View
+from django.utils import formats, timezone
+from django.views.generic import FormView, TemplateView, View
 
-from accounts.forms import WeeklyGoalForm
+from accounts import deletion
+from accounts.forms import DeleteAccountForm, WeeklyGoalForm
 from accounts.models import User
 from workouts import stats, trash
 from workouts.models import (
@@ -151,3 +155,52 @@ class ProfileGoalView(LoginRequiredMixin, View):
     def modal(self, request, form):
         has_goal = request.user.weekly_goal_minutes is not None
         return render(request, self.template_name, {"form": form, "has_goal": has_goal})
+
+
+class AccountDeletionView(LoginRequiredMixin, FormView):
+    """«Удалить аккаунт»: подтверждение паролем, отсрочка 30 дней.
+
+    Аккаунт отключается сразу (accounts.deletion.request), письмо сообщает срок,
+    а вход до него всё возвращает. Администратора так не удалить: строки в
+    профиле у него нет, а прямой заход отклоняется — иначе одним нажатием можно
+    было бы остаться без доступа к админке.
+    """
+
+    template_name = "accounts/account_deletion.html"
+    form_class = DeleteAccountForm
+
+    def dispatch(self, request, *args, **kwargs):
+        user = request.user
+        if user.is_authenticated and (user.is_staff or user.is_superuser):
+            messages.error(request, "Аккаунт администратора отсюда не удалить.")
+            return redirect("profile")
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_form_kwargs(self):
+        return {**super().get_form_kwargs(), "user": self.request.user}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(
+            {
+                "deadline": timezone.localdate() + deletion.GRACE,
+                "nav_active": "profile",
+            }
+        )
+        return context
+
+    def form_valid(self, form):
+        user = self.request.user
+        deletion.request(user)
+        deadline = timezone.localtime(deletion.deadline(user))
+        get_adapter(self.request).send_notification_mail(
+            "account/email/account_deletion_requested", user, {"deadline": deadline}
+        )
+        logout(self.request)
+        # После logout: сессия очищена, а сообщение уедет в cookie и дождётся входа.
+        messages.success(
+            self.request,
+            f"Аккаунт будет удалён {formats.date_format(deadline, 'j E')}. "
+            "Передумаете — просто войдите.",
+        )
+        return redirect("account_login")
