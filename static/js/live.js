@@ -329,9 +329,17 @@ function restTimer() {
 // 2. iOS усыпляет страницу, пока телефон лежит в кармане между подходами. На
 //    возврате таймеры стоят, запрос в полёте умирает без событий, а кнопка с
 //    hx-disabled-elt остаётся выключенной — помогает только переход на другую
-//    страницу и назад. Делаем это сами: после долгой паузы перезагружаем экран.
+//    страницу и назад. Делаем это сами: после долгой паузы перезагружаем экран —
+//    но только если он правда завис, то есть запрос, ушедший до сна, так и не
+//    закончился. Раньше перезагрузка шла на каждом возврате дольше минуты, а это
+//    каждый отдых между подходами: на мобильной сети после простоя она длилась
+//    секунды, и всё это время экран выглядел потерявшим связь. Часам тренировки
+//    и таймеру отдыха перезагрузка не нужна: они считают от меток времени.
 
 const RESUME_RELOAD_AFTER_MS = 60000;
+// Отложенные во сне события (таймаут htmx, обрыв) браузер доставляет сразу после
+// пробуждения — дать им прийти, прежде чем считать запрос умершим.
+const RESUME_CHECK_DELAY_MS = 1000;
 
 function offlineBar() {
   return document.getElementById("live-offline");
@@ -366,6 +374,26 @@ document.addEventListener("htmx:afterRequest", function (event) {
   if (event.detail.successful) hideOffline();
 });
 
+// Запросы в полёте: xhr → когда ушёл. beforeSend, а не beforeRequest: тот можно
+// отменить, и запрос не уйдёт вовсе, а за каждым beforeSend htmx обязательно
+// шлёт afterRequest — на ответ, обрыв, отмену и таймаут.
+const inFlight = new Map();
+
+document.addEventListener("htmx:beforeSend", function (event) {
+  inFlight.set(event.detail.xhr, Date.now());
+});
+
+document.addEventListener("htmx:afterRequest", function (event) {
+  inFlight.delete(event.detail.xhr);
+});
+
+function stuckSince(moment) {
+  for (const sentAt of inFlight.values()) {
+    if (sentAt <= moment) return true;
+  }
+  return false;
+}
+
 let hiddenAt = null;
 
 document.addEventListener("visibilitychange", function () {
@@ -373,15 +401,20 @@ document.addEventListener("visibilitychange", function () {
     hiddenAt = Date.now();
     return;
   }
-  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  const leftAt = hiddenAt;
+  const away = leftAt ? Date.now() - leftAt : 0;
   hiddenAt = null;
   if (away < RESUME_RELOAD_AFTER_MS) return;
-  // Оффлайн перезагружать нельзя: вместо экрана будет ошибка браузера.
-  if (navigator.onLine === false) {
-    showOffline("Нет сети — экран мог устареть.");
-    return;
-  }
-  window.location.reload();
+  window.setTimeout(function () {
+    // Запрос, ушедший уже после возврата, — свежий тап, а не зависший.
+    if (!stuckSince(leftAt)) return;
+    // Оффлайн перезагружать нельзя: вместо экрана будет ошибка браузера.
+    if (navigator.onLine === false) {
+      showOffline("Нет сети — экран мог устареть.");
+      return;
+    }
+    window.location.reload();
+  }, RESUME_CHECK_DELAY_MS);
 });
 
 // Возврат из кэша «назад/вперёд»: состояние страницы там заведомо устаревшее.
