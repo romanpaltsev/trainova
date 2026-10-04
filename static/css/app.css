@@ -1112,6 +1112,12 @@ a.btn {
   grid-template-columns: 1fr;
 }
 
+/* «Записать тренировку задним числом» — под карточкой текущего упражнения, а не
+   в ней: дата у тренировки. Отступ снизу — как у карточки над ней. */
+.app-backdate-btn {
+  margin-bottom: var(--app-space-4);
+}
+
 .app-stepper-label {
   margin-bottom: 0.375rem;
   font-size: 0.75rem;

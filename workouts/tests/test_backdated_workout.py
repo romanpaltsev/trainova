@@ -213,6 +213,29 @@ def test_today_with_a_future_time_is_rejected(client, user, strength, monkeypatc
     assert workout.is_planned
 
 
+@pytest.mark.parametrize("superset", [False, True], ids=["single", "superset"])
+def test_button_stands_under_the_exercise_card_not_in_it(client, user, strength, superset):
+    """Дата у тренировки, а не у упражнения: внутри карточки текущего
+    упражнения кнопка выглядела настройкой упражнения. Всё, что в «Сейчас»
+    обёрнуто в section, — это текущий блок: карточка или рамка суперсета."""
+    workout = draft(user, strength)
+    for name in ("A", "B"):
+        StrengthSetFactory(
+            workout=workout,
+            exercise=ExerciseFactory(name=name),
+            done=False,
+            circuit=1 if superset else None,
+        )
+    client.force_login(user)
+
+    content = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+
+    now = content[content.index('class="app-live-now"') : content.index('class="app-live-plan"')]
+    button = now.index(reverse("workout_backdate", args=[workout.pk]))
+    assert now.rindex("</section>") < button
+    assert "Записать тренировку задним числом" in now
+
+
 def test_draft_without_sets_is_not_recorded_and_not_deleted(client, user, strength):
     """Черновик подготовлен осознанно — молча удалять его, как делает завершение, нельзя."""
     workout = draft(user, strength)
