@@ -1,23 +1,32 @@
-"""Круги: суперсет, трисет, круг из N упражнений.
+"""Суперсеты: суперсет, трисет, суперсет из N упражнений.
 
-Круг — упражнения тренировки с одним номером StrengthSet.circuit. Правило
-порядка одно на три потребителя (models.order_exercises): итог, номер
-упражнения на его странице и подпись тренировки по группам мышц. Подходы
-круга идут по раундам A1 → B1 → A2 → B2, отдых — только после раунда.
+В коде суперсет — круг: упражнения тренировки с одним номером
+StrengthSet.circuit, а проход по ним — раунд (в интерфейсе «подход
+суперсета»). Правило порядка одно на три потребителя
+(models.order_exercises): итог, номер упражнения на его странице и подпись
+тренировки по группам мышц. Подходы круга идут по раундам A1 → B1 → A2 → B2,
+отдых — только после раунда.
 """
 
+import importlib
 import io
 from datetime import timedelta
 
 import pytest
+from django.apps import apps as django_apps
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import Workbook, load_workbook
 
 from workouts import excel, excel_import, services, stats, trash
-from workouts.models import DeletedWorkout, StrengthSet, Workout
+from workouts.models import ChangelogEntry, DeletedWorkout, StrengthSet, Workout
 from workouts.tests.budgets import SIDEBAR_QUERIES
-from workouts.tests.factories import ExerciseFactory, StrengthSetFactory, WorkoutFactory
+from workouts.tests.factories import (
+    ChangelogEntryFactory,
+    ExerciseFactory,
+    StrengthSetFactory,
+    WorkoutFactory,
+)
 
 pytestmark = pytest.mark.django_db
 
@@ -104,6 +113,15 @@ def test_workout_without_circuits_keeps_old_order(user):
     assert names(services.exercise_groups(workout)) == ["B", "A"]
 
 
+def test_label_by_size():
+    assert [services.circuit_label(size) for size in (2, 3, 4, 5)] == [
+        "Суперсет",
+        "Трисет",
+        "Суперсет · 4 упражнения",
+        "Суперсет · 5 упражнений",
+    ]
+
+
 # ---------- Связать и разобрать ----------
 
 
@@ -170,7 +188,7 @@ def test_modal_answers_with_region_out_of_band(client, user, live):
         client, workout, action="link", exercise=a.pk, next=b.pk
     ).content.decode()
 
-    assert "Суперсет" in content
+    assert 'role="group" aria-label="Суперсет"' in content
     assert 'id="exercises" hx-swap-oob="true"' in content
 
 
@@ -242,6 +260,22 @@ def test_sets_go_by_rounds_and_rest_only_after_a_round(client, user):
     assert "data-autostart" in after_b2
 
 
+def test_live_screen_counts_rounds_as_superset_sets(client, user):
+    """Проход по всем упражнениям — «подход суперсета», а не «круг»: одно
+    слово значило в интерфейсе и группу, и проход."""
+    a, b = ExerciseFactory(name="A"), ExerciseFactory(name="B")
+    workout = WorkoutFactory(user=user, duration_min=None)
+    make(workout, a, count=3, done=1, circuit=1)
+    make(workout, b, count=3, done=1, circuit=1)
+    client.force_login(user)
+
+    content = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+
+    assert "подход 2 из 3" in content
+    assert "+ Подход суперсета" in content
+    assert "Изменить суперсет" in content
+
+
 def test_manual_choice_inside_circuit_lasts_one_set(client, user):
     a, b = ExerciseFactory(name="A"), ExerciseFactory(name="B")
     workout = WorkoutFactory(user=user, duration_min=None)
@@ -267,7 +301,7 @@ def test_set_outside_circuit_restarts_rest_as_before(client, user):
     assert "data-autostart" in content and "data-stop" not in content
 
 
-# ---------- «+ Круг», «+ в круг», «Повторить» ----------
+# ---------- «+ Подход суперсета», «+ Упражнение в суперсет», «Повторить» ----------
 
 
 def test_round_adds_a_set_to_every_member(client, user, live):
@@ -320,7 +354,7 @@ def test_exercise_added_into_circuit(client, user, live):
         reverse("live_exercises", args=[workout.pk]), {"exercise": newcomer.pk, "circuit": number}
     )
 
-    assert "Упражнение в круг" in picker.content.decode()
+    assert "Упражнение в суперсет" in picker.content.decode()
     assert set(workout.sets.filter(exercise=newcomer).values_list("circuit", flat=True)) == {number}
 
 
@@ -364,7 +398,7 @@ def test_summary_and_correct_screen_show_the_circuit(client, user):
     correct = client.get(reverse("workout_correct", args=[workout.pk])).content.decode()
 
     assert 'class="app-circuit" aria-label="Суперсет"' in summary
-    assert "2 круга" in summary
+    assert '<span class="app-circuit-round">2 подхода</span>' in summary
     assert reverse("live_round_add", args=[workout.pk]) in correct
 
 
@@ -392,7 +426,7 @@ def test_excel_round_trip_keeps_circuits(user, other_user):
     sheet = load_workbook(io.BytesIO(buffer.getvalue()))[excel.SHEET_TITLE]
     header = [cell.value for cell in sheet[1]]
     circuits = {
-        row[header.index("Упражнение")]: row[header.index("Круг")]
+        row[header.index("Упражнение")]: row[header.index("Суперсет")]
         for row in sheet.iter_rows(min_row=2, values_only=True)
     }
     assert circuits == {"A": 1, "B": 1, "C": None}
@@ -407,7 +441,7 @@ def test_excel_lone_circuit_number_is_dropped(other_user):
     sheet = book.active
     sheet.title = excel.SHEET_TITLE
     sheet.append(
-        ["Дата", "Вид спорта", "Длительность, мин", "Упражнение", "Вес, кг", "Повторы", "Круг"]
+        ["Дата", "Вид спорта", "Длительность, мин", "Упражнение", "Вес, кг", "Повторы", "Суперсет"]
     )
     sheet.append(["01.09.2026", "Силовая", 60, "Одинокое", 50, 10, 2])
     sheet.append(["01.09.2026", "Силовая", 60, "Другое", 50, 10, None])
@@ -467,3 +501,23 @@ def test_foreign_circuit_modal_is_404(client, user, other_user):
     client.force_login(user)
 
     assert client.get(reverse("live_circuits", args=[alien.pk])).status_code == 404
+
+
+# ---------- Новость ----------
+
+
+def test_migration_renames_circuits_announcement():
+    """Новость уже вышла словами «круг»: миграция правит её на месте, дата
+    та же — точка «есть новое» второй раз не загорится."""
+    migration = importlib.import_module("workouts.migrations.0060_rename_circuits_announcement")
+    ChangelogEntry.objects.filter(title__in=[migration.OLD_TITLE, migration.TITLE]).delete()
+    entry = ChangelogEntryFactory(title=migration.OLD_TITLE, body=migration.OLD_BODY)
+
+    migration.rename(django_apps, None)
+    renamed = ChangelogEntry.objects.get(pk=entry.pk)
+    migration.rename_back(django_apps, None)
+
+    assert (renamed.title, renamed.body) == (migration.TITLE, migration.BODY)
+    assert "круг" not in renamed.body.lower()
+    assert renamed.published_at == entry.published_at
+    assert ChangelogEntry.objects.get(pk=entry.pk).title == migration.OLD_TITLE

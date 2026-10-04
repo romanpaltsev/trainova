@@ -1,20 +1,21 @@
 {% comment %}
-  Окно «Круги»: упражнения тренировки по порядку. Между соседними, ещё не
+  Окно «Суперсеты»: упражнения тренировки по порядку. Между соседними, ещё не
   связанными, — «связать» (оба id едут в запросе: устаревшая вкладка ничего не
-  сломает), у упражнения в круге — «×», у круга — «+ Упражнение в круг». Ответ на
-  действие — это же окно и регион упражнений out-of-band (LiveCircuitView).
+  сломает), у упражнения в суперсете — «×», у суперсета — «+ Упражнение в
+  суперсет». Ответ на действие — это же окно и регион упражнений out-of-band
+  (LiveCircuitView).
 {% endcomment %}
 <div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
   <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="circuit-modal-title">
     <div class="app-modal-head">
-      <h2 class="app-modal-title" id="circuit-modal-title">Круги</h2>
+      <h2 class="app-modal-title" id="circuit-modal-title">Суперсеты</h2>
       <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
     <p class="text-secondary-app">
-      Связанные упражнения идут по кругу: по подходу каждого, потом отдых и снова.
+      Упражнения суперсета идут по очереди: по подходу каждого, потом отдых — и снова.
     </p>
 
     <div class="app-circuit-list">
@@ -48,7 +49,7 @@
                 <span class="app-exercise-num" aria-hidden="true">{{ group.position }}</span>
                 <span class="app-circuit-name">{{ group.exercise.name }}</span>
                 <button type="button" class="app-icon-btn app-circuit-remove"
-                        aria-label="Убрать «{{ group.exercise.name }}» из круга"
+                        aria-label="Убрать «{{ group.exercise.name }}» из суперсета"
                         hx-post="{% url 'live_circuits' workout.pk %}"
                         hx-vals='{"action": "unlink", "exercise": "{{ group.exercise.pk }}"}'
                         hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
@@ -60,7 +61,7 @@
             <button type="button" class="app-live-link is-accent"
                     hx-get="{% url 'live_exercises' workout.pk %}?circuit={{ item.block.circuit }}"
                     hx-target="#modal" hx-swap="innerHTML">
-              + Упражнение в круг
+              + Упражнение в суперсет
             </button>
           </div>
         {% endif %}

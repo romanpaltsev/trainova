@@ -1,16 +1,17 @@
 {% comment %}
-  Действия круга: «+ Круг» — ещё по подходу каждому упражнению, «Изменить круг» —
-  окно «Круги». Ждёт block и workout. Общие у живого экрана и экрана правки.
+  Действия суперсета: «+ Подход суперсета» — ещё по подходу каждому упражнению,
+  «Изменить суперсет» — окно «Суперсеты». Ждёт block и workout. Общие у живого
+  экрана и экрана правки.
 {% endcomment %}
 <div class="app-circuit-actions">
   <button type="button" class="app-live-link is-accent"
           hx-post="{% url 'live_round_add' workout.pk %}"
           hx-vals='{"circuit": "{{ block.circuit }}"}'
           hx-target="#exercises" hx-swap="outerHTML" hx-disabled-elt="this">
-    + Круг
+    + Подход суперсета
   </button>
   <button type="button" class="app-live-link"
           hx-get="{% url 'live_circuits' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
-    Изменить круг
+    Изменить суперсет
   </button>
 </div>

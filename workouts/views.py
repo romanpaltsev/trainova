@@ -878,7 +878,7 @@ class LiveExerciseView(LoginRequiredMixin, View):
             exercise = form.save_for_user()
 
         if not workout.sets.filter(exercise=exercise).exists():
-            # «+ Упражнение в круг»: номер проверяется — у разобранного круга
+            # «+ Упражнение в суперсет»: номер проверяется — у разобранного круга
             # упражнение просто встаёт отдельно.
             circuit = services.valid_circuit(workout, request.POST.get("circuit"))
             try:
@@ -1014,7 +1014,7 @@ class LiveSetAddView(LoginRequiredMixin, View):
 
 
 def circuit_modal_response(request, workout, *, refresh=False):
-    """Окно «Круги»; после правки — плюс регион упражнений out-of-band.
+    """Окно «Суперсеты»; после правки — плюс регион упражнений out-of-band.
 
     Между соседними блоками — «связать»: последний член предыдущего с первым
     следующего. Пары считаются здесь, а не в шаблоне: шаблону соседей не видно.
@@ -1048,7 +1048,7 @@ def circuit_modal_response(request, workout, *, refresh=False):
 
 
 class LiveCircuitView(LoginRequiredMixin, View):
-    """Окно «Круги»: связать соседние упражнения в круг или убрать из него.
+    """Окно «Суперсеты»: связать соседние упражнения в круг или убрать из него.
 
     Работает в идущей, в черновике и на правке записанной тренировки — круг
     можно отметить и после. «Связать» шлёт оба id: устаревшая вкладка с уже
@@ -1078,13 +1078,13 @@ class LiveCircuitView(LoginRequiredMixin, View):
 
 
 class LiveRoundAddView(LoginRequiredMixin, View):
-    """«+ Круг»: ещё по подходу каждому упражнению круга."""
+    """«+ Подход суперсета»: ещё по подходу каждому упражнению круга."""
 
     def post(self, request, pk):
         workout = editable_workout_or_404(request, pk)
         circuit = services.valid_circuit(workout, request.POST.get("circuit"))
         if circuit is None:
-            raise Http404("Круга нет")
+            raise Http404("Суперсета нет")
         try:
             with transaction.atomic():
                 services.add_round(workout, circuit)
