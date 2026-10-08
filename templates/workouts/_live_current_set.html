@@ -9,13 +9,16 @@
   время с весом. Больше двух полей не бывает — на 375px три степпера (две кнопки
   по 44px плюс значение) не помещаются.
 
-  У текущего подхода внизу «Подход выполнен». В черновике кнопки нет вовсе:
-  «Начать тренировку» и «Записать тренировку задним числом» — действия всей
-  тренировки и стоят наверху экрана (_draft_start.html); здесь они выглядели
-  настройками упражнения. Признак берём у модели (workout.is_planned), а не из
-  контекста — партиал рендерится и из live.html, и из live_region_response. У
-  открытого планового подхода внизу «Готово»: выполнять подходы не по порядку
-  нельзя, иначе номера и порядок разъехались бы. Ждёт set, group и workout.
+  У текущего подхода идущей тренировки внизу «Подход выполнен». У открытого
+  планового подхода — «Готово»: выполнять подходы не по порядку нельзя, иначе
+  номера и порядок разъехались бы. В черновике выполнять нечего, поэтому
+  «Готово» стоит у любого подхода, первого тоже: без неё у первого подхода
+  внизу было пусто, а у остальных кнопка была, и непонятно, чем закончить
+  правку. «Начать тренировку» и «Записать тренировку задним числом» сюда не
+  возвращаются — это действия всей тренировки, они наверху экрана
+  (_draft_start.html). Признак берём у модели (workout.is_planned), а не из
+  контекста — партиал рендерится и из live.html, и из live_region_response.
+  Ждёт set, group и workout.
 {% endcomment %}
 <div class="app-live-current">
   <div class="app-live-current-head">
@@ -29,7 +32,7 @@
 
   {% include "workouts/_set_steppers.html" %}
 
-  {% if set.pk != group.current_set.pk %}
+  {% if workout.is_planned or set.pk != group.current_set.pk %}
     <div class="app-live-links">
       <button type="button" class="app-live-link is-accent"
               hx-get="{% url 'workout_live' workout.pk %}"
@@ -38,7 +41,7 @@
         Готово
       </button>
     </div>
-  {% elif not workout.is_planned %}
+  {% else %}
     <button type="button" class="btn btn-accent w-100 app-btn-big"
             hx-post="{% url 'set_done' set.pk %}" hx-target="#exercises" hx-swap="outerHTML"
             hx-sync="closest .app-live-exercise:queue all" hx-disabled-elt="this">

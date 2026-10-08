@@ -342,6 +342,20 @@ def test_tap_on_planned_set_opens_its_steppers(client, user, started):
     assert reverse("set_done", args=[third.pk]) not in content
 
 
+def test_first_set_of_draft_has_done_button(client, user):
+    """В черновике «Готово» есть и у первого подхода, а не только у остальных:
+    «Подход выполнен» там нет, и без «Готово» правку нечем было закончить."""
+    workout = WorkoutFactory(user=user, started_at=None, duration_min=None)
+    first, _second = plan(workout, ExerciseFactory(), [60, 60])
+    client.force_login(user)
+
+    content = region(client, workout)
+
+    assert reverse("set_value", args=[first.pk]) in content
+    assert "Готово" in content
+    assert reverse("set_done", args=[first.pk]) not in content
+
+
 def test_stale_done_or_foreign_set_param_opens_current_set(client, user, other_user):
     workout = WorkoutFactory(user=user, duration_min=None)
     done_row, current, _later = plan(workout, ExerciseFactory(), [60, 60, 60], done=1)
