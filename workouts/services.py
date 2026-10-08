@@ -224,40 +224,6 @@ def set_values(measurement, source):
     return values
 
 
-def carry_weight(row, old):
-    """Новый вес планового подхода — следующим плановым с тем же весом.
-
-    Поменял 60 на 65 у первого подхода — второй и третий идут за ним, а не
-    остаются на 60. Переносится только на подряд идущие подходы с прежним
-    весом: пирамида 60, 70, 80 при правке первого не сплющивается. Повторы и
-    время не переносятся — это результат подхода, а «10» из прошлого раза
-    остаётся целью следующего. Выполненный подход и записанная тренировка —
-    факт, и правка факта соседей не трогает. Возвращает подходы с новым весом.
-    """
-    if row.done or row.workout.is_finished or row.weight_kg == old:
-        return []
-    later = StrengthSet.objects.filter(
-        workout_id=row.workout_id,
-        exercise_id=row.exercise_id,
-        # Другая единица (упражнение переводили посреди тренировки) веса может
-        # не иметь вовсе — запись упёрлась бы в set_fields_match_measurement.
-        measurement=row.measurement,
-        done=False,
-        set_number__gt=row.set_number,
-    ).order_by("set_number")
-    carried = []
-    for other in later:
-        if other.weight_kg != old:
-            break
-        other.weight_kg = row.weight_kg
-        carried.append(other)
-    if carried:
-        StrengthSet.objects.filter(pk__in=[other.pk for other in carried]).update(
-            weight_kg=row.weight_kg
-        )
-    return carried
-
-
 def exercise_groups(workout):
     """Упражнения тренировки в порядке фактического выполнения, со своими подходами.
 

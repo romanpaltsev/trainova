@@ -607,7 +607,7 @@ def live_region_response(
         return HttpResponse(
             render_to_string("workouts/_correct_exercises.html", context, request=request)
         )
-    context = services.live_context(workout) | {"oob": oob, "error": error}
+    context = services.live_context(workout, open_set_id) | {"oob": oob, "error": error}
     html = render_to_string("workouts/_live_exercises.html", context, request=request)
     if restart_timer or stop_timer:
         html += render_to_string(
@@ -1026,10 +1026,10 @@ class LiveSetAddView(LoginRequiredMixin, View):
             # возвращается в «Сейчас», как после «вернуть подход в работу».
             workout.current_exercise = exercise
             workout.save(update_fields=["current_exercise"])
-        # На экране правки новый подход сразу раскрыт: его добавили, чтобы поправить.
-        return live_region_response(
-            request, workout, open_set_id=created.pk if created and workout.is_finished else None
-        )
+        # Новый подход сразу раскрыт — и на экране правки, и в живом режиме: его
+        # добавили, чтобы поправить, а панель на первом подходе плана уводила
+        # правку не туда. Даблтап (created is None) открывает текущий.
+        return live_region_response(request, workout, open_set_id=created.pk if created else None)
 
 
 def circuit_modal_response(request, workout, *, refresh=False):
@@ -1201,21 +1201,13 @@ class LiveRestView(LoginRequiredMixin, View):
 def save_set_field(request, row, field, value):
     """Сохранить поле подхода; ответ — его значение для степпера.
 
-    Новый вес переходит на следующие плановые подходы (services.carry_weight),
-    и их строки обновляются out-of-band тем же ответом: регион не
-    перерисовывается, кнопки степпера не пересоздаются, и серия быстрых тапов
-    по-прежнему не теряется.
+    Меняется только этот подход: соседние плановые не трогаются, даже если у
+    них был тот же вес, — правка одного числа не должна молча переписывать
+    другие.
     """
-    old = row.weight_kg
     setattr(row, field, value)
     row.save(update_fields=[field])
-    html = row.field_display(field)
-    carried = services.carry_weight(row, old) if field == "weight_kg" else []
-    if carried:
-        html += render_to_string(
-            "workouts/_live_set_values_oob.html", {"sets": carried}, request=request
-        )
-    return HttpResponse(html)
+    return HttpResponse(row.field_display(field))
 
 
 class SetAdjustView(LoginRequiredMixin, View):

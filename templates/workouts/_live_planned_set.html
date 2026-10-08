@@ -1,10 +1,8 @@
 {% comment %}
   Плановый подход в карточке текущего упражнения: тап открывает его степперы
   (?set=<id>, приём экрана правки) — править можно любой подход плана, а не
-  только текущий. id у значения — для ответа степпера: когда новый вес
-  переходит на следующие подходы (services.carry_weight), строки обновляются
-  out-of-band, тем же id. Подпись для озвучки — скрытым текстом, а не
-  aria-label: тот не поменялся бы вместе со значением. Ждёт set и workout.
+  только текущий. Подпись для озвучки — скрытым текстом, а не aria-label:
+  тот не поменялся бы вместе со значением. Ждёт set и workout.
 {% endcomment %}
 <button type="button" class="app-live-set is-planned"
         hx-get="{% url 'workout_live' workout.pk %}?set={{ set.pk }}"
@@ -13,7 +11,7 @@
   <span class="visually-hidden">Изменить подход</span>
   <span class="app-live-set-num">{{ set.display_number }}</span>
   <span class="app-live-set-value">
-    <span class="num" id="set-{{ set.pk }}-value">{{ set.value_display }}</span>
+    <span class="num">{{ set.value_display }}</span>
   </span>
   <span class="app-live-set-icon" aria-hidden="true">{% include "includes/pencil.html" %}</span>
 </button>

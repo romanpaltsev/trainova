@@ -382,13 +382,11 @@ def test_region_of_finished_workout_redirects_the_whole_page(client, user):
     assert response.headers["HX-Redirect"] == reverse("workout_summary", args=[finished.pk])
 
 
-def test_new_weight_carries_to_following_sets_with_the_same_weight(client, user):
-    """Поменял вес текущего — следующие с тем же весом идут за ним. Добивка с
-    другим весом, выполненный подход и другое упражнение не трогаются."""
+def test_weight_change_touches_only_edited_set(client, user):
+    """Правка веса меняет только этот подход: соседние плановые с тем же весом,
+    выполненный подход и другое упражнение остаются как были."""
     workout = WorkoutFactory(user=user, duration_min=None)
-    done_row, current, second, third, backoff = plan(
-        workout, ExerciseFactory(), [60, 60, 60, 60, 40], done=1
-    )
+    done_row, current, second = plan(workout, ExerciseFactory(), [60, 60, 60], done=1)
     other = plan(workout, ExerciseFactory(), [60])[0]
     client.force_login(user)
 
@@ -398,51 +396,41 @@ def test_new_weight_carries_to_following_sets_with_the_same_weight(client, user)
     assert weights == {
         done_row.pk: 60,
         current.pk: Decimal("62.5"),
-        second.pk: Decimal("62.5"),
-        third.pk: Decimal("62.5"),
-        backoff.pk: 40,
+        second.pk: 60,
         other.pk: 60,
     }
-    content = response.content.decode()
-    assert content.startswith("62,5<")
-    assert f'id="set-{second.pk}-value" hx-swap-oob="true">62,5 кг × 10<' in content
-    assert f"set-{backoff.pk}-value" not in content
-
-
-def test_pyramid_is_not_flattened(client, user):
-    workout = WorkoutFactory(user=user, duration_min=None)
-    first, _second, _third = plan(workout, ExerciseFactory(), [60, 70, 80])
-    client.force_login(user)
-
-    response = adjust(client, first, "weight_kg", "up")
-
-    weights = list(workout.sets.order_by("set_number").values_list("weight_kg", flat=True))
-    assert weights == [Decimal("62.5"), 70, 80]
     assert response.content.decode() == "62,5"
 
 
-def test_typed_weight_carries_in_draft(client, user):
-    """Тетрадка задним числом: вес первого подхода набран руками — второй за ним."""
+def test_typed_weight_touches_only_edited_set_in_draft(client, user):
     workout = WorkoutFactory(user=user, started_at=None, duration_min=None)
     first, second = plan(workout, ExerciseFactory(), [0, 0])
     client.force_login(user)
 
     client.post(reverse("set_value", args=[first.pk]), {"field": "weight_kg", "value": "82,5"})
 
+    first.refresh_from_db()
     second.refresh_from_db()
-    assert second.weight_kg == Decimal("82.5")
+    assert (first.weight_kg, second.weight_kg) == (Decimal("82.5"), 0)
 
 
-def test_reps_do_not_carry(client, user):
-    """Повторы — результат подхода: «10» из прошлого раза остаётся целью следующего."""
-    workout = WorkoutFactory(user=user, duration_min=None)
-    first, second = plan(workout, ExerciseFactory(), [60, 60])
+@pytest.mark.parametrize("started", [True, False], ids=["live", "draft"])
+def test_added_set_opens_for_editing(client, user, started):
+    """«+ Добавить подход» раскрывает новый подход, а не первый в плане: его
+    добавили, чтобы поправить, и правка не должна уходить в чужой подход."""
+    workout = WorkoutFactory(
+        user=user, duration_min=None, **({} if started else {"started_at": None})
+    )
+    bench = ExerciseFactory()
+    first, _second = plan(workout, bench, [60, 60])
     client.force_login(user)
 
-    adjust(client, first, "reps", "down")
+    response = client.post(reverse("live_set_add", args=[workout.pk]), {"exercise": bench.pk})
 
-    second.refresh_from_db()
-    assert second.reps == 10
+    added = workout.sets.get(exercise=bench, set_number=3)
+    content = response.content.decode()
+    assert reverse("set_value", args=[added.pk]) in content
+    assert reverse("set_value", args=[first.pk]) not in content
 
 
 def test_correcting_finished_workout_does_not_touch_other_sets(client, user):
