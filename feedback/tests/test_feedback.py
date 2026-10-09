@@ -4,6 +4,7 @@
 «Админке». Письма: админам — о новом обращении и дописке, автору — об ответе.
 """
 
+import importlib
 from datetime import timedelta
 
 import pytest
@@ -262,29 +263,35 @@ def test_deleting_user_deletes_their_feedback(user):
     assert not Feedback.objects.exists()
 
 
-@pytest.mark.django_db(transaction=True)
 def test_migration_moves_single_reply_into_thread(user):
     """0003: прежний Feedback.reply становится сообщением администратора.
 
-    transaction=True: откат схемы внутри общей транзакции теста Postgres не
-    пускает — у таблицы остаются отложенные проверки FK.
+    Функция миграции вызывается напрямую: колонок reply в схеме уже нет, а
+    откат схемы в тесте потребовал бы транзакционного режима, который в конце
+    очищает таблицы — вместе со строками data-миграций, нужными соседям.
+    Старые строки подставляются объектами с атрибутами reply/replied_at.
     """
-    from django.db import connection
-    from django.db.migrations.executor import MigrationExecutor
-
-    executor = MigrationExecutor(connection)
-    executor.migrate([("feedback", "0002_feedbackmessage")])
-    apps = executor.loader.project_state([("feedback", "0002_feedbackmessage")]).apps
-    OldFeedback = apps.get_model("feedback", "Feedback")
+    migration = importlib.import_module("feedback.migrations.0003_reply_to_message")
     replied_at = timezone.now() - timedelta(days=3)
-    OldFeedback.objects.create(user_id=user.pk, text="Вопрос", reply="Ответ", replied_at=replied_at)
-    OldFeedback.objects.create(user_id=user.pk, text="Без ответа")
+    answered = Feedback.objects.create(user=user, text="Вопрос")
+    answered.reply, answered.replied_at = "Ответ", replied_at
 
-    executor = MigrationExecutor(connection)
-    executor.migrate(executor.loader.graph.leaf_nodes())
+    class OldFeedbackManager:
+        def exclude(self, **lookup):
+            assert lookup == {"reply": ""}
+            return [answered]
+
+    class OldFeedback:
+        objects = OldFeedbackManager()
+
+    class Apps:
+        def get_model(self, app_label, name):
+            return {"Feedback": OldFeedback, "FeedbackMessage": FeedbackMessage}[name]
+
+    migration.reply_to_message(Apps(), None)
 
     message = FeedbackMessage.objects.get()
-    assert (message.feedback.text, message.text, message.from_admin) == ("Вопрос", "Ответ", True)
+    assert (message.feedback, message.text, message.from_admin) == (answered, "Ответ", True)
     assert message.created_at == replied_at
 
 
