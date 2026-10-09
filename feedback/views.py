@@ -1,12 +1,13 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views import View
 
 from feedback import notify
 from feedback.forms import FeedbackForm, FeedbackMessageForm
-from feedback.models import Feedback
+from feedback.models import Feedback, FeedbackMessage
 
 
 class FeedbackView(LoginRequiredMixin, View):
@@ -32,9 +33,11 @@ class FeedbackView(LoginRequiredMixin, View):
         return redirect("feedback")
 
     def page(self, request, form):
-        # Число ответов — аннотацией в том же запросе, а не запросом на строку.
+        # Число ответов и «есть новый ответ» — в том же запросе, а не запросом
+        # на строку.
         items = Feedback.objects.filter(user=request.user).annotate(
-            replies=Count("messages", filter=Q(messages__from_admin=True))
+            replies=Count("messages", filter=Q(messages__from_admin=True)),
+            has_unread=Exists(FeedbackMessage.objects.unread().filter(feedback=OuterRef("pk"))),
         )
         return render(
             request,
@@ -54,6 +57,10 @@ class FeedbackDetailView(LoginRequiredMixin, View):
 
     def get(self, request, pk):
         item = self.get_object(request, pk)
+        # Открыл — значит прочитал: точка «есть ответ» гаснет. Пометка у
+        # обращения, а не у пользователя: открыть одно не значит прочитать другое.
+        # Бейджи панели ленивые и считаются при рендере — уже после этой записи.
+        Feedback.objects.filter(pk=item.pk).update(user_seen_at=timezone.now())
         return self.page(request, item, FeedbackMessageForm(feedback=item))
 
     def post(self, request, pk):

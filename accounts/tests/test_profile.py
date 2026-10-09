@@ -165,7 +165,7 @@ def test_profile_shows_dot_when_unread_entries_exist(client, user):
     client.force_login(user)
     response = client.get(reverse("profile"))
 
-    assert response.context["changelog_unread"] is True
+    assert response.context["changelog_unread"]
     assert "есть новые записи" in response.content.decode()
 
 
@@ -176,7 +176,7 @@ def test_profile_hides_dot_when_everything_is_read(client, user):
     client.get(reverse("changelog"))
     response = client.get(reverse("profile"))
 
-    assert response.context["changelog_unread"] is False
+    assert not response.context["changelog_unread"]
     assert "есть новые записи" not in response.content.decode()
 
 

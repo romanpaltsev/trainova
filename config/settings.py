@@ -99,7 +99,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.honeypot",
                 "accounts.context_processors.theme_colors",
-                "accounts.context_processors.changelog_unread",
+                "accounts.context_processors.sidebar_badges",
             ],
         },
     },

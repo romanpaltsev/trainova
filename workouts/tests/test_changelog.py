@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from workouts.models import ChangelogEntry
+from workouts.tests.budgets import SIDEBAR_QUERIES
 from workouts.tests.factories import ChangelogEntryFactory
 
 pytestmark = pytest.mark.django_db
@@ -279,7 +280,7 @@ def test_changelog_page_queries_do_not_scale(client, user, count, django_assert_
     ChangelogEntryFactory()
 
     client.force_login(user)
-    with django_assert_max_num_queries(6):
+    with django_assert_max_num_queries(6 + SIDEBAR_QUERIES):
         client.get(reverse("changelog"))
 
 

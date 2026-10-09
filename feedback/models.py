@@ -49,6 +49,19 @@ class Feedback(models.Model):
         return f"{self.get_kind_display()}: {self.text[:60]}"
 
 
+class FeedbackMessageQuerySet(models.QuerySet):
+    def unread(self):
+        """Ответы администратора, которых автор ещё не видел.
+
+        «Не видел» — новее Feedback.user_seen_at или обращение не открывали
+        вовсе. Одно определение на точку панели и метку в списке обращений.
+        """
+        return self.filter(from_admin=True).filter(
+            models.Q(feedback__user_seen_at__isnull=True)
+            | models.Q(created_at__gt=models.F("feedback__user_seen_at"))
+        )
+
+
 class FeedbackMessage(models.Model):
     """Реплика переписки после первой: ответ администратора или дописка автора.
 
@@ -63,6 +76,8 @@ class FeedbackMessage(models.Model):
     from_admin = models.BooleanField("от администратора", default=False)
     text = models.TextField("текст", max_length=MESSAGE_MAX_LENGTH)
     created_at = models.DateTimeField("отправлено", default=timezone.now)
+
+    objects = FeedbackMessageQuerySet.as_manager()
 
     class Meta:
         ordering = ["created_at", "id"]

@@ -91,8 +91,9 @@
         </svg>
         <span class="app-sidebar-label">Что нового</span>
         {% comment %}
-          Точка «есть новое» — та же, что у строки в профиле. Значение ленивое
-          (accounts.context_processors.changelog_unread): запрос уходит только
+          Точка «есть новое» — та же, что у строки в профиле. Значения бейджей
+          ленивые и считаются одним запросом на все пункты
+          (accounts.context_processors.sidebar_badges): запрос уходит только
           здесь, на страницах с панелью.
         {% endcomment %}
         {% if changelog_unread %}
@@ -107,6 +108,10 @@
           <path d="M21 12a8 8 0 01-11.6 7.1L4 20l1.1-4.6A8 8 0 1121 12z"/><path d="M8.5 10.5h7M8.5 13.5h4"/>
         </svg>
         <span class="app-sidebar-label">Обратная связь</span>
+        {% if feedback_unread %}
+          <span class="app-sport-dot app-side-dot" style="--dot: var(--app-accent-text)" aria-hidden="true"></span>
+          <span class="visually-hidden">есть новый ответ</span>
+        {% endif %}
       </a>
 
       {% comment %}
@@ -118,6 +123,15 @@
         <a class="app-side-link{% if url_name|slice:':6' == 'admin_' %} is-active{% endif %}" href="{% url 'admin_home' %}" title="Админка">
           {% include "includes/shield.html" with size=22 only %}
           <span class="app-sidebar-label">Админка</span>
+          {% comment %}
+            Число новых обращений: в развёрнутой панели — числом в конце строки,
+            в «рельсе» число прячется вместе с подписями, и остаётся точка.
+          {% endcomment %}
+          {% if admin_new_feedback %}
+            <span class="app-sport-dot app-side-dot app-side-dot-rail" style="--dot: var(--app-accent-text)" aria-hidden="true"></span>
+            <span class="app-side-count app-sidebar-label num">{{ admin_new_feedback }}</span>
+            <span class="visually-hidden">новых обращений: {{ admin_new_feedback }}</span>
+          {% endif %}
         </a>
       {% endif %}
     </nav>

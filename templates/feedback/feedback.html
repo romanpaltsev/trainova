@@ -47,7 +47,8 @@
     <h2 class="app-section-title" id="feedback-mine-title">Мои обращения</h2>
     {% comment %}
       Строка — обращение; переписка открывается на его странице. Число ответов
-      пришло аннотацией вместе со списком (FeedbackView.page).
+      и метка «Новый ответ» пришли аннотациями вместе со списком
+      (FeedbackView.page).
     {% endcomment %}
     <div class="app-rows">
       {% for item in items %}
@@ -57,6 +58,7 @@
             <span class="app-row-meta">
               {{ item.get_kind_display }} · {{ item.created_at|date:"d.m.Y" }} · {{ item.get_status_display }}{% if item.replies %} · ответов: {{ item.replies }}{% endif %}
             </span>
+            {% if item.has_unread %}<span class="app-badge app-badge-new align-self-start">Новый ответ</span>{% endif %}
           </span>
           {% include "includes/chevron.html" %}
         </a>

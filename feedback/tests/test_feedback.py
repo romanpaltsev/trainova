@@ -243,14 +243,14 @@ def test_feedback_page_queries_do_not_grow(client, user, django_assert_max_num_q
 
 
 def test_thread_page_queries_do_not_grow(client, user, django_assert_max_num_queries):
-    """6: BEGIN и COMMIT, сессия, пользователь, обращение, сообщения."""
+    """7: BEGIN и COMMIT, сессия, пользователь, обращение, отметка «прочитано», сообщения."""
     item = Feedback.objects.create(user=user, text="Вопрос")
     FeedbackMessage.objects.bulk_create(
         FeedbackMessage(feedback=item, from_admin=n % 2 == 0, text=f"№{n}") for n in range(8)
     )
     client.force_login(user)
 
-    with django_assert_max_num_queries(6 + SIDEBAR_QUERIES):
+    with django_assert_max_num_queries(7 + SIDEBAR_QUERIES):
         client.get(detail(item))
 
 
@@ -286,3 +286,87 @@ def test_migration_moves_single_reply_into_thread(user):
     message = FeedbackMessage.objects.get()
     assert (message.feedback.text, message.text, message.from_admin) == ("Вопрос", "Ответ", True)
     assert message.created_at == replied_at
+
+
+def reply(item, text="Ответ"):
+    return FeedbackMessage.objects.create(feedback=item, from_admin=True, text=text)
+
+
+def has_dot(client):
+    return "есть новый ответ" in client.get(reverse("profile")).content.decode()
+
+
+def test_unread_reply_lights_dot_until_thread_is_opened(client, user):
+    item = Feedback.objects.create(user=user, text="Вопрос")
+    client.force_login(user)
+    assert not has_dot(client)
+
+    reply(item)
+
+    assert has_dot(client)
+    assert "Новый ответ" in client.get(URL).content.decode()
+    client.get(detail(item))
+    assert not has_dot(client)
+    assert "Новый ответ" not in client.get(URL).content.decode()
+
+
+def test_newer_reply_lights_dot_again(client, user):
+    item = Feedback.objects.create(user=user, text="Вопрос")
+    reply(item)
+    client.force_login(user)
+    client.get(detail(item))
+
+    reply(item, "Ещё ответ")
+
+    assert has_dot(client)
+
+
+def test_opening_one_thread_keeps_dot_for_another(client, user):
+    first = Feedback.objects.create(user=user, text="Первое")
+    second = Feedback.objects.create(user=user, text="Второе")
+    reply(first)
+    reply(second)
+    client.force_login(user)
+
+    client.get(detail(first))
+
+    assert has_dot(client)
+
+
+def test_own_follow_up_does_not_light_dot(client, user):
+    item = Feedback.objects.create(user=user, text="Вопрос")
+    client.force_login(user)
+
+    client.post(detail(item), {"text": "Дописка"})
+
+    assert not has_dot(client)
+
+
+def test_other_users_replies_do_not_light_my_dot(client, user, other_user):
+    reply(Feedback.objects.create(user=other_user, text="Чужое"))
+    client.force_login(user)
+
+    assert not has_dot(client)
+
+
+def test_sidebar_shows_dot_and_admin_counter(client, user, admin_user):
+    reply(Feedback.objects.create(user=user, text="Моё"))
+    Feedback.objects.create(user=user, text="Ещё одно")
+    Feedback.objects.create(user=user, text="Закрытое", status="done")
+
+    client.force_login(user)
+    html = client.get(reverse("dashboard")).content.decode()
+    assert "есть новый ответ" in html
+    assert "новых обращений" not in html
+
+    client.force_login(admin_user)
+    html = client.get(reverse("dashboard")).content.decode()
+    assert "новых обращений: 2" in html
+    assert "есть новый ответ" not in html
+
+
+def test_admin_counter_hidden_when_nothing_is_new(client, admin_user, user):
+    Feedback.objects.create(user=user, text="Закрытое", status="done")
+    client.force_login(admin_user)
+
+    assert "новых обращений" not in client.get(reverse("profile")).content.decode()

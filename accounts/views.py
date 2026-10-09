@@ -21,7 +21,6 @@ from workouts import stats, trash
 from workouts.models import (
     REST_DELTAS,
     BodyMeasurement,
-    ChangelogEntry,
     DeletedWorkout,
     Exercise,
     Location,
@@ -93,7 +92,6 @@ class ProfileView(LoginRequiredMixin, TemplateView):
                 # обязательна), но админ может создать пользователя без адреса.
                 "email_verified": has_verified_email(user),
                 **owned_counts(user),
-                "changelog_unread": ChangelogEntry.objects.unread_for(user).exists(),
             }
         )
         return context

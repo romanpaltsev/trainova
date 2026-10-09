@@ -186,6 +186,10 @@
           <span class="app-row-name">Обратная связь</span>
           <span class="app-row-meta">идея, ошибка или вопрос</span>
         </span>
+        {% if feedback_unread %}
+          <span class="app-sport-dot" style="--dot: var(--app-accent-text)"></span>
+          <span class="visually-hidden">есть новый ответ</span>
+        {% endif %}
         {% include "includes/chevron.html" %}
       </a>
 
@@ -201,6 +205,9 @@
             <span class="app-row-name">Админка</span>
             <span class="app-row-meta">пользователи и состояние системы</span>
           </span>
+          {% if admin_new_feedback %}
+            <span class="app-row-count num" title="Новых обращений">{{ admin_new_feedback }}</span>
+          {% endif %}
           {% include "includes/chevron.html" %}
         </a>
       {% endif %}

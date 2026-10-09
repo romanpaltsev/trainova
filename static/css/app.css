@@ -3740,6 +3740,13 @@ a.btn {
     position: static;
     margin-left: auto;
   }
+  /* У «Админки» в развёрнутой панели вместо точки — число новых обращений. */
+  :root:not([data-sidebar-collapsed]) .app-side-dot-rail { display: none; }
+  :root:not([data-sidebar-collapsed]) .app-side-count {
+    margin-left: auto;
+    color: var(--app-text-secondary);
+    font-size: 0.75rem;
+  }
   :root:not([data-sidebar-collapsed]) .app-sidebar-group {
     display: block;
     margin: var(--app-space-6) var(--app-space-3) var(--app-space-2);
