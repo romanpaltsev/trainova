@@ -11,17 +11,23 @@
     </svg>
   </a>
   <h1 class="app-page-title mb-0">Мои тренажёры</h1>
+  <button type="button" class="btn btn-accent app-catalog-create ms-auto"
+          hx-get="{% url 'machine_create' 'brand' %}" hx-target="#modal" hx-swap="innerHTML">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    Создать
+  </button>
 </div>
 
 {% comment %}
   Свой справочник тренажёров (MyMachinesView): производители со своими
-  моделями, затем свои модели общих производителей. Добавляются записи в окне
-  «Тренажёр» на странице упражнения и в тренировке — здесь только
-  переименование и удаление, поэтому формы добавления нет.
+  моделями, затем свои модели общих производителей. «Создать» и «+ Модель» в
+  группе — окно MachineCreateView; то же можно завести и в окне «Тренажёр» на
+  странице упражнения или в тренировке.
 {% endcomment %}
 <p class="app-queue-hint mb-3">
-  Производителей и модели добавляют в окне «Тренажёр» — на странице упражнения или во время
-  тренировки. Свои записи видны только вам.
+  Своих производителей и модели видите только вы. Добавить их можно здесь или в окне
+  «Тренажёр» — на странице упражнения и во время тренировки.
 </p>
 
 <section class="app-machines-list" aria-labelledby="machines-own-title">
@@ -30,7 +36,8 @@
     {% for brand in own_brands %}
       {% include "workouts/_machine_brand_group.html" %}
     {% empty %}
-      {% include "includes/empty_state.html" with text="Своих производителей пока нет." extra_class="app-empty-slim" %}
+      {% url 'machine_create' 'brand' as create_url %}
+      {% include "includes/empty_state.html" with text="Своих производителей пока нет." cta_label="Добавить производителя" cta_hx_get=create_url extra_class="app-empty-slim" %}
     {% endfor %}
   </div>
 </section>
@@ -44,6 +51,7 @@
           {% for model in models %}
             {% include "workouts/_machine_item_row.html" with item=model kind="model" uses=model.uses_label meta=brand.name only %}
           {% endfor %}
+          {% include "workouts/_machine_add_model.html" %}
         </div>
       {% endfor %}
     </div>
@@ -56,9 +64,9 @@
     <h2 class="app-section-title" id="machines-shared-title">Общие — видят все</h2>
     <div class="app-rows app-rows-board">
       {% for brand in shared_brands %}
-        {% include "workouts/_machine_brand_group.html" %}
+        {% include "workouts/_machine_brand_group.html" with add_scope="global" %}
       {% empty %}
-        {% include "includes/empty_state.html" with text="Общий список пуст. Добавьте производителя в окне «Тренажёр», выбрав «Общее — для всех»." extra_class="app-empty-slim" %}
+        {% include "includes/empty_state.html" with text="Общий список пуст. Нажмите «Создать» и выберите «Общее — для всех»." extra_class="app-empty-slim" %}
       {% endfor %}
     </div>
   </section>

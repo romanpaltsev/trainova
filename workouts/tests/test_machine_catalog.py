@@ -251,3 +251,84 @@ def test_migration_turns_text_into_catalog(user, other_user):
     assert rows[2].saved[0].name == migration.NO_BRAND
     assert rows[2].saved[0].owner == other_user
     assert rows[2].saved[1].name == "Axos"
+
+
+def create(client, kind, **data):
+    return client.post(
+        reverse("machine_create", args=[kind]), {f"new-{key}": value for key, value in data.items()}
+    )
+
+
+def test_create_own_brand_and_model(client, user):
+    client.force_login(user)
+
+    response = create(client, "brand", name="  Kettler   Sport ")
+    assert response.headers["HX-Refresh"] == "true"
+    brand = MachineBrand.objects.get()
+    assert (brand.name, brand.owner) == ("Kettler Sport", user)
+
+    create(client, "model", brand=brand.pk, name="Axos")
+    model = MachineModel.objects.get()
+    assert (model.brand, model.name, model.owner) == (brand, "Axos", user)
+
+
+def test_create_own_model_of_shared_brand(client, user):
+    shared = MachineBrandFactory(name="Technogym")
+    client.force_login(user)
+
+    create(client, "model", brand=shared.pk, name="Selection 900", scope="global")
+
+    model = MachineModel.objects.get()
+    assert (model.brand, model.owner) == (shared, user)  # scope у не-админа нет
+
+
+def test_create_taken_name_is_error(client, user):
+    shared = MachineBrandFactory(name="Technogym")
+    MachineModelFactory(brand=shared, name="Pure")
+    client.force_login(user)
+
+    for kind, data in [
+        ("brand", {"name": "technogym"}),
+        ("model", {"brand": shared.pk, "name": "PURE"}),
+    ]:
+        response = create(client, kind, **data)
+        assert "Такое название уже есть." in response.content.decode()
+    assert MachineBrand.objects.count() == 1
+    assert MachineModel.objects.count() == 1
+
+
+def test_create_model_needs_visible_brand(client, user, other_user):
+    theirs = MachineBrandFactory(name="Чужой", owner=other_user)
+    MachineBrandFactory(name="Kettler", owner=user)
+    client.force_login(user)
+
+    html = create(client, "model", brand=theirs.pk, name="Взлом").content.decode()
+    assert "Выберите производителя из списка." in html
+    assert "Чужой" not in client.get(reverse("machine_create", args=["model"])).content.decode()
+    assert not MachineModel.objects.exists()
+    assert client.get(reverse("machine_create", args=["nonsense"])).status_code == 404
+
+
+def test_admin_creates_shared_and_shared_model_needs_shared_brand(client, admin_user):
+    client.force_login(admin_user)
+
+    create(client, "brand", name="Technogym", scope="global")
+    shared = MachineBrand.objects.get(name="Technogym")
+    assert shared.is_global
+    create(client, "model", brand=shared.pk, name="Pure", scope="global")
+    assert MachineModel.objects.get(name="Pure").is_global
+
+    own = MachineBrandFactory(name="Свой", owner=admin_user)
+    html = create(client, "model", brand=own.pk, name="Общая", scope="global").content.decode()
+    assert "Общая модель бывает только у общего производителя." in html
+    assert not MachineModel.objects.filter(name="Общая").exists()
+
+
+def test_page_has_create_buttons(client, user):
+    brand = MachineBrandFactory(name="Kettler", owner=user)
+    client.force_login(user)
+
+    html = client.get(URL).content.decode()
+
+    assert reverse("machine_create", args=["brand"]) in html
+    assert f"{reverse('machine_create', args=['model'])}?brand={brand.pk}" in html

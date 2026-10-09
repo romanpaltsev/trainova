@@ -1,0 +1,7 @@
+{% comment %}
+  «+ Модель» в конце группы «Моих тренажёров»: окно создания с уже выбранным
+  производителем (brand); add_scope="global" — «Общее» у администратора.
+{% endcomment %}
+<button type="button" class="btn btn-quiet app-machine-add"
+        hx-get="{% url 'machine_create' 'model' %}?brand={{ brand.pk }}{% if add_scope %}&amp;scope={{ add_scope }}{% endif %}"
+        hx-target="#modal" hx-swap="innerHTML">+ Модель</button>

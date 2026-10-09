@@ -44,6 +44,11 @@ urlpatterns = [
     path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
     path("profile/machines/", views.MyMachinesView.as_view(), name="my_machines"),
     path(
+        "profile/machines/new/<str:kind>/",
+        views.MachineCreateView.as_view(),
+        name="machine_create",
+    ),
+    path(
         "profile/machines/<str:kind>/<int:pk>/rename/",
         views.MachineRenameView.as_view(),
         name="machine_rename",

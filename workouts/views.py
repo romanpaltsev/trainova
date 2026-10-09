@@ -33,6 +33,7 @@ from workouts.forms import (
     CardioWorkoutForm,
     ExerciseCreateForm,
     ExerciseQuickForm,
+    MachineCreateForm,
     MachineNameForm,
     SportForm,
     StrengthTimeForm,
@@ -3175,6 +3176,50 @@ class MyMachinesView(LoginRequiredMixin, TemplateView):
                 .prefetch_related(Prefetch("models", queryset=shared_models, to_attr="own_models"))
             )
         return super().get_context_data(**kwargs) | context
+
+
+class MachineCreateView(LoginRequiredMixin, View):
+    """«Создать» на «Моих тренажёрах»: новый производитель или модель (kind).
+
+    Вид записи — в адресе, переключают его чипы окна; ?brand=<id> заранее
+    выбирает производителя у «+ Модель» в группе, ?scope=global — «Общее» у
+    администратора в общем списке. Успех — HX-Refresh: запись встаёт в свою
+    группу страницы.
+    """
+
+    template_name = "workouts/_machine_create_modal.html"
+
+    def get(self, request, kind):
+        initial = {"brand": request.GET.get("brand", ""), "scope": request.GET.get("scope", "")}
+        return self.modal(request, self.form(initial=initial))
+
+    def post(self, request, kind):
+        form = self.form(data=request.POST)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    form.save()
+            except IntegrityError:
+                # Двойная отправка: запись уже завела первая.
+                form.add_error("name", "Такое название уже есть.")
+            else:
+                response = HttpResponse()
+                response["HX-Refresh"] = "true"
+                return response
+        return self.modal(request, form)
+
+    def form(self, **kwargs):
+        if self.kwargs["kind"] not in MACHINE_KINDS:
+            raise Http404
+        return MachineCreateForm(
+            user=self.request.user, kind=self.kwargs["kind"], prefix="new", **kwargs
+        )
+
+    def modal(self, request, form):
+        context = {"form": form, "kind": self.kwargs["kind"]}
+        if "brand" in form.fields:
+            context["brands"] = form.fields["brand"].queryset
+        return render(request, self.template_name, context)
 
 
 class MachineItemMixin(LoginRequiredMixin):

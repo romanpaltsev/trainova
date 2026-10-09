@@ -2073,6 +2073,7 @@ a.btn {
   gap: 0.5rem;
 }
 .app-row.app-machine-model-row { width: auto; margin-left: var(--app-space-6); }
+.app-machine-add { align-self: flex-start; margin-left: var(--app-space-6); }
 
 .app-row {
   display: flex;

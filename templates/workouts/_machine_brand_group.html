@@ -1,5 +1,6 @@
 {% comment %}
-  Производитель и его модели одной группой (ждёт brand с .own_models и .uses).
+  Производитель и его модели одной группой (ждёт brand с .own_models и .uses;
+  add_scope — для «+ Модель», см. _machine_add_model.html).
   Обёртка .app-machine-group — без собственной роли: на ПК группы встают
   доской, на телефоне идут столбиком.
 {% endcomment %}
@@ -8,4 +9,5 @@
   {% for model in brand.own_models %}
     {% include "workouts/_machine_item_row.html" with item=model kind="model" uses=model.uses_label meta="модель" only %}
   {% endfor %}
+  {% include "workouts/_machine_add_model.html" %}
 </div>

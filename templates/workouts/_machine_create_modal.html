@@ -1,0 +1,61 @@
+{% comment %}
+  «Создать» на «Моих тренажёрах» (MachineCreateView): производитель или модель —
+  чипы сверху переключают вид записи, перезапрашивая окно. У модели —
+  производитель из видимых (у своих метка «моё»). «Своё / Общее» — только у
+  администратора. Успех — HX-Refresh, ошибка — это же окно.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="machine-create-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="machine-create-title">
+        {% if kind == "brand" %}Новый производитель{% else %}Новая модель{% endif %}
+      </h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="app-chips mb-3" role="group" aria-label="Что создать">
+      <button type="button" class="app-chip{% if kind == 'brand' %} is-active{% endif %}"
+              {% if kind == "brand" %}aria-pressed="true"{% else %}aria-pressed="false"
+              hx-get="{% url 'machine_create' 'brand' %}" hx-target="#modal" hx-swap="innerHTML"{% endif %}>Производитель</button>
+      <button type="button" class="app-chip{% if kind == 'model' %} is-active{% endif %}"
+              {% if kind == "model" %}aria-pressed="true"{% else %}aria-pressed="false"
+              hx-get="{% url 'machine_create' 'model' %}" hx-target="#modal" hx-swap="innerHTML"{% endif %}>Модель</button>
+    </div>
+    {% if kind == "model" and not brands %}
+      <p class="app-queue-hint mb-0">Модель заводится у производителя — сначала добавьте производителя.</p>
+    {% else %}
+      <form hx-post="{% url 'machine_create' kind %}" hx-target="#modal" hx-swap="innerHTML"
+            hx-disabled-elt="find button" novalidate>
+        {% if kind == "model" %}
+          <label class="form-label" for="{{ form.brand.id_for_label }}">Производитель</label>
+          <select name="{{ form.brand.html_name }}" id="{{ form.brand.id_for_label }}" class="form-select mb-3">
+            <option value="">Выберите производителя</option>
+            {% for item in brands %}
+              <option value="{{ item.pk }}"{% if form.brand.value|stringformat:"s" == item.pk|stringformat:"s" %} selected{% endif %}>{{ item.name }}{% if not item.is_global %} · моё{% endif %}</option>
+            {% endfor %}
+          </select>
+          {% for error in form.brand.errors %}<div class="invalid-feedback d-block mb-3">{{ error }}</div>{% endfor %}
+        {% endif %}
+        <label class="form-label" for="{{ form.name.id_for_label }}">Название</label>
+        <input type="text" name="{{ form.name.html_name }}" id="{{ form.name.id_for_label }}"
+               class="form-control" value="{{ form.name.value|default:'' }}"
+               maxlength="{{ form.fields.name.max_length }}" autocomplete="off" autofocus
+               placeholder="{% if kind == 'brand' %}напр. Technogym{% else %}напр. Selection 900 Leg Press{% endif %}">
+        {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        {% if form.scope %}
+          {% include "workouts/_machine_scope.html" %}
+          {% if kind == "model" %}<p class="app-queue-hint mb-0">Общая модель — только у общего производителя.</p>{% endif %}
+        {% else %}
+          <p class="app-queue-hint mt-2 mb-0">Запись увидите только вы.</p>
+        {% endif %}
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-accent flex-fill">Добавить</button>
+          <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+        </div>
+      </form>
+    {% endif %}
+  </div>
+</div>

@@ -14,6 +14,8 @@ from workouts.models import (
     CardioPart,
     Exercise,
     Location,
+    MachineBrand,
+    MachineModel,
     Sport,
     Workout,
     chosen_equipment,
@@ -781,3 +783,57 @@ class MachineNameForm(forms.Form):
 
     def clean_name(self):
         return collapse_spaces(self.cleaned_data["name"])
+
+
+class MachineCreateForm(MachineNameForm):
+    """«Создать» на «Моих тренажёрах»: производитель или модель (kind).
+
+    В отличие от окна «Тренажёр», совпавшее имя здесь ошибка (приём
+    ExerciseCreateForm): человек пришёл завести запись, а не выбрать её. У
+    модели ещё и производитель — из видимых, поэтому чужой своей записи не
+    подставить. Общая модель — только у общего производителя.
+    """
+
+    brand = forms.ModelChoiceField(
+        queryset=MachineBrand.objects.none(),
+        error_messages={
+            "required": "Выберите производителя.",
+            "invalid_choice": "Выберите производителя из списка.",
+        },
+    )
+
+    def __init__(self, *args, user, kind, **kwargs):
+        self.user = user
+        self.model = MachineBrand if kind == "brand" else MachineModel
+        max_length = self.model._meta.get_field("name").max_length
+        super().__init__(*args, user=user, max_length=max_length, **kwargs)
+        if self.model is MachineBrand:
+            del self.fields["brand"]
+        else:
+            self.fields["brand"].queryset = MachineBrand.objects.visible_to(user)
+
+    def clean(self):
+        cleaned = super().clean()
+        name = cleaned.get("name")
+        manager = self.model.objects
+        same = manager.global_only() if self.is_global else manager.visible_to(self.user)
+        if self.model is MachineModel:
+            brand = cleaned.get("brand")
+            if brand is None:
+                return cleaned
+            if self.is_global and not brand.is_global:
+                self.add_error("name", "Общая модель бывает только у общего производителя.")
+                return cleaned
+            same = same.filter(brand=brand)
+        if name and same.filter(name__iexact=name).exists():
+            self.add_error("name", "Такое название уже есть.")
+        return cleaned
+
+    def save(self):
+        fields = {
+            "owner": None if self.is_global else self.user,
+            "name": self.cleaned_data["name"],
+        }
+        if self.model is MachineModel:
+            fields["brand"] = self.cleaned_data["brand"]
+        return self.model.objects.create(**fields)
