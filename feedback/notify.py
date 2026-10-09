@@ -1,4 +1,4 @@
-"""Письма обратной связи: админам — о новом обращении, автору — об ответе.
+"""Письма обратной связи: админам — о новом обращении и дописке, автору — об ответе.
 
 Сбой почты не должен терять обращение или ответ: они уже в базе и видны в
 интерфейсе, поэтому ошибка SMTP только пишется в журнал.
@@ -37,6 +37,15 @@ def new_feedback(request, feedback):
     _send("new_feedback", {"feedback": feedback, "url": url}, admin_emails())
 
 
-def reply_sent(request, feedback):
-    url = request.build_absolute_uri(reverse("feedback"))
-    _send("reply", {"feedback": feedback, "url": url}, [feedback.user.email])
+def followup(request, message):
+    feedback = message.feedback
+    url = request.build_absolute_uri(reverse("admin_feedback_detail", args=[feedback.pk]))
+    context = {"feedback": feedback, "message": message, "url": url}
+    _send("followup", context, admin_emails())
+
+
+def reply_sent(request, message):
+    feedback = message.feedback
+    url = request.build_absolute_uri(reverse("feedback_detail", args=[feedback.pk]))
+    context = {"feedback": feedback, "message": message, "url": url}
+    _send("reply", context, [feedback.user.email])

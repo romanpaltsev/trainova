@@ -6,40 +6,34 @@
 {% include "adminpanel/_head.html" with back="admin_feedback" title="Обращение" only %}
 
 {% comment %}
-  Обращение и ответ — две колонки на ПК (та же обёртка, что у страницы
-  пользователя). Ответ уходит автору письмом, только когда его текст изменился:
-  смена одного статуса никому не пишет.
+  Переписка и ответ — две колонки на ПК (та же обёртка, что у страницы
+  пользователя). Сообщение уходит автору письмом; смена одного статуса никому
+  не пишет.
 {% endcomment %}
 <div class="app-feedback">
   <section aria-labelledby="feedback-item-title">
     <h2 class="app-section-title" id="feedback-item-title">{{ item.get_kind_display }} от {{ item.user.email }}</h2>
-    <article class="app-card app-panel">
-      <div class="app-feedback-meta">
-        <span>{{ item.created_at|date:"d.m.Y H:i" }}</span>
-        <span class="app-badge">{{ item.get_status_display }}</span>
-      </div>
-      <p class="app-feedback-text mb-0">{{ item.text|linebreaksbr }}</p>
-      {% if item.replied_at %}
-        <p class="app-queue-hint mt-3 mb-0">Ответ отправлен {{ item.replied_at|date:"d.m.Y H:i" }}.</p>
-      {% endif %}
-    </article>
+    {% include "feedback/_thread.html" %}
   </section>
 
   <section aria-labelledby="feedback-reply-title">
     <h2 class="app-section-title" id="feedback-reply-title">Ответ</h2>
     <form method="post" class="app-card app-panel" novalidate>
       {% csrf_token %}
+      {% for error in form.non_field_errors %}
+        <div class="app-alert app-alert-danger">{{ error }}</div>
+      {% endfor %}
       <div class="app-chips mb-3" role="group" aria-label="Статус">
-        {% for value, label in form.fields.status.choices %}
+        {% for value, label in status_form.fields.status.choices %}
           <input type="radio" name="status" id="feedback-status-{{ value }}" value="{{ value }}"
-                 class="app-chip-input" {% if form.status.value == value %}checked{% endif %}>
+                 class="app-chip-input" {% if status_form.status.value == value %}checked{% endif %}>
           <label class="app-chip" for="feedback-status-{{ value }}">{{ label }}</label>
         {% endfor %}
       </div>
-      <label class="form-label" for="{{ form.reply.id_for_label }}">Текст ответа</label>
-      {{ form.reply }}
-      {% for error in form.reply.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-      <p class="app-queue-hint mt-2 mb-0">Новый или изменённый ответ придёт автору на почту и появится у обращения.</p>
+      <label class="form-label" for="{{ form.text.id_for_label }}">Новое сообщение</label>
+      {{ form.text }}
+      {% for error in form.text.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      <p class="app-queue-hint mt-2 mb-0">Сообщение придёт автору на почту и появится в переписке. Пустое — сохранится только статус.</p>
       <button type="submit" class="btn btn-accent app-btn-fill mt-3">Сохранить</button>
     </form>
   </section>

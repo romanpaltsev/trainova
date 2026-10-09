@@ -5,6 +5,6 @@
 
 Ответ:
 
-{{ feedback.reply }}
+{{ message.text }}
 
-Все ваши обращения и ответы: {{ url }}{% endautoescape %}{% endblock content %}
+Ответить и посмотреть всю переписку: {{ url }}{% endautoescape %}{% endblock content %}

@@ -45,23 +45,25 @@
 
   <section aria-labelledby="feedback-mine-title">
     <h2 class="app-section-title" id="feedback-mine-title">Мои обращения</h2>
-    {% for item in items %}
-      <article class="app-card app-panel app-feedback-item">
-        <div class="app-feedback-meta">
-          <span>{{ item.get_kind_display }} · {{ item.created_at|date:"d.m.Y" }}</span>
-          <span class="app-badge">{{ item.get_status_display }}</span>
-        </div>
-        <p class="app-feedback-text mb-0">{{ item.text|linebreaksbr }}</p>
-        {% if item.reply %}
-          <div class="app-feedback-reply">
-            <div class="app-profile-block-title">Ответ · {{ item.replied_at|date:"d.m.Y" }}</div>
-            <p class="mb-0">{{ item.reply|linebreaksbr }}</p>
-          </div>
-        {% endif %}
-      </article>
-    {% empty %}
-      {% include "includes/empty_state.html" with text="Вы ещё ничего не писали. Здесь появятся ваши сообщения и ответы на них." %}
-    {% endfor %}
+    {% comment %}
+      Строка — обращение; переписка открывается на его странице. Число ответов
+      пришло аннотацией вместе со списком (FeedbackView.page).
+    {% endcomment %}
+    <div class="app-rows">
+      {% for item in items %}
+        <a class="app-row" href="{% url 'feedback_detail' item.pk %}">
+          <span class="app-row-text">
+            <span class="app-row-name app-feedback-text">{{ item.text|truncatechars:160 }}</span>
+            <span class="app-row-meta">
+              {{ item.get_kind_display }} · {{ item.created_at|date:"d.m.Y" }} · {{ item.get_status_display }}{% if item.replies %} · ответов: {{ item.replies }}{% endif %}
+            </span>
+          </span>
+          {% include "includes/chevron.html" %}
+        </a>
+      {% empty %}
+        {% include "includes/empty_state.html" with text="Вы ещё ничего не писали. Здесь появятся ваши сообщения и ответы на них." %}
+      {% endfor %}
+    </div>
   </section>
 </div>
 {% endblock %}

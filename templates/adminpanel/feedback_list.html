@@ -23,7 +23,7 @@
       <span class="app-row-text">
         <span class="app-row-name">{{ item.get_kind_display }} · {{ item.user.email }}</span>
         <span class="app-row-meta">{{ item.text|truncatechars:120 }}</span>
-        <span class="app-row-meta">{{ item.created_at|date:"d.m.Y H:i" }} · {{ item.get_status_display }}{% if item.reply %} · есть ответ{% endif %}</span>
+        <span class="app-row-meta">{{ item.created_at|date:"d.m.Y H:i" }} · {{ item.get_status_display }}{% if item.replies %} · сообщений: {{ item.replies }}{% endif %}</span>
       </span>
       {% include "includes/chevron.html" %}
     </a>

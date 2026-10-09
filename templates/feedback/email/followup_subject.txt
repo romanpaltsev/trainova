@@ -1,0 +1,1 @@
+{% autoescape off %}Дописка к обращению от {{ feedback.user.email }} — Дневник тренировок{% endautoescape %}

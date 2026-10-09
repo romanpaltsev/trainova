@@ -1,0 +1,27 @@
+{% comment %}
+  Переписка по обращению: первая реплика (item.text), затем сообщения по
+  времени. Общая у автора и администратора — различаются только подписи:
+  ответ подписан «Ответ», реплика автора — «Вы» у автора и «Автор» у
+  администратора (почта уже в заголовке страницы).
+  Параметры: item, thread, admin_view (необязателен).
+{% endcomment %}
+<div class="app-feedback-thread">
+  <article class="app-card app-panel app-feedback-message">
+    <div class="app-feedback-meta">
+      <span>{% if admin_view %}Автор{% else %}Вы{% endif %} · {{ item.created_at|date:"d.m.Y H:i" }}</span>
+      <span class="app-badge">{{ item.get_status_display }}</span>
+    </div>
+    <p class="app-feedback-text mb-0">{{ item.text|linebreaksbr }}</p>
+  </article>
+  {% for message in thread %}
+    <article class="app-card app-panel app-feedback-message{% if message.from_admin %} is-admin{% endif %}">
+      <div class="app-feedback-meta">
+        <span>
+          {% if message.from_admin %}Ответ{% elif admin_view %}Автор{% else %}Вы{% endif %}
+          · {{ message.created_at|date:"d.m.Y H:i" }}
+        </span>
+      </div>
+      <p class="app-feedback-text mb-0">{{ message.text|linebreaksbr }}</p>
+    </article>
+  {% endfor %}
+</div>

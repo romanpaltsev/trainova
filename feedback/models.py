@@ -1,17 +1,20 @@
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 FEEDBACK_TEXT_MAX_LENGTH = 2000
-REPLY_MAX_LENGTH = 2000
+MESSAGE_MAX_LENGTH = 2000
 
 
 class Feedback(models.Model):
-    """Обращение пользователя: идея, ошибка или вопрос — и ответ администратора.
+    """Обращение пользователя: идея, ошибка или вопрос — и переписка по нему.
 
     user — CASCADE: обращение — данные человека и уходит вместе с аккаунтом
     (accounts.deletion.delete_user_data ничего для этого делать не нужно).
-    Ответ живёт в той же строке, а не отдельной перепиской: обращение — одна
-    реплика и один ответ, а за уточнением пишут новое.
+    Первая реплика — text этой строки, всё дальнейшее — FeedbackMessage: список
+    обращений и письмо админам читают одну строку, без джойна к сообщениям.
+    user_seen_at — когда автор последний раз открывал обращение: ответ
+    администратора новее этой метки горит точкой «есть ответ».
     """
 
     class Kind(models.TextChoices):
@@ -34,8 +37,7 @@ class Feedback(models.Model):
     text = models.TextField("текст", max_length=FEEDBACK_TEXT_MAX_LENGTH)
     created_at = models.DateTimeField("отправлено", auto_now_add=True)
     status = models.CharField("статус", max_length=16, choices=Status.choices, default=Status.NEW)
-    reply = models.TextField("ответ", max_length=REPLY_MAX_LENGTH, blank=True)
-    replied_at = models.DateTimeField("ответ дан", null=True, blank=True)
+    user_seen_at = models.DateTimeField("автор открывал", null=True, blank=True)
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -45,3 +47,27 @@ class Feedback(models.Model):
 
     def __str__(self):
         return f"{self.get_kind_display()}: {self.text[:60]}"
+
+
+class FeedbackMessage(models.Model):
+    """Реплика переписки после первой: ответ администратора или дописка автора.
+
+    Автора-администратора не храним: пользователь видит «Ответ», а не имя
+    (никакой социальности), а FK на админа связал бы его удаление с чужими
+    обращениями. Сообщения не правятся — отправленное уже ушло письмом.
+    """
+
+    feedback = models.ForeignKey(
+        Feedback, verbose_name="обращение", on_delete=models.CASCADE, related_name="messages"
+    )
+    from_admin = models.BooleanField("от администратора", default=False)
+    text = models.TextField("текст", max_length=MESSAGE_MAX_LENGTH)
+    created_at = models.DateTimeField("отправлено", default=timezone.now)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        verbose_name = "сообщение"
+        verbose_name_plural = "сообщения"
+
+    def __str__(self):
+        return self.text[:60]

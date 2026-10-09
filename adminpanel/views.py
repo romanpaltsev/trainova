@@ -24,7 +24,7 @@ from django.views.generic import TemplateView, View
 from accounts import deletion
 from accounts.models import User
 from feedback import notify
-from feedback.forms import FeedbackReplyForm
+from feedback.forms import FeedbackMessageForm, FeedbackStatusForm
 from feedback.models import Feedback
 from workouts import trash
 from workouts.models import BodyMeasurement, CardioPart, DeletedWorkout, StrengthSet, Workout
@@ -154,7 +154,7 @@ class AdminFeedbackListView(AdminPageMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         status = self.request.GET.get("status", "")
-        items = Feedback.objects.select_related("user")
+        items = Feedback.objects.select_related("user").annotate(replies=Count("messages"))
         # Неизвестный статус — как без фильтра, а не пустой список.
         if status in Feedback.Status.values:
             items = items.filter(status=status)
@@ -168,28 +168,33 @@ class AdminFeedbackListView(AdminPageMixin, TemplateView):
 
 
 class AdminFeedbackDetailView(AdminRequiredMixin, View):
-    """Обращение и форма «статус + ответ». Изменившийся ответ уходит автору письмом."""
+    """Переписка по обращению и форма «статус + новое сообщение».
+
+    Непустое сообщение уходит автору письмом; смена одного статуса не пишет
+    никому. Отправленные сообщения не правятся — письмо уже ушло.
+    """
 
     template_name = "adminpanel/feedback_detail.html"
 
     def get(self, request, pk):
         item = self.get_object(pk)
-        return self.page(request, item, FeedbackReplyForm(instance=item))
+        return self.page(
+            request,
+            item,
+            FeedbackStatusForm(instance=item),
+            FeedbackMessageForm(feedback=item, from_admin=True),
+        )
 
     def post(self, request, pk):
         item = self.get_object(pk)
-        previous_reply = item.reply
-        form = FeedbackReplyForm(request.POST, instance=item)
-        if not form.is_valid():
-            return self.page(request, item, form)
-        item = form.save(commit=False)
-        reply_changed = item.reply and item.reply != previous_reply
-        if reply_changed:
-            item.replied_at = timezone.now()
-        item.save()
-        if reply_changed:
-            notify.reply_sent(request, item)
-            messages.success(request, "Ответ сохранён и отправлен на почту автору.")
+        status_form = FeedbackStatusForm(request.POST, instance=item)
+        message_form = FeedbackMessageForm(request.POST, feedback=item, from_admin=True)
+        if not (status_form.is_valid() and message_form.is_valid()):
+            return self.page(request, item, status_form, message_form)
+        status_form.save()
+        if message_form.cleaned_data["text"]:
+            notify.reply_sent(request, message_form.save())
+            messages.success(request, "Ответ отправлен автору на почту.")
         else:
             messages.success(request, "Сохранено.")
         return redirect("admin_feedback_detail", pk=item.pk)
@@ -197,9 +202,16 @@ class AdminFeedbackDetailView(AdminRequiredMixin, View):
     def get_object(self, pk):
         return get_object_or_404(Feedback.objects.select_related("user"), pk=pk)
 
-    def page(self, request, item, form):
+    def page(self, request, item, status_form, form):
         return render(
             request,
             self.template_name,
-            {"item": item, "form": form, "nav_active": "profile"},
+            {
+                "item": item,
+                "thread": item.messages.all(),
+                "status_form": status_form,
+                "form": form,
+                "admin_view": True,
+                "nav_active": "profile",
+            },
         )

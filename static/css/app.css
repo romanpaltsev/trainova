@@ -142,7 +142,6 @@ body {
 
 /* ---------- Обратная связь ---------- */
 
-.app-feedback-item + .app-feedback-item { margin-top: var(--app-space-2); }
 .app-feedback-meta {
   display: flex;
   align-items: center;
@@ -153,13 +152,18 @@ body {
   font-size: 0.875rem;
 }
 .app-feedback-text { overflow-wrap: anywhere; }
-/* Ответ — врезкой под текстом: акцентная рейка слева, как у сообщений. */
-.app-feedback-reply {
-  margin-top: var(--app-space-3);
-  padding-left: var(--app-space-3);
-  border-left: 3px solid var(--app-accent);
-  overflow-wrap: anywhere;
+/* Переписка — столбик реплик; ответ администратора — с акцентной рейкой слева,
+   чтобы его было видно в длинной ленте. Рейка — тенью, а не рамкой: рамка
+   сдвинула бы текст ответа относительно соседних реплик. Тень карточки сюда
+   не добавляется списком: в тёмной теме она «none», и список стал бы
+   невалидным — пропало бы всё объявление. */
+.app-feedback-thread {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
 }
+.app-feedback-message.is-admin { box-shadow: inset 3px 0 0 var(--app-accent); }
+.app-feedback-meta .app-badge { flex: 0 0 auto; white-space: nowrap; }
 .app-feedback > section + section { margin-top: var(--app-space-6); }
 
 /* Заголовок справочника с кнопкой «Создать» справа. Отступ снизу — тот же,

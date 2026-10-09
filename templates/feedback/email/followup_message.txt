@@ -1,0 +1,6 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}Новое сообщение от {{ feedback.user.email }} в обращении «{{ feedback.text|truncatechars:80 }}»:
+
+{{ message.text }}
+
+Ответить: {{ url }}{% endautoescape %}{% endblock content %}
