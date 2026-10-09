@@ -3,11 +3,12 @@
 Все значения, зависящие от окружения, читаются из .env (django-environ).
 """
 
-import tomllib
 from pathlib import Path
 
 import environ
 from django.contrib.messages import constants as messages_constants
+
+from config.version import read_app_version
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -28,14 +29,8 @@ env = environ.Env(
 )
 environ.Env.read_env(BASE_DIR / ".env")
 
-# Версия продукта для футера профиля. Единственный источник — pyproject.toml:
-# importlib.metadata не годится, прод-образ ставит зависимости с --no-install-project.
-try:
-    APP_VERSION = tomllib.loads((BASE_DIR / "pyproject.toml").read_text("utf-8"))["project"][
-        "version"
-    ]
-except (OSError, KeyError, tomllib.TOMLDecodeError):
-    APP_VERSION = ""
+# Версия продукта «дата · коммит» — для футера профиля и «Состояния системы».
+APP_VERSION = read_app_version(BASE_DIR)
 
 # Дубль токенов --app-bg из static/css/tokens.css: манифест PWA и <meta name="theme-color">
 # не понимают CSS-переменных, а цвет темы нужен ещё до первой отрисовки.

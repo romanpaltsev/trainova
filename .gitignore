@@ -236,3 +236,6 @@ deploy/secrets/
 # Собранная статика: нужен только сам каталог
 /staticfiles/*
 !/staticfiles/.gitkeep
+
+# Версия продукта: файл пишет деплой (config/version.py)
+/VERSION

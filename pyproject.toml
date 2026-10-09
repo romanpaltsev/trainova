@@ -1,5 +1,6 @@
 [project]
 name = "trainova"
+# Поле для uv, а не версия продукта: та считается деплоем (config/version.py).
 version = "0.1.0"
 description = "Дневник тренировок — веб-приложение для записи силовых и кардио-тренировок"
 requires-python = ">=3.12"
