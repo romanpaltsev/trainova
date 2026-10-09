@@ -6,14 +6,29 @@
 {% include "adminpanel/_head.html" with back="admin_home" title="Обратная связь" only %}
 
 {% comment %}
-  Фильтр — чипы статуса, тот же ряд .app-filters, что у истории. Выбор живёт в
-  адресе (?status=…): «назад» из обращения возвращает тот же срез.
+  Фильтры — два ряда чипов (статус и тип, тот же .app-filters, что у истории) и
+  поиск. Всё живёт в адресе и складывается: {% querystring %} меняет один
+  параметр и сохраняет остальные, поиск несёт чипы скрытыми полями. «Назад» из
+  обращения возвращает тот же срез.
 {% endcomment %}
-<div class="app-chips app-filters mb-3">
-  <a class="app-chip {% if not status %}is-active{% endif %}" href="{% url 'admin_feedback' %}">Все</a>
+<form method="get" action="{% url 'admin_feedback' %}" class="app-search" role="search">
+  {% if status %}<input type="hidden" name="status" value="{{ status }}">{% endif %}
+  {% if kind %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
+  <input type="search" name="q" value="{{ query }}" class="form-control"
+         placeholder="Текст или почта" autocomplete="off" aria-label="Найти обращение">
+</form>
+<div class="app-chips app-filters mb-2" role="group" aria-label="Статус">
+  <a class="app-chip {% if not status %}is-active{% endif %}" href="{% url 'admin_feedback' %}{% querystring status=None %}">Все</a>
   {% for value, label in statuses %}
     <a class="app-chip {% if status == value %}is-active{% endif %}"
-       href="{% url 'admin_feedback' %}?status={{ value }}">{{ label }}</a>
+       href="{% url 'admin_feedback' %}{% querystring status=value %}">{{ label }}</a>
+  {% endfor %}
+</div>
+<div class="app-chips app-filters mb-3" role="group" aria-label="Тип">
+  <a class="app-chip {% if not kind %}is-active{% endif %}" href="{% url 'admin_feedback' %}{% querystring kind=None %}">Любой тип</a>
+  {% for value, label in kinds %}
+    <a class="app-chip {% if kind == value %}is-active{% endif %}"
+       href="{% url 'admin_feedback' %}{% querystring kind=value %}">{{ label }}</a>
   {% endfor %}
 </div>
 
@@ -23,12 +38,16 @@
       <span class="app-row-text">
         <span class="app-row-name">{{ item.get_kind_display }} · {{ item.user.email }}</span>
         <span class="app-row-meta">{{ item.text|truncatechars:120 }}</span>
-        <span class="app-row-meta">{{ item.created_at|date:"d.m.Y H:i" }} · {{ item.get_status_display }}{% if item.replies %} · сообщений: {{ item.replies }}{% endif %}</span>
+        <span class="app-row-meta">{{ item.created_at|date:"d.m.Y H:i" }} · {{ item.get_status_display }}{% if item.replies %} · сообщений: {{ item.replies }}{% endif %}{% if item.admin_note %} · есть заметка{% endif %}</span>
       </span>
       {% include "includes/chevron.html" %}
     </a>
   {% empty %}
-    {% include "includes/empty_state.html" with text="Обращений нет." %}
+    {% if query or status or kind %}
+      {% include "includes/empty_state.html" with text="Ничего не нашлось — попробуйте убрать фильтр." %}
+    {% else %}
+      {% include "includes/empty_state.html" with text="Обращений нет." %}
+    {% endif %}
   {% endfor %}
 </div>
 {% endblock %}

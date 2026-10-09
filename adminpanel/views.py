@@ -24,8 +24,8 @@ from django.views.generic import TemplateView, View
 from accounts import deletion
 from accounts.models import User
 from feedback import notify
-from feedback.forms import FeedbackMessageForm, FeedbackStatusForm
-from feedback.models import Feedback
+from feedback.forms import FeedbackAdminForm, FeedbackMessageForm
+from feedback.models import Feedback, FeedbackMessage
 from workouts import trash
 from workouts.models import BodyMeasurement, CardioPart, DeletedWorkout, StrengthSet, Workout
 
@@ -148,30 +148,50 @@ class AdminSystemView(AdminPageMixin, TemplateView):
 
 
 class AdminFeedbackListView(AdminPageMixin, TemplateView):
-    """Все обращения, свежие сверху; чипы — фильтр по статусу (?status=…)."""
+    """Все обращения, свежие сверху.
+
+    Фильтры живут в адресе и складываются: статус (?status=…), тип (?kind=…)
+    и поиск (?q=…) по тексту обращения, переписке и почте автора.
+    """
 
     template_name = "adminpanel/feedback_list.html"
 
     def get_context_data(self, **kwargs):
-        status = self.request.GET.get("status", "")
+        params = self.request.GET
         items = Feedback.objects.select_related("user").annotate(replies=Count("messages"))
-        # Неизвестный статус — как без фильтра, а не пустой список.
+        # Неизвестное значение — как без фильтра, а не пустой список.
+        status = params.get("status", "")
         if status in Feedback.Status.values:
             items = items.filter(status=status)
-        else:
-            status = ""
+        kind = params.get("kind", "")
+        if kind in Feedback.Kind.values:
+            items = items.filter(kind=kind)
+        query = params.get("q", "").strip()
+        if query:
+            # Поиск по переписке — подзапросом, а не джойном: джойн размножил
+            # бы обращение по числу совпавших сообщений.
+            in_thread = FeedbackMessage.objects.filter(
+                feedback=OuterRef("pk"), text__icontains=query
+            )
+            items = items.filter(
+                Q(text__icontains=query) | Q(user__email__icontains=query) | Exists(in_thread)
+            )
         return super().get_context_data(**kwargs) | {
             "items": items,
-            "status": status,
+            "status": status if status in Feedback.Status.values else "",
+            "kind": kind if kind in Feedback.Kind.values else "",
+            "query": query,
             "statuses": Feedback.Status.choices,
+            "kinds": Feedback.Kind.choices,
         }
 
 
 class AdminFeedbackDetailView(AdminRequiredMixin, View):
-    """Переписка по обращению и форма «статус + новое сообщение».
+    """Переписка по обращению и форма «статус, сообщение, заметка, новость».
 
-    Непустое сообщение уходит автору письмом; смена одного статуса не пишет
-    никому. Отправленные сообщения не правятся — письмо уже ушло.
+    Непустое сообщение уходит автору письмом; смена статуса, заметки или
+    новости не пишет никому. Отправленные сообщения не правятся — письмо уже
+    ушло.
     """
 
     template_name = "adminpanel/feedback_detail.html"
@@ -181,13 +201,13 @@ class AdminFeedbackDetailView(AdminRequiredMixin, View):
         return self.page(
             request,
             item,
-            FeedbackStatusForm(instance=item),
+            FeedbackAdminForm(instance=item),
             FeedbackMessageForm(feedback=item, from_admin=True),
         )
 
     def post(self, request, pk):
         item = self.get_object(pk)
-        status_form = FeedbackStatusForm(request.POST, instance=item)
+        status_form = FeedbackAdminForm(request.POST, instance=item)
         message_form = FeedbackMessageForm(request.POST, feedback=item, from_admin=True)
         if not (status_form.is_valid() and message_form.is_valid()):
             return self.page(request, item, status_form, message_form)

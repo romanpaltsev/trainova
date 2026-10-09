@@ -75,15 +75,24 @@ class FeedbackDetailView(LoginRequiredMixin, View):
         return redirect("feedback_detail", pk=item.pk)
 
     def get_object(self, request, pk):
-        return get_object_or_404(Feedback, pk=pk, user=request.user)
+        # Новость — тем же запросом (LEFT JOIN): ссылка «Сделано» не стоит запроса.
+        return get_object_or_404(
+            Feedback.objects.select_related("changelog_entry"), pk=pk, user=request.user
+        )
 
     def page(self, request, item, form):
+        # Те же две заслонки, что у ChangelogQuerySet.published(), — в Python:
+        # новость уже пришла джойном, второй запрос ради неё не нужен.
+        news = item.changelog_entry
+        if news and not (news.is_published and news.published_at <= timezone.now()):
+            news = None
         return render(
             request,
             self.template_name,
             {
                 "item": item,
                 "thread": item.messages.all(),
+                "news": news,
                 "form": form,
                 "nav_active": "profile",
             },

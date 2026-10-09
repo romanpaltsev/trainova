@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django import forms
+from django.db.models import Q
 from django.utils import timezone
 
 from feedback.models import (
@@ -9,6 +10,7 @@ from feedback.models import (
     Feedback,
     FeedbackMessage,
 )
+from workouts.models import ChangelogEntry
 
 # Мягкая защита от случайного спама (двойная отправка, залипшая кнопка), а не от
 # злоумышленника: пишут сюда только вошедшие, друзья и родственники автора.
@@ -92,10 +94,31 @@ class FeedbackMessageForm(forms.ModelForm):
         return super().save(commit=commit)
 
 
-class FeedbackStatusForm(forms.ModelForm):
-    """Статус обращения — у администратора рядом с полем ответа."""
+class FeedbackAdminForm(forms.ModelForm):
+    """Поля обращения у администратора: статус, заметка и новость «Что нового».
+
+    Новость выбирается из опубликованных, свежие сверху; уже привязанная
+    остаётся в списке, даже если её сняли с публикации, — иначе форма не
+    сохранилась бы, пока админ не отвяжет её руками.
+    """
 
     class Meta:
         model = Feedback
-        fields = ("status",)
-        widgets = {"status": forms.RadioSelect}
+        fields = ("status", "admin_note", "changelog_entry")
+        widgets = {
+            "status": forms.RadioSelect,
+            "admin_note": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "changelog_entry": forms.Select(attrs={"class": "form-select"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        entry = self.fields["changelog_entry"]
+        entry.queryset = ChangelogEntry.objects.filter(
+            Q(pk__in=ChangelogEntry.objects.published().values("pk"))
+            | Q(pk=self.instance.changelog_entry_id)
+        ).order_by("-published_at")
+        entry.empty_label = "Не связано"
+
+    def clean_admin_note(self):
+        return self.cleaned_data["admin_note"].strip()

@@ -15,6 +15,8 @@ class Feedback(models.Model):
     обращений и письмо админам читают одну строку, без джойна к сообщениям.
     user_seen_at — когда автор последний раз открывал обращение: ответ
     администратора новее этой метки горит точкой «есть ответ».
+    admin_note и changelog_entry — инструменты администратора: заметка видна
+    только в «Админке», новость показывается автору ссылкой, когда опубликована.
     """
 
     class Kind(models.TextChoices):
@@ -38,6 +40,18 @@ class Feedback(models.Model):
     created_at = models.DateTimeField("отправлено", auto_now_add=True)
     status = models.CharField("статус", max_length=16, choices=Status.choices, default=Status.NEW)
     user_seen_at = models.DateTimeField("автор открывал", null=True, blank=True)
+    # Только для администраторов: в письма и на страницы автора не попадает.
+    admin_note = models.TextField("заметка администратора", blank=True)
+    # «Сделано — подробнее в „Что нового“». SET_NULL: снятая новость не должна
+    # удалять обращение; неопубликованную автор и так не видит.
+    changelog_entry = models.ForeignKey(
+        "workouts.ChangelogEntry",
+        verbose_name="новость",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
 
     class Meta:
         ordering = ["-created_at", "-id"]

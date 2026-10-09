@@ -17,6 +17,7 @@ from accounts.tests.factories import UserFactory
 from feedback.forms import DAILY_LIMIT
 from feedback.models import Feedback, FeedbackMessage
 from workouts.tests.budgets import SIDEBAR_QUERIES
+from workouts.tests.factories import ChangelogEntryFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -377,3 +378,73 @@ def test_admin_counter_hidden_when_nothing_is_new(client, admin_user, user):
     client.force_login(admin_user)
 
     assert "новых обращений" not in client.get(reverse("profile")).content.decode()
+
+
+def admin_list(client, **params):
+    return [item.text for item in client.get(reverse("admin_feedback"), params).context["items"]]
+
+
+def test_admin_list_filters_by_kind_and_status_together(client, user, admin_user):
+    Feedback.objects.create(user=user, text="Новая идея", kind="idea")
+    Feedback.objects.create(user=user, text="Новая ошибка", kind="bug")
+    Feedback.objects.create(user=user, text="Закрытая ошибка", kind="bug", status="done")
+    client.force_login(admin_user)
+
+    assert admin_list(client, kind="bug", status="new") == ["Новая ошибка"]
+    assert len(admin_list(client, kind="мусор")) == 3
+
+
+def test_admin_search_by_text_email_and_thread(client, user, other_user, admin_user):
+    Feedback.objects.create(user=user, text="Таймер отдыха врёт")
+    Feedback.objects.create(user=other_user, text="Хочу тёмную тему")
+    in_thread = Feedback.objects.create(user=user, text="Вопрос")
+    FeedbackMessage.objects.create(feedback=in_thread, text="Про таймер тоже")
+    FeedbackMessage.objects.create(feedback=in_thread, from_admin=True, text="Таймер чиню")
+    client.force_login(admin_user)
+
+    assert sorted(admin_list(client, q="таймер")) == ["Вопрос", "Таймер отдыха врёт"]
+    assert admin_list(client, q=other_user.email) == ["Хочу тёмную тему"]
+
+
+def test_admin_note_is_saved_and_hidden_from_author(client, user, admin_user):
+    item = Feedback.objects.create(user=user, text="Идея")
+    client.force_login(admin_user)
+
+    client.post(admin_detail(item), {"status": "new", "text": "", "admin_note": "Дубль #12"})
+
+    item.refresh_from_db()
+    assert item.admin_note == "Дубль #12"
+    assert mail.outbox == []
+    client.force_login(user)
+    assert "Дубль #12" not in client.get(URL).content.decode()
+    assert "Дубль #12" not in client.get(detail(item)).content.decode()
+
+
+def test_linked_news_is_shown_to_author_only_when_published(client, user, admin_user):
+    news = ChangelogEntryFactory(title="Тёмная тема графиков")
+    draft = ChangelogEntryFactory(title="Секретный черновик", is_published=False)
+    item = Feedback.objects.create(user=user, text="Идея")
+    client.force_login(admin_user)
+
+    client.post(admin_detail(item), {"status": "done", "changelog_entry": news.pk})
+
+    item.refresh_from_db()
+    assert item.changelog_entry == news
+    client.force_login(user)
+    html = client.get(detail(item)).content.decode()
+    assert f"#news-{news.pk}" in html
+    assert "Тёмная тема графиков" in html
+
+    Feedback.objects.filter(pk=item.pk).update(changelog_entry=draft)
+    assert "Секретный черновик" not in client.get(detail(item)).content.decode()
+
+
+def test_unpublished_news_cannot_be_linked(client, user, admin_user):
+    draft = ChangelogEntryFactory(is_published=False)
+    item = Feedback.objects.create(user=user, text="Идея")
+    client.force_login(admin_user)
+
+    client.post(admin_detail(item), {"status": "done", "changelog_entry": draft.pk})
+
+    item.refresh_from_db()
+    assert item.changelog_entry is None

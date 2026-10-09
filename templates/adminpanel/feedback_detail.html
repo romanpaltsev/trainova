@@ -7,8 +7,8 @@
 
 {% comment %}
   Переписка и ответ — две колонки на ПК (та же обёртка, что у страницы
-  пользователя). Сообщение уходит автору письмом; смена одного статуса никому
-  не пишет.
+  пользователя). Сообщение уходит автору письмом; статус, новость и заметка
+  никому не пишут. Заметка в шаблоны автора не попадает вовсе.
 {% endcomment %}
 <div class="app-feedback">
   <section aria-labelledby="feedback-item-title">
@@ -33,7 +33,15 @@
       <label class="form-label" for="{{ form.text.id_for_label }}">Новое сообщение</label>
       {{ form.text }}
       {% for error in form.text.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-      <p class="app-queue-hint mt-2 mb-0">Сообщение придёт автору на почту и появится в переписке. Пустое — сохранится только статус.</p>
+      <p class="app-queue-hint mt-2 mb-0">Сообщение придёт автору на почту и появится в переписке. Пустое — сохранится только остальное.</p>
+
+      <label class="form-label mt-3" for="{{ status_form.changelog_entry.id_for_label }}">Новость «Что нового»</label>
+      {{ status_form.changelog_entry }}
+      <p class="app-queue-hint mt-2 mb-0">Автор увидит ссылку «Сделано — подробнее в „Что нового“» у своего обращения.</p>
+
+      <label class="form-label mt-3" for="{{ status_form.admin_note.id_for_label }}">Заметка — видна только администраторам</label>
+      {{ status_form.admin_note }}
+
       <button type="submit" class="btn btn-accent app-btn-fill mt-3">Сохранить</button>
     </form>
   </section>

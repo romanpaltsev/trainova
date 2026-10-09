@@ -21,6 +21,20 @@
   <section aria-labelledby="feedback-thread-title">
     <h2 class="app-section-title" id="feedback-thread-title">Переписка</h2>
     {% include "feedback/_thread.html" %}
+    {% comment %}
+      Ссылка на новость — только на опубликованную: снятая или отложенная
+      ведёт в пустоту («Что нового» её не покажет). Проверку делает вьюха
+      (news), а не шаблон: у неё есть время «сейчас».
+    {% endcomment %}
+    {% if news %}
+      <a class="app-row mt-2" href="{% url 'changelog' %}#news-{{ news.pk }}">
+        <span class="app-row-text">
+          <span class="app-row-name">Сделано — подробнее в «Что нового»</span>
+          <span class="app-row-meta">{{ news.title }}</span>
+        </span>
+        {% include "includes/chevron.html" %}
+      </a>
+    {% endif %}
   </section>
 
   <section aria-labelledby="feedback-more-title">
