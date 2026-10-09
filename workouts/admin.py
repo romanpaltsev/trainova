@@ -11,6 +11,8 @@ from workouts.models import (
     ExerciseNote,
     ExerciseSettings,
     Location,
+    MachineBrand,
+    MachineModel,
     Sport,
     StrengthSet,
     Workout,
@@ -90,15 +92,36 @@ class ExerciseSettingsAdmin(admin.ModelAdmin):
     autocomplete_fields = ("user", "exercise")
 
 
+@admin.register(MachineBrand)
+class MachineBrandAdmin(CatalogAdmin):
+    list_display = ("name", "owner_display")
+
+
+@admin.register(MachineModel)
+class MachineModelAdmin(CatalogAdmin):
+    list_display = ("name", "brand", "owner_display")
+    search_fields = ("name", "brand__name")
+    autocomplete_fields = ("owner", "brand")
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("brand")
+
+
 @admin.register(ExerciseMachine)
 class ExerciseMachineAdmin(admin.ModelAdmin):
     """Тренажёры пользователей: упражнение × место — производитель и модель."""
 
     list_display = ("user", "exercise", "location", "brand", "model")
     list_filter = ("user",)
-    search_fields = ("user__email", "exercise__name", "location__name", "brand", "model")
-    autocomplete_fields = ("user", "exercise", "location")
-    list_select_related = ("user", "exercise", "location")
+    search_fields = (
+        "user__email",
+        "exercise__name",
+        "location__name",
+        "brand__name",
+        "model__name",
+    )
+    autocomplete_fields = ("user", "exercise", "location", "brand", "model")
+    list_select_related = ("user", "exercise", "location", "brand", "model")
 
 
 class StrengthSetInline(admin.TabularInline):

@@ -1,0 +1,13 @@
+{% comment %}
+  «Своё / Общее» у новой записи справочника тренажёров — только администратору
+  (у остальных поля scope в форме нет). Ждёт form (MachineNameForm с prefix).
+{% endcomment %}
+<div class="app-stepper-label mt-3">Кому</div>
+<div class="app-chips mb-2" role="group" aria-label="Кому видна запись">
+  <input type="radio" name="{{ form.scope.html_name }}" id="{{ form.prefix }}-scope-own" value="own"
+         class="app-chip-input" {% if form.scope.value != "global" %}checked{% endif %}>
+  <label class="app-chip" for="{{ form.prefix }}-scope-own">Своё</label>
+  <input type="radio" name="{{ form.scope.html_name }}" id="{{ form.prefix }}-scope-global" value="global"
+         class="app-chip-input" {% if form.scope.value == "global" %}checked{% endif %}>
+  <label class="app-chip" for="{{ form.prefix }}-scope-global">Общее — для всех</label>
+</div>

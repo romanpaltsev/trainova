@@ -28,7 +28,7 @@ from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from workouts import excel
+from workouts import excel, services
 from workouts.models import (
     DEFAULT_WEIGHT_STEP,
     EQUIPMENT_MAX_LENGTH,
@@ -122,9 +122,10 @@ HELP_LINES = (
     "",
     "Лист «Тренажёры» — на каком тренажёре вы делаете упражнение в каждом месте:",
     "строка — упражнение и место, дальше производитель и модель. «Место» — название",
-    "одного из ваших мест, новых мест загрузка не заводит. Пустые производитель и модель",
-    "убирают тренажёр; строка, удалённая из листа, ничего не меняет. Листа нет в файле —",
-    "тренажёры не трогаются.",
+    "одного из ваших мест, новых мест загрузка не заводит. Производитель и модель ищутся",
+    "в списке тренажёров по названию; незнакомое название добавится в ваш список.",
+    "Пустые производитель и модель убирают тренажёр; строка, удалённая из листа, ничего",
+    "не меняет. Листа нет в файле — тренажёры не трогаются.",
     "",
     "Файл можно загружать повторно: то, что уже совпадает, останется как есть. Поэтому",
     "сохраните скачанный файл до правок: его загрузка вернёт справочник как было",
@@ -172,7 +173,7 @@ def machine_rows(user):
     """Строки листа «Тренажёры»: все указанные тренажёры — один запрос."""
     machines = (
         ExerciseMachine.objects.filter(user=user)
-        .select_related("exercise", "location")
+        .select_related("exercise", "location", "brand", "model")
         .order_by("exercise__name", "location__name")
     )
     return [
@@ -180,8 +181,8 @@ def machine_rows(user):
             "exercise_id": machine.exercise_id,
             "exercise": machine.exercise.name,
             "location": machine.location.name,
-            "brand": machine.brand,
-            "model": machine.model,
+            "brand": machine.brand.name,
+            "model": machine.model.name if machine.model_id else "",
         }
         for machine in machines
     ]
@@ -715,16 +716,17 @@ class Machines:
         self.user = user
         self.current = {}
         self.places = {}
-        brands = set()
-        for machine in ExerciseMachine.objects.filter(user=user).select_related("location"):
+        machines = ExerciseMachine.objects.filter(user=user).select_related(
+            "location", "brand", "model"
+        )
+        for machine in machines:
+            # Названия в нижнем регистре: «technogym» в файле — тот же Technogym,
+            # и нетронутая строка не должна стоить ни запроса.
             self.current[(machine.exercise_id, machine.location_id)] = (
-                machine.brand,
-                machine.model,
+                machine.brand.name.lower(),
+                machine.model.name.lower() if machine.model_id else "",
             )
             self.places[machine.location.name.lower()] = machine.location
-            if machine.brand:
-                brands.add(machine.brand)
-        self.brands = sorted(brands)
         self.all_places_loaded = False
 
     def place(self, name):
@@ -776,18 +778,23 @@ def _apply_machines(user, catalog, report, rows):
             error(row, f"Этот тренажёр уже был в строке {seen[key]} — повтор пропущен.")
             continue
         seen[key] = row.number
-        brand = normalize_facet(row.brand, machines.brands)
-        model = collapse_spaces(row.model)
-        if machines.current.get(key, ("", "")) == (brand, model):
+        brand_name, model_name = collapse_spaces(row.brand), collapse_spaces(row.model)
+        if machines.current.get(key, ("", "")) == (brand_name.lower(), model_name.lower()):
+            continue
+        if model_name and not brand_name:
+            error(row, "Модель указана без производителя — строка пропущена.")
             continue
         lookup = {"user": user, "exercise": exercise, "location": location}
-        if brand or model:
+        if brand_name:
+            # Названия — ссылки на справочник: совпавшее имя значит «это он»,
+            # незнакомое заводит своё (контракт machine_*_for_name, как у
+            # упражнений в основном листе).
+            brand = services.machine_brand_for_name(user, brand_name)
+            model = services.machine_model_for_name(user, brand, model_name) if model_name else None
             ExerciseMachine.objects.update_or_create(
                 **lookup, defaults={"brand": brand, "model": model}
             )
-            machines.current[key] = (brand, model)
-            if brand and brand not in machines.brands:
-                machines.brands.append(brand)
+            machines.current[key] = (brand_name.lower(), model_name.lower())
         else:
             ExerciseMachine.objects.filter(**lookup).delete()
             machines.current.pop(key, None)

@@ -42,6 +42,17 @@ urlpatterns = [
         name="exercise_rename",
     ),
     path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
+    path("profile/machines/", views.MyMachinesView.as_view(), name="my_machines"),
+    path(
+        "profile/machines/<str:kind>/<int:pk>/rename/",
+        views.MachineRenameView.as_view(),
+        name="machine_rename",
+    ),
+    path(
+        "profile/machines/<str:kind>/<int:pk>/delete/",
+        views.MachineDeleteView.as_view(),
+        name="machine_delete",
+    ),
     path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
     path("profile/locations/", views.MyLocationsView.as_view(), name="my_locations"),
     # Мои замеры: имена маршрутов начинаются с body_ — по префиксу подсвечивается

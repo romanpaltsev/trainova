@@ -31,6 +31,7 @@
           </button>
         {% endfor %}
       </div>
+      <a class="app-link d-inline-block mt-2" href="{% url 'my_machines' %}">Мои тренажёры</a>
     {% else %}
       {% url 'my_locations' as locations_url %}
       {% include "includes/empty_state.html" with text="Тренажёр указывается для места тренировки — сначала добавьте зал." cta_label="Мои места" cta_url=locations_url extra_class="app-empty-slim" %}

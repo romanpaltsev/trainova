@@ -15,6 +15,8 @@ from workouts.models import (
     ExerciseNote,
     ExerciseSettings,
     Location,
+    MachineBrand,
+    MachineModel,
     Sport,
     StrengthSet,
     Workout,
@@ -65,15 +67,38 @@ class LocationFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Место {n}")
 
 
+class MachineBrandFactory(factory.django.DjangoModelFactory):
+    """Производитель тренажёров; по умолчанию общий (owner=None)."""
+
+    class Meta:
+        model = MachineBrand
+        django_get_or_create = ("name", "owner")
+
+    name = "Technogym"
+    owner = None
+
+
+class MachineModelFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = MachineModel
+        django_get_or_create = ("brand", "name", "owner")
+
+    brand = factory.SubFactory(MachineBrandFactory)
+    name = "Selection 900"
+    owner = None
+
+
 class ExerciseMachineFactory(factory.django.DjangoModelFactory):
+    """Тренажёр упражнения в месте: по умолчанию общий «Technogym · Selection 900»."""
+
     class Meta:
         model = ExerciseMachine
 
     user = factory.SubFactory(UserFactory)
     exercise = factory.SubFactory(ExerciseFactory)
     location = factory.SubFactory(LocationFactory, owner=factory.SelfAttribute("..user"))
-    brand = "Technogym"
-    model = "Selection 900"
+    brand = factory.SubFactory(MachineBrandFactory)
+    model = factory.SubFactory(MachineModelFactory, brand=factory.SelfAttribute("..brand"))
 
 
 class WorkoutFactory(factory.django.DjangoModelFactory):

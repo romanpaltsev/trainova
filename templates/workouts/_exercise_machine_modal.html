@@ -1,44 +1,102 @@
 {% comment %}
-  Окно «Тренажёр»: производитель и модель упражнения в одном месте
-  (ExerciseMachineView). Пустые оба поля — «не указан». Успех отвечает
-  HX-Refresh, ошибка — этим же окном.
-  Подсказки производителей — уже введённые этим человеком (datalist):
-  набирать «Hammer Strength» второй раз не нужно.
+  Окно «Тренажёр» (ExerciseMachineView): выбор из справочника в два шага.
+  brand пуст — шаг 1, производители (общие и свои, у своих метка «моё»);
+  brand задан — шаг 2, модели этого производителя и «Модель не знаю».
+  Строки шага 2 сохраняют сразу (ответ — HX-Refresh), строки шага 1 — открывают
+  шаг 2. Новое название вводится формой внизу; «Своё / Общее» — только у
+  администратора (у остальных поля scope нет), и общая модель — только у общего
+  производителя, поэтому у своего производителя чипов нет.
 {% endcomment %}
+{% url 'exercise_machine' exercise.pk location.pk as machine_url %}
 <div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
   <div class="app-card app-modal" role="dialog" aria-modal="true"
        aria-labelledby="machine-modal-title">
     <div class="app-modal-head">
-      <h2 class="app-modal-title" id="machine-modal-title">Тренажёр</h2>
+      <h2 class="app-modal-title" id="machine-modal-title">
+        {% if brand %}{{ brand.name }}{% else %}Производитель{% endif %}
+      </h2>
       <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-    <p class="app-queue-hint mb-3">{{ exercise.name }} · {{ location.name }}</p>
+    <p class="app-queue-hint mb-3">Тренажёр для «{{ exercise.name }}» · {{ location.name }}</p>
 
-    <form hx-post="{% url 'exercise_machine' exercise.pk location.pk %}"
-          hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="find button" novalidate>
-      <label class="form-label" for="machine-brand">Производитель</label>
-      <input type="text" name="brand" id="machine-brand" class="form-control"
-             value="{{ form.brand.value|default:'' }}" maxlength="{{ form.fields.brand.max_length }}"
-             list="machine-brands" autocomplete="off" placeholder="напр. Technogym">
-      {% for error in form.brand.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-      <datalist id="machine-brands">
-        {% for brand in known_brands %}<option value="{{ brand }}">{% endfor %}
-      </datalist>
-
-      <label class="form-label mt-3" for="machine-model">Модель</label>
-      <input type="text" name="model" id="machine-model" class="form-control"
-             value="{{ form.model.value|default:'' }}" maxlength="{{ form.fields.model.max_length }}"
-             autocomplete="off" placeholder="напр. Selection 900 Leg Press">
-      {% for error in form.model.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-      <p class="app-queue-hint mt-2 mb-0">Только для этого места. Оставьте оба поля пустыми, чтобы убрать тренажёр.</p>
-
-      <div class="d-flex gap-2 mt-3">
-        <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
-        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+    {% if brand %}
+      <button type="button" class="btn btn-quiet mb-3"
+              hx-get="{{ machine_url }}?step=brands" hx-target="#modal" hx-swap="innerHTML">
+        ← Другой производитель
+      </button>
+      <div class="app-pick-list">
+        <button type="button" class="app-pick-row" hx-post="{{ machine_url }}"
+                hx-vals='{"action": "pick", "brand": "{{ brand.pk }}", "model": ""}'
+                hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
+          <span class="app-pick-name">Модель не знаю</span>
+          {% if machine and machine.brand_id == brand.pk and not machine.model_id %}{% include "includes/check.html" %}{% endif %}
+        </button>
+        {% for item in models %}
+          <button type="button" class="app-pick-row" hx-post="{{ machine_url }}"
+                  hx-vals='{"action": "pick", "brand": "{{ brand.pk }}", "model": "{{ item.pk }}"}'
+                  hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
+            <span class="app-pick-name">{{ item.name }}</span>
+            {% if not item.is_global %}<span class="app-pick-meta">моё</span>{% endif %}
+            {% if machine.model_id == item.pk %}{% include "includes/check.html" %}{% endif %}
+          </button>
+        {% endfor %}
       </div>
-    </form>
+      <form class="mt-3" hx-post="{{ machine_url }}" hx-target="#modal" hx-swap="innerHTML"
+            hx-disabled-elt="find button" novalidate>
+        <input type="hidden" name="action" value="model_new">
+        <input type="hidden" name="brand" value="{{ brand.pk }}">
+        <label class="form-label" for="{{ form.name.id_for_label }}">Новая модель</label>
+        <input type="text" name="{{ form.name.html_name }}" id="{{ form.name.id_for_label }}"
+               class="form-control" value="{{ form.name.value|default:'' }}"
+               maxlength="{{ form.fields.name.max_length }}" autocomplete="off"
+               placeholder="напр. Selection 900 Leg Press">
+        {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        {% if form.scope and brand.is_global %}
+          {% include "workouts/_machine_scope.html" %}
+        {% endif %}
+        <p class="app-queue-hint mt-2 mb-0">Если такая модель уже есть, выберется она.</p>
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-accent flex-fill">Добавить и выбрать</button>
+        </div>
+      </form>
+    {% else %}
+      <div class="app-pick-list">
+        {% for item in brands %}
+          <button type="button" class="app-pick-row"
+                  hx-get="{{ machine_url }}?brand={{ item.pk }}"
+                  hx-target="#modal" hx-swap="innerHTML">
+            <span class="app-pick-name">{{ item.name }}</span>
+            {% if not item.is_global %}<span class="app-pick-meta">моё</span>{% endif %}
+            {% if machine.brand_id == item.pk %}{% include "includes/check.html" %}{% endif %}
+          </button>
+        {% empty %}
+          <p class="app-queue-hint mb-0">Список пока пуст — добавьте производителя ниже.</p>
+        {% endfor %}
+      </div>
+      <form class="mt-3" hx-post="{{ machine_url }}" hx-target="#modal" hx-swap="innerHTML"
+            hx-disabled-elt="find button" novalidate>
+        <input type="hidden" name="action" value="brand_new">
+        <label class="form-label" for="{{ form.name.id_for_label }}">Новый производитель</label>
+        <input type="text" name="{{ form.name.html_name }}" id="{{ form.name.id_for_label }}"
+               class="form-control" value="{{ form.name.value|default:'' }}"
+               maxlength="{{ form.fields.name.max_length }}" autocomplete="off"
+               placeholder="напр. Technogym">
+        {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        {% if form.scope %}{% include "workouts/_machine_scope.html" %}{% endif %}
+        <p class="app-queue-hint mt-2 mb-0">Если такой производитель уже есть, выберется он.</p>
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-accent flex-fill">Добавить</button>
+        </div>
+      </form>
+    {% endif %}
+
+    {% if machine %}
+      <button type="button" class="btn btn-danger-quiet w-100 mt-3" hx-post="{{ machine_url }}"
+              hx-vals='{"action": "remove"}' hx-target="#modal" hx-swap="innerHTML"
+              hx-disabled-elt="this">Убрать тренажёр</button>
+    {% endif %}
   </div>
 </div>

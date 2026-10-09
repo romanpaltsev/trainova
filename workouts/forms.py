@@ -1,6 +1,7 @@
 """Формы записи тренировок и личных справочников."""
 
 from django import forms
+from django.core.validators import MaxLengthValidator
 from django.utils import formats, timezone
 
 from workouts import excel, excel_import, services
@@ -8,8 +9,6 @@ from workouts.models import (
     BODY_METRIC_NAME_MAX_LENGTH,
     BODY_METRIC_UNIT_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
-    MACHINE_BRAND_MAX_LENGTH,
-    MACHINE_MODEL_MAX_LENGTH,
     BodyMeasurement,
     BodyMetric,
     CardioPart,
@@ -21,7 +20,6 @@ from workouts.models import (
     chosen_muscle_group,
     collapse_spaces,
     facets_for,
-    normalize_facet,
     parse_measurement_value,
 )
 
@@ -754,25 +752,32 @@ class BodyMetricForm(forms.Form):
         return metric
 
 
-class ExerciseMachineForm(forms.Form):
-    """Тренажёр упражнения в месте: производитель и модель, оба необязательные.
+class MachineNameForm(forms.Form):
+    """Новый производитель или модель в окне «Тренажёр» и переименование на
+    «Моих тренажёрах»: одно поле названия, у администратора — ещё «Своё / Общее».
 
-    Пустые оба — «тренажёр не указан» (строка удаляется вьюхой). Производитель
-    приводится к уже принятому написанию (`known_brands`): «technogym» не
-    должен стать вторым брендом рядом с «Technogym».
+    Поля scope у остальных нет вовсе (приём ExerciseCreateForm): подменой
+    запроса общую запись не завести.
     """
 
-    brand = forms.CharField(
-        label="Производитель", max_length=MACHINE_BRAND_MAX_LENGTH, required=False
+    SCOPE_OWN = "own"
+    SCOPE_GLOBAL = "global"
+
+    name = forms.CharField(error_messages={"required": "Введите название."})
+    scope = forms.ChoiceField(
+        choices=[(SCOPE_OWN, "Своё"), (SCOPE_GLOBAL, "Общее")], required=False
     )
-    model = forms.CharField(label="Модель", max_length=MACHINE_MODEL_MAX_LENGTH, required=False)
 
-    def __init__(self, *args, known_brands=(), **kwargs):
-        self.known_brands = known_brands
+    def __init__(self, *args, user, max_length, with_scope=True, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["name"].max_length = max_length
+        self.fields["name"].validators.append(MaxLengthValidator(max_length))
+        if not (with_scope and user.is_admin):
+            del self.fields["scope"]
 
-    def clean_brand(self):
-        return normalize_facet(self.cleaned_data["brand"], self.known_brands)
+    @property
+    def is_global(self):
+        return self.cleaned_data.get("scope") == self.SCOPE_GLOBAL
 
-    def clean_model(self):
-        return collapse_spaces(self.cleaned_data["model"])
+    def clean_name(self):
+        return collapse_spaces(self.cleaned_data["name"])

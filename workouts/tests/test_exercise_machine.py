@@ -14,11 +14,13 @@ from django.urls import reverse
 from openpyxl import load_workbook
 
 from workouts import exercise_excel
-from workouts.models import ExerciseMachine, Location
+from workouts.models import ExerciseMachine, Location, MachineBrand, MachineModel
 from workouts.tests.factories import (
     ExerciseFactory,
     ExerciseMachineFactory,
     LocationFactory,
+    MachineBrandFactory,
+    MachineModelFactory,
     StrengthSetFactory,
     WorkoutFactory,
 )
@@ -40,8 +42,12 @@ def url(exercise, location):
     return reverse("exercise_machine", args=[exercise.pk, location.pk])
 
 
-def save(client, exercise, location, brand="", model=""):
-    return client.post(url(exercise, location), {"brand": brand, "model": model})
+def brand(name, owner=None):
+    return MachineBrandFactory(name=name, owner=owner)
+
+
+def post(client, exercise, location, **data):
+    return client.post(url(exercise, location), data)
 
 
 def machine_of(user, exercise, location):
@@ -51,49 +57,164 @@ def machine_of(user, exercise, location):
 # ---------- Окно «Тренажёр» ----------
 
 
-def test_modal_opens_with_current_values(client, user, press, gym):
-    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand="Hammer Strength")
+def test_modal_starts_with_brands_and_opens_current_brand(client, user, other_user, press, gym):
+    brand("Technogym")
+    brand("Свой бренд", owner=user)
+    brand("Чужой бренд", owner=other_user)
     client.force_login(user)
 
     html = client.get(url(press, gym)).content.decode()
 
-    assert "Hammer Strength" in html
-    assert "СпортЛайф" in html
+    assert "Technogym" in html
+    assert "Свой бренд" in html
+    assert "Чужой бренд" not in html
+
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand("Hammer Strength"))
+    html = client.get(url(press, gym)).content.decode()
+    assert "Selection 900" in html  # сразу шаг моделей текущего производителя
+    assert "Другой производитель" in html
 
 
-def test_save_creates_then_updates_then_empty_removes(client, user, press, gym):
+def test_pick_shared_brand_and_model(client, user, press, gym):
+    model = MachineModelFactory(brand=brand("Technogym"), name="Pure Leg Press")
     client.force_login(user)
 
-    response = save(client, press, gym, "  Technogym ", "Selection   900")
+    response = post(client, press, gym, action="pick", brand=model.brand_id, model=model.pk)
+
     assert response.headers["HX-Refresh"] == "true"
     machine = machine_of(user, press, gym)
-    assert (machine.brand, machine.model) == ("Technogym", "Selection 900")
-
-    save(client, press, gym, "", "Leg Press 45")
-    machine.refresh_from_db()
-    assert (machine.brand, machine.model) == ("", "Leg Press 45")
-
-    save(client, press, gym)
-    assert not ExerciseMachine.objects.exists()
+    assert (machine.brand, machine.model) == (model.brand, model)
 
 
-def test_brand_follows_accepted_spelling(client, user, press, gym):
-    other = ExerciseFactory(name="Сгибание ног", owner=None)
-    ExerciseMachineFactory(user=user, exercise=other, location=gym, brand="Technogym")
+def test_pick_brand_without_model(client, user, press, gym):
+    technogym = brand("Technogym")
     client.force_login(user)
 
-    save(client, press, gym, "TECHNOGYM", "")
+    post(client, press, gym, action="pick", brand=technogym.pk, model="")
 
-    assert machine_of(user, press, gym).brand == "Technogym"
+    machine = machine_of(user, press, gym)
+    assert machine.brand == technogym
+    assert machine.model is None
+    assert machine.label == "Technogym"
 
 
-def test_too_long_model_is_a_form_error(client, user, press, gym):
+def test_new_brand_by_name_is_own_and_reuses_existing(client, user, press, gym):
+    technogym = brand("Technogym")
     client.force_login(user)
 
-    response = save(client, press, gym, "", "x" * 200)
+    html = post(client, press, gym, action="brand_new", **{"brand-name": " TECHNOGYM "})
+    assert MachineBrand.objects.count() == 1  # совпало имя — выбран общий
+    assert "Модель не знаю" in html.content.decode()
+
+    post(client, press, gym, action="brand_new", **{"brand-name": "Kettler"})
+    kettler = MachineBrand.objects.get(name="Kettler")
+    assert kettler.owner == user
+    assert technogym.is_global
+
+
+def test_new_model_is_own_and_saved(client, user, press, gym):
+    technogym = brand("Technogym")
+    client.force_login(user)
+
+    response = post(
+        client,
+        press,
+        gym,
+        action="model_new",
+        brand=technogym.pk,
+        **{"model-name": "Selection  700"},
+    )
+
+    assert response.headers["HX-Refresh"] == "true"
+    machine = machine_of(user, press, gym)
+    assert machine.model.name == "Selection 700"
+    assert machine.model.owner == user
+    assert machine.model.brand == technogym
+
+
+def test_regular_user_cannot_create_shared(client, user, press, gym):
+    client.force_login(user)
+
+    post(
+        client, press, gym, action="brand_new", **{"brand-name": "Matrix", "brand-scope": "global"}
+    )
+
+    assert MachineBrand.objects.get(name="Matrix").owner == user
+
+
+def test_admin_creates_shared_brand_and_model(client, user, press, gym):
+    user.is_staff = True
+    user.save(update_fields=["is_staff"])
+    client.force_login(user)
+
+    post(
+        client, press, gym, action="brand_new", **{"brand-name": "Matrix", "brand-scope": "global"}
+    )
+    matrix = MachineBrand.objects.get(name="Matrix")
+    assert matrix.is_global
+
+    post(
+        client,
+        press,
+        gym,
+        action="model_new",
+        brand=matrix.pk,
+        **{"model-name": "Ultra", "model-scope": "global"},
+    )
+    assert MachineModel.objects.get(name="Ultra").is_global
+
+
+def test_admin_shared_model_needs_shared_brand(client, user, press, gym):
+    user.is_staff = True
+    user.save(update_fields=["is_staff"])
+    own = brand("Свой", owner=user)
+    client.force_login(user)
+
+    response = post(
+        client,
+        press,
+        gym,
+        action="model_new",
+        brand=own.pk,
+        **{"model-name": "Ultra", "model-scope": "global"},
+    )
 
     assert "HX-Refresh" not in response.headers
+    assert "только у общего производителя" in response.content.decode()
+    assert not MachineModel.objects.exists()
+
+
+def test_remove_machine(client, user, press, gym):
+    ExerciseMachineFactory(user=user, exercise=press, location=gym)
+    client.force_login(user)
+
+    post(client, press, gym, action="remove")
+
     assert not ExerciseMachine.objects.exists()
+
+
+def test_someone_elses_brand_or_model_is_404(client, user, other_user, press, gym):
+    theirs = brand("Чужой", owner=other_user)
+    their_model = MachineModelFactory(brand=brand("Technogym"), name="Чужая", owner=other_user)
+    client.force_login(user)
+
+    assert client.get(url(press, gym), {"brand": theirs.pk}).status_code == 404
+    assert post(client, press, gym, action="pick", brand=theirs.pk).status_code == 404
+    response = post(
+        client, press, gym, action="pick", brand=their_model.brand_id, model=their_model.pk
+    )
+    assert response.status_code == 404
+    assert not ExerciseMachine.objects.exists()
+
+
+def test_model_of_another_brand_is_404(client, user, press, gym):
+    model = MachineModelFactory(brand=brand("Technogym"), name="Pure")
+    other = brand("Matrix")
+    client.force_login(user)
+
+    assert (
+        post(client, press, gym, action="pick", brand=other.pk, model=model.pk).status_code == 404
+    )
 
 
 def test_someone_elses_location_is_404(client, user, other_user, press):
@@ -101,7 +222,8 @@ def test_someone_elses_location_is_404(client, user, other_user, press):
     client.force_login(user)
 
     assert client.get(url(press, theirs)).status_code == 404
-    assert save(client, press, theirs, "Technogym").status_code == 404
+    technogym = brand("Technogym")
+    assert post(client, press, theirs, action="pick", brand=technogym.pk).status_code == 404
     assert not ExerciseMachine.objects.exists()
 
 
@@ -109,7 +231,8 @@ def test_someone_elses_personal_exercise_is_404(client, user, other_user, gym):
     theirs = ExerciseFactory(name="Секретное", owner=other_user)
     client.force_login(user)
 
-    assert save(client, theirs, gym, "Technogym").status_code == 404
+    technogym = brand("Technogym")
+    assert post(client, theirs, gym, action="pick", brand=technogym.pk).status_code == 404
     assert not ExerciseMachine.objects.exists()
 
 
@@ -129,8 +252,10 @@ def detail(client, exercise):
 
 def test_exercise_page_lists_own_places_with_machines(client, user, other_user, press, gym):
     LocationFactory(owner=user, name="Дом")
-    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand="Hammer Strength")
-    ExerciseMachineFactory(user=other_user, exercise=press, brand="Чужой бренд")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand("Hammer Strength"))
+    ExerciseMachineFactory(
+        user=other_user, exercise=press, brand=brand("Чужой бренд", owner=other_user)
+    )
     client.force_login(user)
 
     html = detail(client, press)
@@ -142,8 +267,13 @@ def test_exercise_page_lists_own_places_with_machines(client, user, other_user, 
 
 
 def test_shared_exercise_has_own_machine_per_user(client, user, other_user, press, gym):
-    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand="Hammer Strength")
-    ExerciseMachineFactory(user=other_user, exercise=press, brand="Technogym", model="Pure")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand("Hammer Strength"))
+    ExerciseMachineFactory(
+        user=other_user,
+        exercise=press,
+        model=MachineModelFactory(brand=brand("Technogym"), name="Pure"),
+        brand=brand("Technogym"),
+    )
 
     client.force_login(other_user)
     html = detail(client, press)
@@ -162,7 +292,7 @@ def test_section_without_places_points_to_my_locations(client, user, press):
 
 def test_exercise_history_shows_machine_of_that_place(client, user, press, gym):
     StrengthSetFactory(workout=WorkoutFactory(user=user, location=gym), exercise=press)
-    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand="Hammer Strength")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand("Hammer Strength"))
     client.force_login(user)
 
     html = detail(client, press)
@@ -181,8 +311,8 @@ def live_workout(user, location, exercise):
 
 def test_live_screen_shows_machine_of_workout_place(client, user, press, gym):
     other_place = LocationFactory(owner=user, name="Дом")
-    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand="Hammer Strength")
-    ExerciseMachineFactory(user=user, exercise=press, location=other_place, brand="Kettler")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand("Hammer Strength"))
+    ExerciseMachineFactory(user=user, exercise=press, location=other_place, brand=brand("Kettler"))
     workout = live_workout(user, gym, press)
     client.force_login(user)
 
@@ -225,7 +355,7 @@ def test_workout_without_place_has_no_machine(client, user, press):
 def test_summary_shows_machine(client, user, press, gym):
     workout = WorkoutFactory(user=user, location=gym)
     StrengthSetFactory(workout=workout, exercise=press)
-    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand="Hammer Strength")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand("Hammer Strength"))
     client.force_login(user)
 
     html = client.get(reverse("workout_summary", args=[workout.pk])).content.decode()
@@ -290,7 +420,7 @@ def round_trip(client, user, edit=None):
 
 
 def test_export_has_machine_sheet(user, press, gym):
-    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand="Hammer Strength")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand("Hammer Strength"))
     buffer = io.BytesIO()
     exercise_excel.build_workbook(user).save(buffer)
 
@@ -322,8 +452,8 @@ def test_machine_sheet_edits_are_applied(client, user, press, gym):
     report = round_trip(client, user, edit)
 
     assert report.machines == 2
-    assert machine_of(user, press, gym).model == "Selection 700"
-    assert ExerciseMachine.objects.get(location__name="Дом").brand == "Kettler"
+    assert machine_of(user, press, gym).model.name == "Selection 700"
+    assert ExerciseMachine.objects.get(location__name="Дом").brand.name == "Kettler"
 
 
 def test_machine_sheet_empty_fields_remove_machine(client, user, press, gym):

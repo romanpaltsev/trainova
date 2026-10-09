@@ -1156,14 +1156,92 @@ def machine_label(brand, model):
     return " · ".join(part for part in (brand, model) if part)
 
 
+class MachineBrand(CatalogItem):
+    """Производитель тренажёров — гибридный справочник, как Sport и Exercise.
+
+    Общие записи (owner IS NULL) ведёт администратор, свои человек заводит в
+    окне «Тренажёр» и правит на «Моих тренажёрах». Стартового набора нет:
+    выдуманные названия были бы хуже пустого списка.
+    """
+
+    name = models.CharField("название", max_length=MACHINE_BRAND_MAX_LENGTH)
+
+    class Meta(CatalogItem.Meta):
+        abstract = False
+        verbose_name = "производитель тренажёров"
+        verbose_name_plural = "производители тренажёров"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "owner",
+                name="unique_machine_brand_per_owner",
+                violation_error_message="Такой производитель у вас уже есть.",
+            ),
+            models.UniqueConstraint(
+                Lower("name"),
+                condition=Q(owner__isnull=True),
+                name="unique_global_machine_brand",
+                violation_error_message="Общий производитель с таким названием уже есть.",
+            ),
+        ]
+
+
+class MachineModel(CatalogItem):
+    """Модель тренажёра у производителя — тоже гибридный справочник.
+
+    Своя модель может быть у общего производителя («Technogym» общий, своя
+    «Selection 900»), а общая — только у общего: иначе её видели бы все, а её
+    производителя — один владелец. Межтабличное условие констрейнтом не
+    выразить, его держит форма окна.
+
+    brand — RESTRICT, а не PROTECT: удаление аккаунта каскадом сносит и свои
+    модели, и своих производителей, а PROTECT внутри одного каскада падает
+    (см. пункт 2 CLAUDE.md). RESTRICT пропускает строки того же каскада и
+    по-прежнему не даёт удалить общего производителя из-под чужих моделей.
+    """
+
+    brand = models.ForeignKey(
+        MachineBrand,
+        verbose_name="производитель",
+        on_delete=models.RESTRICT,
+        related_name="models",
+    )
+    name = models.CharField("название", max_length=MACHINE_MODEL_MAX_LENGTH)
+
+    class Meta(CatalogItem.Meta):
+        abstract = False
+        verbose_name = "модель тренажёра"
+        verbose_name_plural = "модели тренажёров"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                "brand",
+                Lower("name"),
+                "owner",
+                name="unique_machine_model_per_owner",
+                violation_error_message="Такая модель у вас уже есть.",
+            ),
+            models.UniqueConstraint(
+                "brand",
+                Lower("name"),
+                condition=Q(owner__isnull=True),
+                name="unique_global_machine_model",
+                violation_error_message="Общая модель с таким названием уже есть.",
+            ),
+        ]
+
+
 class ExerciseMachine(models.Model):
     """Тренажёр, на котором пользователь делает упражнение в конкретном месте.
 
     Пара «упражнение × место», а не поле упражнения и не ExerciseSettings:
     один «Жим ногами в тренажёре» в двух залах — две разные машины, а общие
-    упражнения одни на всех. Строки нет — тренажёр не указан; два пустых поля
-    удаляют строку. Все FK — CASCADE: тренажёр ничего не держит, удаление
-    места, упражнения или аккаунта убирает его само.
+    упражнения одни на всех. Строки нет — тренажёр не указан. user, exercise и
+    location — CASCADE: удаление места, упражнения или аккаунта убирает
+    тренажёр само. brand и model — записи справочника (model NULL = «модель
+    не знаю»), RESTRICT: используемую запись справочника не удалить, а каскад
+    удаления аккаунта проходит (см. MachineModel).
 
     Это текущая настройка, а не снимок: итог старой тренировки показывает
     тренажёр, указанный у места сейчас, — как и переименованное место.
@@ -1181,8 +1259,20 @@ class ExerciseMachine(models.Model):
     location = models.ForeignKey(
         Location, verbose_name="место", on_delete=models.CASCADE, related_name="machines"
     )
-    brand = models.CharField("производитель", max_length=MACHINE_BRAND_MAX_LENGTH, blank=True)
-    model = models.CharField("модель", max_length=MACHINE_MODEL_MAX_LENGTH, blank=True)
+    brand = models.ForeignKey(
+        MachineBrand,
+        verbose_name="производитель",
+        on_delete=models.RESTRICT,
+        related_name="exercise_machines",
+    )
+    model = models.ForeignKey(
+        MachineModel,
+        verbose_name="модель",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="exercise_machines",
+    )
 
     class Meta:
         verbose_name = "тренажёр"
@@ -1192,25 +1282,21 @@ class ExerciseMachine(models.Model):
                 fields=["user", "exercise", "location"],
                 name="unique_machine_per_exercise_location",
             ),
-            models.CheckConstraint(
-                condition=~models.Q(brand="", model=""),
-                name="machine_is_not_empty",
-            ),
         ]
 
     def __str__(self):
-        return machine_label(self.brand, self.model)
+        return self.label
 
     @property
     def label(self):
-        return machine_label(self.brand, self.model)
+        return machine_label(self.brand.name, self.model.name if self.model_id else "")
 
 
 def with_machine(queryset, user, location, *, exercise_ref="exercise"):
     """Подмешать тренажёр упражнения в месте тренировки — подзапросами, без N+1.
 
-    machine_brand и machine_model; у тренировки без места — пустые строки
-    (подзапрос не строится вовсе).
+    machine_brand и machine_model — названия из справочника; у тренировки без
+    места — пустые строки (подзапрос не строится вовсе).
     """
     if location is None:
         empty = models.Value("", output_field=models.CharField())
@@ -1219,8 +1305,12 @@ def with_machine(queryset, user, location, *, exercise_ref="exercise"):
         user=user, location=location, exercise=models.OuterRef(exercise_ref)
     )
     return queryset.annotate(
-        machine_brand=Coalesce(models.Subquery(machines.values("brand")[:1]), models.Value("")),
-        machine_model=Coalesce(models.Subquery(machines.values("model")[:1]), models.Value("")),
+        machine_brand=Coalesce(
+            models.Subquery(machines.values("brand__name")[:1]), models.Value("")
+        ),
+        machine_model=Coalesce(
+            models.Subquery(machines.values("model__name")[:1]), models.Value("")
+        ),
     )
 
 

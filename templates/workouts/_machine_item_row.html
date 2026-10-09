@@ -1,0 +1,21 @@
+{% comment %}
+  Строка записи справочника тренажёров на «Моих тренажёрах»: название —
+  кнопка переименования (карандаш внутри, приём строк мест), справа удаление.
+  Ждёт item, kind (brand | model), uses, meta (необязательна).
+{% endcomment %}
+<div class="app-row{% if kind == 'model' %} app-machine-model-row{% endif %}">
+  <button type="button" class="app-row-text app-location-edit"
+          hx-get="{% url 'machine_rename' kind item.pk %}"
+          hx-target="#modal" hx-swap="innerHTML"
+          aria-label="Переименовать {{ item.name }}">
+    <span class="app-row-name">{{ item.name }}{% include "includes/pencil.html" %}</span>
+    <span class="app-row-meta">{% if meta %}{{ meta }} · {% endif %}{{ uses }}</span>
+  </button>
+  <a class="app-icon-btn app-row-delete" href="{% url 'machine_delete' kind item.pk %}"
+     aria-label="Удалить {{ item.name }}">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>
+    </svg>
+  </a>
+</div>

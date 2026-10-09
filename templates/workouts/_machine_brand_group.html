@@ -1,0 +1,11 @@
+{% comment %}
+  Производитель и его модели одной группой (ждёт brand с .own_models и .uses).
+  Обёртка .app-machine-group — без собственной роли: на ПК группы встают
+  доской, на телефоне идут столбиком.
+{% endcomment %}
+<div class="app-machine-group">
+  {% include "workouts/_machine_item_row.html" with item=brand kind="brand" uses=brand.uses_label meta="производитель" only %}
+  {% for model in brand.own_models %}
+    {% include "workouts/_machine_item_row.html" with item=model kind="model" uses=model.uses_label meta="модель" only %}
+  {% endfor %}
+</div>

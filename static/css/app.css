@@ -2065,6 +2065,15 @@ a.btn {
 /* Форма выхода не должна ломать колонку строк */
 .app-rows form { display: contents; }
 
+/* «Мои тренажёры»: производитель и его модели одной группой; модели — с
+   отступом, чтобы было видно, чьи они. Группа — ячейка доски на ПК. */
+.app-machine-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.app-row.app-machine-model-row { width: auto; margin-left: var(--app-space-6); }
+
 .app-row {
   display: flex;
   align-items: center;

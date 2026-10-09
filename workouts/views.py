@@ -14,7 +14,7 @@ from typing import NamedTuple
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Max, OuterRef, Q, Subquery
+from django.db.models import Count, F, Max, OuterRef, Prefetch, Q, Subquery
 from django.db.models.deletion import ProtectedError, RestrictedError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,8 +32,8 @@ from workouts.forms import (
     CardioPartForm,
     CardioWorkoutForm,
     ExerciseCreateForm,
-    ExerciseMachineForm,
     ExerciseQuickForm,
+    MachineNameForm,
     SportForm,
     StrengthTimeForm,
     XlsxUploadForm,
@@ -45,6 +45,8 @@ from workouts.models import (
     EQUIPMENT_MAX_LENGTH,
     EXERCISE_NAME_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
+    MACHINE_BRAND_MAX_LENGTH,
+    MACHINE_MODEL_MAX_LENGTH,
     MAX_WEIGHT_KG,
     MEASUREMENT_FIELDS,
     METRIC_LABELS,
@@ -65,6 +67,8 @@ from workouts.models import (
     ExerciseNote,
     ExerciseSettings,
     Location,
+    MachineBrand,
+    MachineModel,
     Sport,
     StrengthSet,
     Workout,
@@ -2014,8 +2018,8 @@ def machines_by_location(user, exercise):
     machines = ExerciseMachine.objects.filter(user=user, exercise=exercise, location=OuterRef("pk"))
     places = list(
         Location.objects.filter(owner=user).annotate(
-            machine_brand=Subquery(machines.values("brand")[:1]),
-            machine_model=Subquery(machines.values("model")[:1]),
+            machine_brand=Subquery(machines.values("brand__name")[:1]),
+            machine_model=Subquery(machines.values("model__name")[:1]),
         )
     )
     for place in places:
@@ -2412,68 +2416,128 @@ class ExerciseEquipmentView(LoginRequiredMixin, View):
 
 
 class ExerciseMachineView(LoginRequiredMixin, View):
-    """Окно «Тренажёр»: производитель и модель упражнения в одном месте.
+    """Окно «Тренажёр»: производитель и модель упражнения в одном месте —
+    выбором из справочника (MachineBrand, MachineModel), общего и своего.
 
-    Упражнение — любое видимое (у общего тренажёр тоже свой у каждого), место —
-    только своё: чужое по прямому id даёт 404. Окно открывают со страницы
-    упражнения, из шторки справочника, из живого режима и с правки записанной,
-    поэтому ответ — HX-Refresh: перезагрузка текущей страницы обслуживает все
-    четыре без адреса возврата в запросе (и без открытого редиректа).
+    Два шага в одной модалке: сначала производитель (GET без brand или
+    ?step=brands), потом его модель (?brand=<id>). Есть тренажёр — окно сразу
+    открывается на его производителе. Новый производитель или модель вводится
+    названием: совпавшее имя значит «это он» (services.machine_*_for_name), у
+    администратора — ещё «Своё / Общее».
+
+    Упражнение — любое видимое, место — только своё, записи справочника —
+    только видимые: чужое по прямому id даёт 404. Сохранение отвечает
+    HX-Refresh: окно открывают со страницы упражнения, из шторки, из живого
+    режима и с правки записанной — перезагрузка обслуживает все без адреса
+    возврата в запросе.
     """
 
     template_name = "workouts/_exercise_machine_modal.html"
 
     def get(self, request, pk, location_pk):
         exercise, location = self.get_objects(request, pk, location_pk)
-        machine = ExerciseMachine.objects.filter(
-            user=request.user, exercise=exercise, location=location
-        ).first()
-        initial = {"brand": machine.brand, "model": machine.model} if machine else {}
-        return self.modal(request, exercise, location, ExerciseMachineForm(initial=initial))
+        machine = self.current(request, exercise, location)
+        raw = request.GET.get("brand", "")
+        if raw.isdecimal():
+            brand = self.visible_brand(request, raw)
+        elif machine and request.GET.get("step") != "brands":
+            brand = machine.brand
+        else:
+            brand = None
+        return self.modal(request, exercise, location, machine, brand)
 
     def post(self, request, pk, location_pk):
         exercise, location = self.get_objects(request, pk, location_pk)
-        form = ExerciseMachineForm(request.POST, known_brands=self.known_brands(request.user))
-        if not form.is_valid():
-            return self.modal(request, exercise, location, form)
-        brand, model = form.cleaned_data["brand"], form.cleaned_data["model"]
+        machine = self.current(request, exercise, location)
+        action = request.POST.get("action", "")
         lookup = {"user": request.user, "exercise": exercise, "location": location}
-        if brand or model:
-            ExerciseMachine.objects.update_or_create(
-                **lookup, defaults={"brand": brand, "model": model}
-            )
-        else:
-            # Пусто — «тренажёр не указан»: строки нет, как у пустой заметки.
+        if action == "remove":
             ExerciseMachine.objects.filter(**lookup).delete()
-        response = HttpResponse()
-        response["HX-Refresh"] = "true"
-        return response
+            return self.refresh()
+        if action == "brand_new":
+            form = self.name_form(request, MACHINE_BRAND_MAX_LENGTH, prefix="brand")
+            if not form.is_valid():
+                return self.modal(request, exercise, location, machine, None, brand_form=form)
+            brand = services.machine_brand_for_name(
+                request.user, form.cleaned_data["name"], shared=form.is_global
+            )
+            # Производитель выбран — дальше его модель; сохранять рано.
+            return self.modal(request, exercise, location, machine, brand)
+        brand = self.visible_brand(request, request.POST.get("brand", ""))
+        if action == "model_new":
+            form = self.name_form(request, MACHINE_MODEL_MAX_LENGTH, prefix="model")
+            if form.is_valid():
+                try:
+                    model = services.machine_model_for_name(
+                        request.user, brand, form.cleaned_data["name"], shared=form.is_global
+                    )
+                except ValueError as error:
+                    form.add_error("name", str(error))
+            if form.errors:
+                return self.modal(request, exercise, location, machine, brand, model_form=form)
+        else:
+            raw = request.POST.get("model", "")
+            model = None
+            if raw:
+                model = get_object_or_404(
+                    MachineModel.objects.visible_to(request.user).filter(brand=brand),
+                    pk=raw if raw.isdecimal() else 0,
+                )
+        ExerciseMachine.objects.update_or_create(
+            **lookup, defaults={"brand": brand, "model": model}
+        )
+        return self.refresh()
 
     def get_objects(self, request, pk, location_pk):
         exercise = get_object_or_404(Exercise.objects.visible_to(request.user), pk=pk)
         location = get_object_or_404(Location.objects.filter(owner=request.user), pk=location_pk)
         return exercise, location
 
-    def known_brands(self, user):
-        return list(
-            ExerciseMachine.objects.filter(user=user)
-            .exclude(brand="")
-            .order_by("brand")
-            .values_list("brand", flat=True)
-            .distinct()
+    def current(self, request, exercise, location):
+        return (
+            ExerciseMachine.objects.filter(user=request.user, exercise=exercise, location=location)
+            .select_related("brand", "model")
+            .first()
         )
 
-    def modal(self, request, exercise, location, form):
-        return render(
-            request,
-            self.template_name,
-            {
-                "exercise": exercise,
-                "location": location,
-                "form": form,
-                "known_brands": self.known_brands(request.user),
-            },
+    def visible_brand(self, request, raw):
+        # Чужой свой производитель по прямому id — 404, как чужое место.
+        return get_object_or_404(
+            MachineBrand.objects.visible_to(request.user), pk=raw if raw.isdecimal() else 0
         )
+
+    def name_form(self, request, max_length, *, prefix):
+        return MachineNameForm(
+            request.POST, user=request.user, max_length=max_length, prefix=prefix
+        )
+
+    def refresh(self):
+        response = HttpResponse()
+        response["HX-Refresh"] = "true"
+        return response
+
+    def modal(
+        self, request, exercise, location, machine, brand, *, brand_form=None, model_form=None
+    ):
+        user = request.user
+        context = {
+            "exercise": exercise,
+            "location": location,
+            "machine": machine,
+            "brand": brand,
+            "is_admin": user.is_admin,
+        }
+        if brand is None:
+            context["brands"] = MachineBrand.objects.visible_to(user)
+            context["form"] = brand_form or MachineNameForm(
+                user=user, max_length=MACHINE_BRAND_MAX_LENGTH, prefix="brand"
+            )
+        else:
+            context["models"] = MachineModel.objects.visible_to(user).filter(brand=brand)
+            context["form"] = model_form or MachineNameForm(
+                user=user, max_length=MACHINE_MODEL_MAX_LENGTH, prefix="model"
+            )
+        return render(request, self.template_name, context)
 
 
 class ExerciseCreateView(LoginRequiredMixin, View):
@@ -3035,6 +3099,212 @@ class LocationDeleteView(CatalogDeleteView):
 
     def referencing_workouts(self, item):
         return Workout.objects.filter(location=item)
+
+
+MACHINE_KINDS = {"brand": MachineBrand, "model": MachineModel}
+
+
+def machine_uses_label(count):
+    """«у 2 упражнений» или «не используется» — подпись записи справочника тренажёров."""
+    if not count:
+        return "не используется"
+    word = ru_plural(count, "упражнения", "упражнений", "упражнений")
+    return f"у {count} {word}"
+
+
+def label_machine_uses(items):
+    """Подписи «у N упражнений» — производителям и их моделям из prefetch."""
+    items = list(items)
+    for item in items:
+        item.uses_label = machine_uses_label(item.uses)
+        for model in getattr(item, "own_models", ()):
+            model.uses_label = machine_uses_label(model.uses)
+    return items
+
+
+def editable_machine_items(user, model):
+    """Что человек правит на «Моих тренажёрах»: своё, а администратор — и общее."""
+    items = model.objects.filter(owner=user)
+    if user.is_admin:
+        items = model.objects.filter(Q(owner=user) | Q(owner__isnull=True))
+    return items
+
+
+class MyMachinesView(LoginRequiredMixin, TemplateView):
+    """«Мои тренажёры»: свои производители и модели — переименовать и удалить.
+
+    Свои модели общих производителей — отдельной группой: удалить общего
+    производителя человек не может, а свою модель у него — может. Администратор
+    ниже видит общий список с теми же действиями. Число использований — числом
+    тренажёров упражнений (любого пользователя: им держится удаление),
+    аннотацией в тех же запросах.
+    """
+
+    template_name = "workouts/my_machines.html"
+
+    def get_context_data(self, **kwargs):
+        user = self.request.user
+        own_models = MachineModel.objects.filter(owner=user).annotate(
+            uses=Count("exercise_machines")
+        )
+        own_brands = (
+            MachineBrand.objects.filter(owner=user)
+            .annotate(uses=Count("exercise_machines"))
+            .prefetch_related(Prefetch("models", queryset=own_models, to_attr="own_models"))
+        )
+        # Свои модели общих производителей — по производителю, в порядке названий.
+        foreign = {}
+        for item in own_models.filter(brand__owner__isnull=True).select_related("brand"):
+            foreign.setdefault(item.brand, []).append(item)
+        own_brands = label_machine_uses(own_brands)
+        for items in foreign.values():
+            label_machine_uses(items)
+        context = {
+            "own_brands": own_brands,
+            "own_models_of_shared": sorted(foreign.items(), key=lambda pair: pair[0].name),
+            "nav_active": "profile",
+        }
+        if user.is_admin:
+            shared_models = MachineModel.objects.global_only().annotate(
+                uses=Count("exercise_machines")
+            )
+            context["show_shared"] = True
+            context["shared_brands"] = label_machine_uses(
+                MachineBrand.objects.global_only()
+                .annotate(uses=Count("exercise_machines"))
+                .prefetch_related(Prefetch("models", queryset=shared_models, to_attr="own_models"))
+            )
+        return super().get_context_data(**kwargs) | context
+
+
+class MachineItemMixin(LoginRequiredMixin):
+    """Запись справочника тренажёров по kind (brand | model) и pk.
+
+    Чужая запись — 404, общая — 404 всем, кроме администратора.
+    """
+
+    def get_item(self):
+        model = MACHINE_KINDS.get(self.kwargs["kind"])
+        if model is None:
+            raise Http404
+        items = editable_machine_items(self.request.user, model)
+        if model is MachineModel:
+            items = items.select_related("brand")
+        return get_object_or_404(items, pk=self.kwargs["pk"])
+
+
+class MachineRenameView(MachineItemMixin, View):
+    """Переименование производителя или модели. Занятое имя — ошибка формы.
+
+    Тренажёры упражнений ссылаются на запись, поэтому новое имя сразу видно
+    везде — в живом режиме, итоге и истории (как у переименованного места).
+    """
+
+    template_name = "workouts/_machine_rename_modal.html"
+
+    def get(self, request, kind, pk):
+        item = self.get_item()
+        form = self.form(initial={"name": item.name})
+        return self.modal(request, item, form)
+
+    def post(self, request, kind, pk):
+        item = self.get_item()
+        form = self.form(data=request.POST)
+        if form.is_valid():
+            name = form.cleaned_data["name"]
+            same = type(item).objects.filter(owner=item.owner, name__iexact=name)
+            if isinstance(item, MachineModel):
+                same = same.filter(brand=item.brand)
+            if same.exclude(pk=item.pk).exists():
+                form.add_error("name", "Такое название уже есть.")
+            else:
+                item.name = name
+                item.save(update_fields=["name"])
+                response = HttpResponse()
+                response["HX-Refresh"] = "true"
+                return response
+        return self.modal(request, item, form)
+
+    def form(self, **kwargs):
+        model = MACHINE_KINDS[self.kwargs["kind"]]
+        max_length = model._meta.get_field("name").max_length
+        return MachineNameForm(
+            user=self.request.user, max_length=max_length, with_scope=False, **kwargs
+        )
+
+    def modal(self, request, item, form):
+        return render(
+            request,
+            self.template_name,
+            {"item": item, "kind": self.kwargs["kind"], "form": form},
+        )
+
+
+class MachineDeleteView(MachineItemMixin, View):
+    """Удаление производителя или модели: подтверждение страницей, удаление POST'ом.
+
+    Запись, на которую ссылается чей-то тренажёр, не удаляется (RESTRICT держит
+    это и в базе). Производитель уходит вместе со своими моделями того же
+    владельца; если у общего производителя есть чужие личные модели, удалить его
+    нельзя — они остались бы без производителя.
+    """
+
+    def blocked_message(self, item, uses):
+        if uses:
+            return f"«{item.name}» указан у тренажёров упражнений — сначала замените его там."
+        if isinstance(item, MachineBrand) and self.foreign_models(item).exists():
+            return f"У «{item.name}» есть модели других пользователей — его нельзя удалить."
+        return ""
+
+    def foreign_models(self, brand):
+        models_ = MachineModel.objects.filter(brand=brand)
+        if brand.owner_id is None:
+            return models_.exclude(owner__isnull=True)
+        return models_.exclude(owner=brand.owner)
+
+    def uses(self, item):
+        return ExerciseMachine.objects.filter(
+            **{"brand" if isinstance(item, MachineBrand) else "model": item}
+        ).count()
+
+    def get(self, request, kind, pk):
+        item = self.get_item()
+        uses = self.uses(item)
+        note = ""
+        if isinstance(item, MachineBrand):
+            count = MachineModel.objects.filter(brand=item, owner=item.owner).count()
+            if count:
+                note = f"Вместе с ним удалятся модели: {count}."
+        return render(
+            request,
+            "workouts/catalog_confirm_delete.html",
+            {
+                "item": item,
+                "title": "Удалить производителя?" if kind == "brand" else "Удалить модель?",
+                "usage_label": machine_uses_label(uses),
+                "blocked_message": self.blocked_message(item, uses),
+                "delete_note": note,
+                "cancel_url": reverse("my_machines"),
+                "nav_active": "profile",
+            },
+        )
+
+    def post(self, request, kind, pk):
+        item = self.get_item()
+        blocked = self.blocked_message(item, self.uses(item))
+        if blocked:
+            messages.error(request, blocked)
+            return redirect("my_machines")
+        try:
+            with transaction.atomic():
+                if isinstance(item, MachineBrand):
+                    MachineModel.objects.filter(brand=item, owner=item.owner).delete()
+                item.delete()
+        except (ProtectedError, RestrictedError):
+            messages.error(request, f"«{item.name}» уже используется — его нельзя удалить.")
+            return redirect("my_machines")
+        messages.success(request, "Удалено.")
+        return redirect("my_machines")
 
 
 def decorate_news(entry, user, today):

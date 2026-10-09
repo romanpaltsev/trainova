@@ -17,6 +17,8 @@ from workouts.models import (
     Exercise,
     ExerciseNote,
     Location,
+    MachineBrand,
+    MachineModel,
     Sport,
     StrengthSet,
     collapse_spaces,
@@ -147,6 +149,58 @@ def sport_for_name(user, name, *, category):
             return Sport.objects.create(owner=user, name=name, category=category)
     except IntegrityError:
         return Sport.objects.visible_to(user).get(name__iexact=name)
+
+
+def machine_brand_for_name(user, name, *, shared=False):
+    """Видимый производитель с таким названием или новый — тот же контракт, что у
+    sport_for_name: совпавшее имя значит «это он», своё раньше общего.
+
+    shared=True — общий (решает администратор): ищется и заводится среди общих.
+    """
+    name = collapse_spaces(name)
+    scope = MachineBrand.objects.global_only() if shared else MachineBrand.objects.visible_to(user)
+
+    def existing():
+        return scope.filter(name__iexact=name).order_by(F("owner").desc(nulls_last=True)).first()
+
+    found = existing()
+    if found is not None:
+        return found
+    try:
+        with transaction.atomic():
+            return MachineBrand.objects.create(owner=None if shared else user, name=name)
+    except IntegrityError:
+        return existing()
+
+
+def machine_model_for_name(user, brand, name, *, shared=False):
+    """Модель производителя с таким названием или новая — контракт тот же.
+
+    Общая модель бывает только у общего производителя: иначе её видели бы все,
+    а производителя — один владелец. Нарушение — ValueError, текст для человека.
+    """
+    if shared and not brand.is_global:
+        raise ValueError("Общая модель бывает только у общего производителя.")
+    name = collapse_spaces(name)
+    scope = MachineModel.objects.global_only() if shared else MachineModel.objects.visible_to(user)
+
+    def existing():
+        return (
+            scope.filter(brand=brand, name__iexact=name)
+            .order_by(F("owner").desc(nulls_last=True))
+            .first()
+        )
+
+    found = existing()
+    if found is not None:
+        return found
+    try:
+        with transaction.atomic():
+            return MachineModel.objects.create(
+                owner=None if shared else user, brand=brand, name=name
+            )
+    except IntegrityError:
+        return existing()
 
 
 def last_sets(user, exercise):

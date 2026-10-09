@@ -1,0 +1,31 @@
+{% comment %}
+  Переименование производителя или модели (MachineRenameView). Успех —
+  HX-Refresh, ошибка — это же окно с подсказкой.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="machine-rename-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="machine-rename-title">
+        {% if kind == "brand" %}Производитель{% else %}Модель{% endif %}
+      </h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    {% if item.is_global %}<p class="app-queue-hint mb-3">Общая запись — новое название увидят все.</p>{% endif %}
+    <form hx-post="{% url 'machine_rename' kind item.pk %}" hx-target="#modal" hx-swap="innerHTML"
+          hx-disabled-elt="find button" novalidate>
+      <label class="form-label" for="machine-rename-name">Название</label>
+      <input type="text" name="name" id="machine-rename-name" class="form-control"
+             value="{{ form.name.value|default:'' }}" maxlength="{{ form.fields.name.max_length }}"
+             autocomplete="off" autofocus>
+      {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>

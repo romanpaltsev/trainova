@@ -175,6 +175,19 @@
         {% include "includes/chevron.html" %}
       </a>
 
+      {% comment %}
+        «Мои тренажёры» — строкой здесь, а не плиткой в «Моих справочниках»: на
+        ПК там квадрат 2×2, и пятая плитка встала бы неявным рядом.
+      {% endcomment %}
+      <a class="app-row" href="{% url 'my_machines' %}">
+        <span class="app-row-icon">{% include "includes/machine.html" with size=20 only %}</span>
+        <span class="app-row-text">
+          <span class="app-row-name">Мои тренажёры</span>
+          <span class="app-row-meta">производители и модели</span>
+        </span>
+        {% include "includes/chevron.html" %}
+      </a>
+
       <a class="app-row" href="{% url 'feedback' %}">
         <span class="app-row-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"

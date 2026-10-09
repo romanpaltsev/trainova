@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Мои тренажёры · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Мои тренажёры</h1>
+</div>
+
+{% comment %}
+  Свой справочник тренажёров (MyMachinesView): производители со своими
+  моделями, затем свои модели общих производителей. Добавляются записи в окне
+  «Тренажёр» на странице упражнения и в тренировке — здесь только
+  переименование и удаление, поэтому формы добавления нет.
+{% endcomment %}
+<p class="app-queue-hint mb-3">
+  Производителей и модели добавляют в окне «Тренажёр» — на странице упражнения или во время
+  тренировки. Свои записи видны только вам.
+</p>
+
+<section class="app-machines-list" aria-labelledby="machines-own-title">
+  <h2 class="app-section-title" id="machines-own-title">Свои производители</h2>
+  <div class="app-rows app-rows-board">
+    {% for brand in own_brands %}
+      {% include "workouts/_machine_brand_group.html" %}
+    {% empty %}
+      {% include "includes/empty_state.html" with text="Своих производителей пока нет." extra_class="app-empty-slim" %}
+    {% endfor %}
+  </div>
+</section>
+
+{% if own_models_of_shared %}
+  <section class="app-machines-list mt-4" aria-labelledby="machines-models-title">
+    <h2 class="app-section-title" id="machines-models-title">Свои модели общих производителей</h2>
+    <div class="app-rows app-rows-board">
+      {% for brand, models in own_models_of_shared %}
+        <div class="app-machine-group">
+          {% for model in models %}
+            {% include "workouts/_machine_item_row.html" with item=model kind="model" uses=model.uses_label meta=brand.name only %}
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+
+{% if show_shared %}
+  {% comment %}Только администратору: общий список видят все пользователи.{% endcomment %}
+  <section class="app-machines-list mt-4" aria-labelledby="machines-shared-title">
+    <h2 class="app-section-title" id="machines-shared-title">Общие — видят все</h2>
+    <div class="app-rows app-rows-board">
+      {% for brand in shared_brands %}
+        {% include "workouts/_machine_brand_group.html" %}
+      {% empty %}
+        {% include "includes/empty_state.html" with text="Общий список пуст. Добавьте производителя в окне «Тренажёр», выбрав «Общее — для всех»." extra_class="app-empty-slim" %}
+      {% endfor %}
+    </div>
+  </section>
+{% endif %}
+{% endblock %}
