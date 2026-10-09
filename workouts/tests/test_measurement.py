@@ -375,7 +375,7 @@ def test_own_exercise_measurement_is_editable(client, user):
     client.force_login(user)
     response = client.get(reverse("exercise_detail", args=[exercise.pk]))
 
-    assert response.context["can_edit_measurement"] is True
+    assert response.context["can_edit"] is True
     assert reverse("exercise_measurement", args=[exercise.pk]) in response.content.decode()
 
 
@@ -389,7 +389,7 @@ def test_global_exercise_measurement_is_shown_but_not_editable(client, user):
         reverse("exercise_measurement", args=[exercise.pk]), {"measurement": MEASURE.REPS}
     )
 
-    assert page.context["can_edit_measurement"] is False
+    assert page.context["can_edit"] is False
     assert "время" in page.content.decode()
     assert reverse("exercise_measurement", args=[exercise.pk]) not in page.content.decode()
     assert saved.status_code == 404

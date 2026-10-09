@@ -76,10 +76,10 @@ def test_catalog_is_professional_enough():
 
 
 def test_seed_fills_equipment_of_existing_global_exercise():
-    """Записи из старого справочника уже есть в базе — снаряд им проставляет seed."""
+    """Старый справочник в базе — разовый --add-missing-exercises проставит снаряд."""
     Exercise.objects.create(name="Планка", muscle_group="Пресс", owner=None)
 
-    call_command("seed")
+    call_command("seed", add_missing_exercises=True)
 
     plank = Exercise.objects.global_only().get(name__iexact="Планка")
     assert plank.equipment == "Своё тело"
@@ -100,10 +100,10 @@ def test_seed_keeps_equipment_edited_by_admin():
 
 
 def test_seed_does_not_rename_existing_exercises():
-    """Переименование глобальных — дело миграции: она обратима и видна в истории."""
+    """Даже при дописывании существующие записи не переименовываются."""
     Exercise.objects.create(name="Жим лёжа", muscle_group="Грудь", owner=None)
 
-    call_command("seed")
+    call_command("seed", add_missing_exercises=True)
 
     assert Exercise.objects.global_only().filter(name="Жим лёжа").exists()
     assert Exercise.objects.global_only().count() == len(EXERCISES) + 1
@@ -158,3 +158,17 @@ def test_seed_does_not_touch_user_records():
     own.refresh_from_db()
     assert own.category == Sport.Category.CARDIO
     assert Sport.objects.global_only().get(name="Силовая").category == Sport.Category.STRENGTH
+
+
+def test_seed_leaves_non_empty_catalog_to_admin():
+    """Справочник ведёт администратор: seed не воскрешает переименованное и удалённое."""
+    call_command("seed")
+    Exercise.objects.global_only().filter(name="Планка").update(name="Планка на локтях")
+    Exercise.objects.global_only().filter(name="Скручивания").delete()
+
+    call_command("seed")
+
+    names = set(Exercise.objects.global_only().values_list("name", flat=True))
+    assert "Планка" not in names
+    assert "Планка на локтях" in names
+    assert "Скручивания" not in names

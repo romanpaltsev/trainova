@@ -21,6 +21,7 @@
       <div class="app-exercise-head-text">
         {% include "workouts/_exercise_title.html" %}
         <div class="text-secondary-app">{{ stats_line }}</div>
+        {% include "workouts/_exercise_global_note.html" %}
       </div>
       {% comment %}
         Крестик закрывает шторку, под ней — таблица справочника (exercise.js).
@@ -43,6 +44,7 @@
       <div>
         {% include "workouts/_exercise_title.html" %}
         <div class="text-secondary-app">{{ stats_line }}</div>
+        {% include "workouts/_exercise_global_note.html" %}
       </div>
     </div>
   {% endif %}

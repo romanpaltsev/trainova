@@ -1,0 +1,11 @@
+{% comment %}
+  Администратору на общем упражнении: правки на этой странице увидят все, а
+  удалить его можно, только пока его нет ни в одной тренировке (ExerciseDeleteView
+  проверит и скажет). Остальным строки нет — у них общее упражнение не правится.
+{% endcomment %}
+{% if can_edit and exercise.is_global %}
+  <div class="app-queue-hint app-exercise-global-note">
+    Общее упражнение — изменения увидят все.
+    <a class="app-link" href="{% url 'exercise_delete' exercise.pk %}">Удалить</a>
+  </div>
+{% endif %}

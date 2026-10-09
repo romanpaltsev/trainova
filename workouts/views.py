@@ -2033,7 +2033,7 @@ def exercise_detail_context(request, exercise, *, in_panel):
         },
         "chart_title": f"Максимум: {metric_label}",
         "metric_label": metric_label,
-        "can_edit_measurement": exercise.owner_id == request.user.pk,
+        "can_edit": can_edit_exercise(request.user, exercise),
         **weight_step_context(exercise),
         # Обе оси приезжают одним запросом, поэтому второй блок чипов бюджету
         # страницы (девять запросов) ничего не стоил.
@@ -2083,13 +2083,30 @@ class ExerciseDetailView(LoginRequiredMixin, View):
         )
 
 
+def editable_exercises(user):
+    """Упражнения, которые человек может править: свои, а администратор — ещё и общие.
+
+    Одна точка для всех правок упражнения (единица, группа, снаряд, название,
+    удаление). Чужое личное не правит никто, и администратор тоже: это данные
+    другого человека, а не справочник проекта.
+    """
+    if user.is_admin:
+        return Exercise.objects.filter(Q(owner=user) | Q(owner__isnull=True))
+    return Exercise.objects.filter(owner=user)
+
+
+def can_edit_exercise(user, exercise):
+    """То же правило для уже загруженного упражнения — без запроса."""
+    return exercise.owner_id == user.pk or (exercise.is_global and user.is_admin)
+
+
 class ExerciseMeasurementView(LoginRequiredMixin, View):
-    """Смена единицы своего упражнения. Записанные подходы не меняются: у них
-    свой снимок единицы, и история остаётся в том виде, в котором её записали."""
+    """Смена единицы своего упражнения (у админа — и общего). Записанные подходы не
+    меняются: у них свой снимок единицы, и история остаётся такой, как её записали."""
 
     def post(self, request, pk):
-        # Глобальное упражнение правит только админ, чужое личное — никто.
-        exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
+        # Общее упражнение правит только админ, чужое личное — никто.
+        exercise = get_object_or_404(editable_exercises(request.user), pk=pk)
         measurement = request.POST.get("measurement", "")
         if measurement not in Exercise.Measurement.values:
             return HttpResponseBadRequest("Неизвестная единица")
@@ -2098,7 +2115,7 @@ class ExerciseMeasurementView(LoginRequiredMixin, View):
         return render(
             request,
             "workouts/_measurement_choice.html",
-            {"exercise": exercise, "can_edit_measurement": True, "saved": True},
+            {"exercise": exercise, "can_edit": True, "saved": True},
         )
 
 
@@ -2323,8 +2340,8 @@ class ExerciseMuscleGroupView(LoginRequiredMixin, View):
     """Группа мышц своего упражнения: чипы уже принятых значений плюс своё."""
 
     def post(self, request, pk):
-        # Глобальное упражнение правит только админ, чужое личное — никто.
-        exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
+        # Общее упражнение правит только админ, чужое личное — никто.
+        exercise = get_object_or_404(editable_exercises(request.user), pk=pk)
         exercise.muscle_group = chosen_muscle_group(
             request.POST, facets_for(request.user).muscle_groups
         )
@@ -2339,7 +2356,7 @@ class ExerciseMuscleGroupView(LoginRequiredMixin, View):
                 "exercise": exercise,
                 "muscle_groups": facets_for(request.user).muscle_groups,
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
-                "can_edit_measurement": True,
+                "can_edit": True,
                 "saved": True,
             },
         )
@@ -2349,8 +2366,8 @@ class ExerciseEquipmentView(LoginRequiredMixin, View):
     """Снаряд своего упражнения — вторая ось справочника, зеркало группы мышц."""
 
     def post(self, request, pk):
-        # Глобальное упражнение правит только админ, чужое личное — никто.
-        exercise = get_object_or_404(Exercise.objects.filter(owner=request.user), pk=pk)
+        # Общее упражнение правит только админ, чужое личное — никто.
+        exercise = get_object_or_404(editable_exercises(request.user), pk=pk)
         exercise.equipment = chosen_equipment(request.POST, facets_for(request.user).equipment)
         exercise.save(update_fields=["equipment"])
         return render(
@@ -2358,7 +2375,7 @@ class ExerciseEquipmentView(LoginRequiredMixin, View):
             "workouts/_equipment_choice.html",
             {
                 "exercise": exercise,
-                "can_edit_measurement": True,
+                "can_edit": True,
                 **equipment_context(exercise, facets_for(request.user), saved=True),
             },
         )
@@ -2423,15 +2440,13 @@ class ExerciseRenameView(LoginRequiredMixin, View):
     """Переименование своего упражнения: опечатка правится один раз на всю историю.
 
     Зеркало LocationRenameView — и по той же причине: это та же строка БД,
-    поэтому подходы, рекорды и график остаются на месте. Глобальные упражнения
-    так не правятся: их переименование это дело миграции, там оно обратимо.
+    поэтому подходы, рекорды и график остаются на месте. Общее упражнение
+    переименовывает администратор — новое имя увидят все.
     """
 
     def get_object(self):
-        # Глобальное и чужое по прямому URL — 404.
-        return get_object_or_404(
-            Exercise.objects.filter(owner=self.request.user), pk=self.kwargs["pk"]
-        )
+        # Чужое по прямому URL — 404; общее — 404 всем, кроме администратора.
+        return get_object_or_404(editable_exercises(self.request.user), pk=self.kwargs["pk"])
 
     def get(self, request, pk):
         return self.render_modal(self.get_object(), in_panel=bool(request.GET.get("panel")))
@@ -2447,12 +2462,12 @@ class ExerciseRenameView(LoginRequiredMixin, View):
         # Занятость считаем по всему видимому справочнику, а не только по своим:
         # переименование в имя глобального упражнения дало бы в списке две
         # одинаковые строки, и различить их было бы нечем.
-        taken = (
-            Exercise.objects.visible_to(request.user)
-            .filter(name__iexact=name)
-            .exclude(pk=exercise.pk)
-            .exists()
-        )
+        # У общего — ещё и среди всех общих: их уникальность держит база
+        # (unique_global_exercise_name), и без проверки вышла бы 500.
+        same_name = Exercise.objects.visible_to(request.user)
+        if exercise.is_global:
+            same_name = same_name | Exercise.objects.global_only()
+        taken = same_name.filter(name__iexact=name).exclude(pk=exercise.pk).exists()
         if taken:
             return self.render_modal(
                 exercise, error="Упражнение с таким названием уже есть.", in_panel=in_panel
@@ -2817,11 +2832,13 @@ class CatalogDeleteView(LoginRequiredMixin, View):
     deleted_message = ""
     success_url_name = ""
 
+    def editable_queryset(self):
+        """Что можно удалить. Упражнения расширяют: админ удаляет и общие."""
+        return self.model.objects.filter(owner=self.request.user)
+
     def get_object(self):
         # Чужая и глобальная запись по прямому URL — 404.
-        return get_object_or_404(
-            self.model.objects.filter(owner=self.request.user), pk=self.kwargs["pk"]
-        )
+        return get_object_or_404(self.editable_queryset(), pk=self.kwargs["pk"])
 
     def referencing_workouts(self, item):
         """Тренировки, которые держат запись. Подклассы знают путь до них."""
@@ -2886,6 +2903,11 @@ class ExerciseDeleteView(CatalogDeleteView):
     )
     deleted_message = "Упражнение удалено."
     success_url_name = "exercise_list"
+
+    def editable_queryset(self):
+        # Общее упражнение удаляет администратор — и только неиспользованное:
+        # тренировки всех пользователей держат его так же, как свои (PROTECT).
+        return editable_exercises(self.request.user)
 
     def referencing_workouts(self, item):
         # distinct: в одной тренировке у упражнения несколько подходов.

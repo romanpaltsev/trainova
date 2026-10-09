@@ -1,8 +1,10 @@
 """Наполнение глобальных справочников и стартовых новостей.
 
 Команда идемпотентна: повторный запуск ничего не дублирует, так что её безопасно
-вызывать после каждого деплоя. Ключ идемпотентности новостей — точный заголовок,
-поэтому переименованную в админке запись команда создаст заново.
+вызывать после каждого деплоя. Общие упражнения она создаёт только в пустой
+справочник: дальше их ведёт администратор в интерфейсе (см. _seed_exercises).
+Ключ идемпотентности новостей — точный заголовок, поэтому переименованную в
+админке запись команда создаст заново.
 
 Новости здесь — только стартовые, чтобы на пустой базе экран «Что нового» не был
 пустым. Анонсы релизов пишутся в Django admin: там можно поставить дату задним
@@ -151,10 +153,20 @@ CHANGELOG = [
 class Command(BaseCommand):
     help = "Создаёт глобальные виды спорта, базовые упражнения и новости (idempotent)"
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--add-missing-exercises",
+            action="store_true",
+            help=(
+                "дописать недостающие по имени общие упражнения, даже если справочник "
+                "не пуст (разово: переименованное админом вернётся под старым именем)"
+            ),
+        )
+
     @transaction.atomic
-    def handle(self, *args, **options):
+    def handle(self, *args, add_missing_exercises=False, **options):
         sports_created = self._seed_sports()
-        exercises_created = self._seed_exercises()
+        exercises_created = self._seed_exercises(add_missing=add_missing_exercises)
         news_created = self._seed_changelog()
 
         self.stdout.write(
@@ -179,7 +191,17 @@ class Command(BaseCommand):
                 sport.save(update_fields=["category"])
         return created
 
-    def _seed_exercises(self):
+    def _seed_exercises(self, add_missing=False):
+        """Общий справочник упражнений — только в пустую базу.
+
+        Дальше его ведёт администратор в интерфейсе (создаёт, переименовывает,
+        удаляет), и прежнее «дописать недостающие по имени» воскрешало бы
+        переименованное и удалённое под старым именем. --add-missing-exercises
+        возвращает прежнее поведение разово — например, для базы, где команду
+        давно не запускали.
+        """
+        if not add_missing and Exercise.objects.global_only().exists():
+            return 0
         created = 0
         for name, muscle_group, equipment in EXERCISES:
             exercise = Exercise.objects.global_only().filter(name__iexact=name).first()
@@ -195,8 +217,7 @@ class Command(BaseCommand):
             elif not exercise.equipment:
                 # Снаряд проставляется только пустой: непустой мог поправить админ,
                 # и затирать его нельзя. Имя и группу существующей записи команда
-                # не трогает вовсе — переименование глобальных упражнений это дело
-                # миграции, там оно обратимо и видно в истории.
+                # не трогает вовсе — их правит администратор в интерфейсе.
                 exercise.equipment = equipment
                 exercise.save(update_fields=["equipment"])
         return created

@@ -5,7 +5,7 @@
 {% endcomment %}
 <div id="equipment-choice" class="app-profile-block">
   <div class="app-profile-block-title">Снаряд</div>
-  {% if can_edit_measurement %}
+  {% if can_edit %}
     <form hx-post="{% url 'exercise_equipment' exercise.pk %}"
           hx-target="#equipment-choice" hx-swap="outerHTML"
           x-data="{ own: '' }">
