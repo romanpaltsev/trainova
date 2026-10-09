@@ -1,0 +1,9 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}Новое обращение в «Обратной связи».
+
+Тип: {{ feedback.get_kind_display }}
+От: {{ feedback.user.email }}
+
+{{ feedback.text }}
+
+Ответить: {{ url }}{% endautoescape %}{% endblock content %}

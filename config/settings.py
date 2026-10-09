@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     "accounts",
     "workouts",
     "adminpanel",
+    "feedback",
 ]
 
 MIDDLEWARE = [

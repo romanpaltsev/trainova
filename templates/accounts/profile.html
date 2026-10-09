@@ -175,6 +175,20 @@
         {% include "includes/chevron.html" %}
       </a>
 
+      <a class="app-row" href="{% url 'feedback' %}">
+        <span class="app-row-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a8 8 0 01-11.6 7.1L4 20l1.1-4.6A8 8 0 1121 12z"/><path d="M8.5 10.5h7M8.5 13.5h4"/>
+          </svg>
+        </span>
+        <span class="app-row-text">
+          <span class="app-row-name">Обратная связь</span>
+          <span class="app-row-meta">идея, ошибка или вопрос</span>
+        </span>
+        {% include "includes/chevron.html" %}
+      </a>
+
       {% comment %}
         Вход в «Админку» на телефоне — только отсюда: боковой панели там нет.
         Строкой в «Приложении», а не своей секцией: у сетки профиля на ПК

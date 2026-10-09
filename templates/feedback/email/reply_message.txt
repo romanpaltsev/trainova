@@ -1,0 +1,10 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}Вы писали в «Обратную связь»:
+
+{{ feedback.text }}
+
+Ответ:
+
+{{ feedback.reply }}
+
+Все ваши обращения и ответы: {{ url }}{% endautoescape %}{% endblock content %}

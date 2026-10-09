@@ -7,4 +7,10 @@ urlpatterns = [
     path("", views.AdminHomeView.as_view(), name="admin_home"),
     path("users/", views.AdminUsersView.as_view(), name="admin_users"),
     path("system/", views.AdminSystemView.as_view(), name="admin_system"),
+    path("feedback/", views.AdminFeedbackListView.as_view(), name="admin_feedback"),
+    path(
+        "feedback/<int:pk>/",
+        views.AdminFeedbackDetailView.as_view(),
+        name="admin_feedback_detail",
+    ),
 ]

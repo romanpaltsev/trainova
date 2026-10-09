@@ -1,0 +1,1 @@
+{% autoescape off %}{{ feedback.get_kind_display }} от {{ feedback.user.email }} — Дневник тренировок{% endautoescape %}

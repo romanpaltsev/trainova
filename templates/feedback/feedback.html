@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Обратная связь · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Обратная связь</h1>
+</div>
+
+{% comment %}
+  Форма и свои обращения. На ПК — две колонки (обёртка .app-feedback), на
+  телефоне обёртка не образует бокса и блоки идут один под другим.
+{% endcomment %}
+<div class="app-feedback">
+  <section aria-labelledby="feedback-new-title">
+    <h2 class="app-section-title" id="feedback-new-title">Написать</h2>
+    <form method="post" class="app-card app-panel" novalidate>
+      {% csrf_token %}
+      {% for error in form.non_field_errors %}
+        <div class="app-alert app-alert-danger">{{ error }}</div>
+      {% endfor %}
+      <p class="app-queue-hint mb-3">
+        Идея, замеченная ошибка или вопрос — всё читает автор дневника. Ответ придёт
+        на почту и появится здесь.
+      </p>
+      <div class="app-chips mb-3" role="group" aria-label="О чём сообщение">
+        {% for value, label in form.fields.kind.choices %}
+          <input type="radio" name="kind" id="feedback-kind-{{ value }}" value="{{ value }}"
+                 class="app-chip-input" {% if form.kind.value == value %}checked{% endif %}>
+          <label class="app-chip" for="feedback-kind-{{ value }}">{{ label }}</label>
+        {% endfor %}
+      </div>
+      <label class="form-label" for="{{ form.text.id_for_label }}">Сообщение</label>
+      {{ form.text }}
+      {% for error in form.text.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      <button type="submit" class="btn btn-accent app-btn-fill mt-3">Отправить</button>
+    </form>
+  </section>
+
+  <section aria-labelledby="feedback-mine-title">
+    <h2 class="app-section-title" id="feedback-mine-title">Мои обращения</h2>
+    {% for item in items %}
+      <article class="app-card app-panel app-feedback-item">
+        <div class="app-feedback-meta">
+          <span>{{ item.get_kind_display }} · {{ item.created_at|date:"d.m.Y" }}</span>
+          <span class="app-badge">{{ item.get_status_display }}</span>
+        </div>
+        <p class="app-feedback-text mb-0">{{ item.text|linebreaksbr }}</p>
+        {% if item.reply %}
+          <div class="app-feedback-reply">
+            <div class="app-profile-block-title">Ответ · {{ item.replied_at|date:"d.m.Y" }}</div>
+            <p class="mb-0">{{ item.reply|linebreaksbr }}</p>
+          </div>
+        {% endif %}
+      </article>
+    {% empty %}
+      {% include "includes/empty_state.html" with text="Вы ещё ничего не писали. Здесь появятся ваши сообщения и ответы на них." %}
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

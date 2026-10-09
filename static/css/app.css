@@ -140,6 +140,28 @@ body {
   margin-bottom: 1rem;
 }
 
+/* ---------- Обратная связь ---------- */
+
+.app-feedback-item + .app-feedback-item { margin-top: var(--app-space-2); }
+.app-feedback-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-2);
+  margin-bottom: var(--app-space-2);
+  color: var(--app-text-secondary);
+  font-size: 0.875rem;
+}
+.app-feedback-text { overflow-wrap: anywhere; }
+/* Ответ — врезкой под текстом: акцентная рейка слева, как у сообщений. */
+.app-feedback-reply {
+  margin-top: var(--app-space-3);
+  padding-left: var(--app-space-3);
+  border-left: 3px solid var(--app-accent);
+  overflow-wrap: anywhere;
+}
+.app-feedback > section + section { margin-top: var(--app-space-6); }
+
 /* Заголовок справочника с кнопкой «Создать» справа. Отступ снизу — тот же,
    что у голого заголовка страницы. */
 .app-catalog-head {
@@ -3083,6 +3105,15 @@ a.btn {
   .app-catalog-table :is(.app-catalog-col-workouts, .app-catalog-col-record) { text-align: end; }
   /* Кнопка удаления 44px не раздувает строку: высоту задают текстовые ячейки. */
   .app-catalog-table td.app-catalog-col-actions { padding-block: 0; }
+
+  /* ---------- Обратная связь: форма и обращения рядом ---------- */
+  .app-feedback {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--app-space-6);
+    align-items: start;
+  }
+  .app-feedback > section + section { margin-top: 0; }
 
   /* ---------- Админка ----------
 

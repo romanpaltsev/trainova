@@ -19,6 +19,7 @@ urlpatterns = [
     path("", include("accounts.urls")),
     # Дашборд (name="dashboard") живёт в workouts: это витрина тренировок.
     path("", include("workouts.urls")),
+    path("", include("feedback.urls")),
 ]
 
 if settings.DEBUG_TOOLBAR:

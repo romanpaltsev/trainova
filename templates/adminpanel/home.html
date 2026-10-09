@@ -8,7 +8,7 @@
 {% comment %}
   Сервисы администрирования — доска строк, как справочники. Новый сервис —
   новая строка здесь и маршрут admin_* (adminpanel/urls.py). Правка данных —
-  в Django admin: раздел только показывает.
+  в Django admin; здесь из действий только ответы на обратную связь.
 {% endcomment %}
 <div class="app-rows app-rows-board">
   <a class="app-row" href="{% url 'admin_users' %}">
@@ -24,6 +24,20 @@
       <span class="app-row-meta">почта, тренировки, статус</span>
     </span>
     <span class="app-row-count num">{{ users_count }}</span>
+    {% include "includes/chevron.html" %}
+  </a>
+  <a class="app-row" href="{% url 'admin_feedback' %}">
+    <span class="app-row-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 12a8 8 0 01-11.6 7.1L4 20l1.1-4.6A8 8 0 1121 12z"/><path d="M8.5 10.5h7M8.5 13.5h4"/>
+      </svg>
+    </span>
+    <span class="app-row-text">
+      <span class="app-row-name">Обратная связь</span>
+      <span class="app-row-meta">{% if new_feedback_count %}новых: {{ new_feedback_count }}{% else %}новых нет{% endif %}</span>
+    </span>
+    {% if new_feedback_count %}<span class="app-row-count num">{{ new_feedback_count }}</span>{% endif %}
     {% include "includes/chevron.html" %}
   </a>
   <a class="app-row" href="{% url 'admin_system' %}">

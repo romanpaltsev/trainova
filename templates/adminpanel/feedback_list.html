@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block title %}Обратная связь · Админка · Дневник тренировок{% endblock %}
+
+{% block content %}
+{% include "adminpanel/_head.html" with back="admin_home" title="Обратная связь" only %}
+
+{% comment %}
+  Фильтр — чипы статуса, тот же ряд .app-filters, что у истории. Выбор живёт в
+  адресе (?status=…): «назад» из обращения возвращает тот же срез.
+{% endcomment %}
+<div class="app-chips app-filters mb-3">
+  <a class="app-chip {% if not status %}is-active{% endif %}" href="{% url 'admin_feedback' %}">Все</a>
+  {% for value, label in statuses %}
+    <a class="app-chip {% if status == value %}is-active{% endif %}"
+       href="{% url 'admin_feedback' %}?status={{ value }}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="app-rows app-rows-board">
+  {% for item in items %}
+    <a class="app-row" href="{% url 'admin_feedback_detail' item.pk %}">
+      <span class="app-row-text">
+        <span class="app-row-name">{{ item.get_kind_display }} · {{ item.user.email }}</span>
+        <span class="app-row-meta">{{ item.text|truncatechars:120 }}</span>
+        <span class="app-row-meta">{{ item.created_at|date:"d.m.Y H:i" }} · {{ item.get_status_display }}{% if item.reply %} · есть ответ{% endif %}</span>
+      </span>
+      {% include "includes/chevron.html" %}
+    </a>
+  {% empty %}
+    {% include "includes/empty_state.html" with text="Обращений нет." %}
+  {% endfor %}
+</div>
+{% endblock %}
