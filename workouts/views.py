@@ -32,6 +32,7 @@ from workouts.forms import (
     CardioPartForm,
     CardioWorkoutForm,
     ExerciseCreateForm,
+    ExerciseMachineForm,
     ExerciseQuickForm,
     SportForm,
     StrengthTimeForm,
@@ -60,6 +61,7 @@ from workouts.models import (
     BodyMetric,
     ChangelogEntry,
     Exercise,
+    ExerciseMachine,
     ExerciseNote,
     ExerciseSettings,
     Location,
@@ -74,6 +76,7 @@ from workouts.models import (
     decimal_display,
     exercise_usage,
     facets_for,
+    machine_label,
     measurement_delta,
     measurement_display,
     metric_display,
@@ -81,6 +84,7 @@ from workouts.models import (
     parse_weight_step,
     rest_display,
     ru_plural,
+    suggests_machine,
     with_weight_step,
 )
 from workouts.stats import week_start, week_title
@@ -2001,6 +2005,24 @@ class DashboardWeekView(LoginRequiredMixin, View):
         )
 
 
+def machines_by_location(user, exercise):
+    """Места пользователя с тренажёром этого упражнения в каждом — одним запросом.
+
+    У каждого места атрибут machine («Technogym · Selection 900» или пусто).
+    Подзапросы к строке места, а не джойн: строки тренажёра может не быть.
+    """
+    machines = ExerciseMachine.objects.filter(user=user, exercise=exercise, location=OuterRef("pk"))
+    places = list(
+        Location.objects.filter(owner=user).annotate(
+            machine_brand=Subquery(machines.values("brand")[:1]),
+            machine_model=Subquery(machines.values("model")[:1]),
+        )
+    )
+    for place in places:
+        place.machine = machine_label(place.machine_brand or "", place.machine_model or "")
+    return places
+
+
 def exercise_detail_context(request, exercise, *, in_panel):
     """Контекст страницы упражнения.
 
@@ -2020,9 +2042,17 @@ def exercise_detail_context(request, exercise, *, in_panel):
     else:
         stats_line = "ещё не было в тренировках"
     facets = facets_for(request.user)
+    # Десятый запрос страницы: места с тренажёрами. Он же подписывает тренажёр
+    # у записей истории — по месту той тренировки, без запроса на запись.
+    places = machines_by_location(request.user, exercise)
+    machine_at = {place.pk: place.machine for place in places}
+    for group in progress:
+        group["machine"] = machine_at.get(group["workout"].location_id, "")
     return {
         "exercise": exercise,
         "history": list(reversed(progress)),
+        "machine_places": places,
+        "machines_open": suggests_machine(exercise) or any(place.machine for place in places),
         "chart": {
             "labels": [group["label"] for group in progress],
             "values": [group["max_value"] for group in progress],
@@ -2377,6 +2407,71 @@ class ExerciseEquipmentView(LoginRequiredMixin, View):
                 "exercise": exercise,
                 "can_edit": True,
                 **equipment_context(exercise, facets_for(request.user), saved=True),
+            },
+        )
+
+
+class ExerciseMachineView(LoginRequiredMixin, View):
+    """Окно «Тренажёр»: производитель и модель упражнения в одном месте.
+
+    Упражнение — любое видимое (у общего тренажёр тоже свой у каждого), место —
+    только своё: чужое по прямому id даёт 404. Окно открывают со страницы
+    упражнения, из шторки справочника, из живого режима и с правки записанной,
+    поэтому ответ — HX-Refresh: перезагрузка текущей страницы обслуживает все
+    четыре без адреса возврата в запросе (и без открытого редиректа).
+    """
+
+    template_name = "workouts/_exercise_machine_modal.html"
+
+    def get(self, request, pk, location_pk):
+        exercise, location = self.get_objects(request, pk, location_pk)
+        machine = ExerciseMachine.objects.filter(
+            user=request.user, exercise=exercise, location=location
+        ).first()
+        initial = {"brand": machine.brand, "model": machine.model} if machine else {}
+        return self.modal(request, exercise, location, ExerciseMachineForm(initial=initial))
+
+    def post(self, request, pk, location_pk):
+        exercise, location = self.get_objects(request, pk, location_pk)
+        form = ExerciseMachineForm(request.POST, known_brands=self.known_brands(request.user))
+        if not form.is_valid():
+            return self.modal(request, exercise, location, form)
+        brand, model = form.cleaned_data["brand"], form.cleaned_data["model"]
+        lookup = {"user": request.user, "exercise": exercise, "location": location}
+        if brand or model:
+            ExerciseMachine.objects.update_or_create(
+                **lookup, defaults={"brand": brand, "model": model}
+            )
+        else:
+            # Пусто — «тренажёр не указан»: строки нет, как у пустой заметки.
+            ExerciseMachine.objects.filter(**lookup).delete()
+        response = HttpResponse()
+        response["HX-Refresh"] = "true"
+        return response
+
+    def get_objects(self, request, pk, location_pk):
+        exercise = get_object_or_404(Exercise.objects.visible_to(request.user), pk=pk)
+        location = get_object_or_404(Location.objects.filter(owner=request.user), pk=location_pk)
+        return exercise, location
+
+    def known_brands(self, user):
+        return list(
+            ExerciseMachine.objects.filter(user=user)
+            .exclude(brand="")
+            .order_by("brand")
+            .values_list("brand", flat=True)
+            .distinct()
+        )
+
+    def modal(self, request, exercise, location, form):
+        return render(
+            request,
+            self.template_name,
+            {
+                "exercise": exercise,
+                "location": location,
+                "form": form,
+                "known_brands": self.known_brands(request.user),
             },
         )
 

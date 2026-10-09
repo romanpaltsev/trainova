@@ -11,6 +11,7 @@
         <span class="visually-hidden">упражнение {{ group.position }}: </span>{{ group.exercise.name }}
       </span>
       <span class="app-queue-hint">{{ group.hint }}</span>
+      {% if group.machine %}<span class="app-queue-hint">{{ group.machine }}</span>{% endif %}
       {% comment %}Только текст: сама строка очереди — button, вложенная кнопка невалидна.{% endcomment %}
       {% if group.note %}
         <span class="app-queue-hint">{{ group.note|truncatechars:60 }}</span>

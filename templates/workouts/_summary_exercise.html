@@ -20,6 +20,7 @@
     </div>
     <span class="app-live-exercise-meta">{{ group.total }}</span>
   </div>
+  {% include "workouts/_machine_line.html" %}
   {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}
   <div class="app-live-sets">
     {% for set in group.sets %}

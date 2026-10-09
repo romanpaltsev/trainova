@@ -117,5 +117,5 @@ def test_exercise_page_budget_is_unchanged_for_admin(
 ):
     client.force_login(admin_user)
 
-    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
+    with django_assert_max_num_queries(10 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_detail", args=[shared.pk]))

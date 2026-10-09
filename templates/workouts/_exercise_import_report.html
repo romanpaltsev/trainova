@@ -13,6 +13,9 @@
     {% if report.steps %}
       <li>Шаг веса обновлён: <span class="num">{{ report.steps }}</span></li>
     {% endif %}
+    {% if report.machines %}
+      <li>Тренажёров изменено: <span class="num">{{ report.machines }}</span></li>
+    {% endif %}
     {% if report.unchanged %}
       <li>Без изменений: <span class="num">{{ report.unchanged }}</span></li>
     {% endif %}

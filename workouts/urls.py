@@ -32,6 +32,11 @@ urlpatterns = [
         name="exercise_equipment",
     ),
     path(
+        "exercises/<int:pk>/machine/<int:location_pk>/",
+        views.ExerciseMachineView.as_view(),
+        name="exercise_machine",
+    ),
+    path(
         "exercises/<int:pk>/rename/",
         views.ExerciseRenameView.as_view(),
         name="exercise_rename",

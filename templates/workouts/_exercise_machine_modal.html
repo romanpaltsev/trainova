@@ -1,0 +1,44 @@
+{% comment %}
+  Окно «Тренажёр»: производитель и модель упражнения в одном месте
+  (ExerciseMachineView). Пустые оба поля — «не указан». Успех отвечает
+  HX-Refresh, ошибка — этим же окном.
+  Подсказки производителей — уже введённые этим человеком (datalist):
+  набирать «Hammer Strength» второй раз не нужно.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="machine-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="machine-modal-title">Тренажёр</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="app-queue-hint mb-3">{{ exercise.name }} · {{ location.name }}</p>
+
+    <form hx-post="{% url 'exercise_machine' exercise.pk location.pk %}"
+          hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="find button" novalidate>
+      <label class="form-label" for="machine-brand">Производитель</label>
+      <input type="text" name="brand" id="machine-brand" class="form-control"
+             value="{{ form.brand.value|default:'' }}" maxlength="{{ form.fields.brand.max_length }}"
+             list="machine-brands" autocomplete="off" placeholder="напр. Technogym">
+      {% for error in form.brand.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      <datalist id="machine-brands">
+        {% for brand in known_brands %}<option value="{{ brand }}">{% endfor %}
+      </datalist>
+
+      <label class="form-label mt-3" for="machine-model">Модель</label>
+      <input type="text" name="model" id="machine-model" class="form-control"
+             value="{{ form.model.value|default:'' }}" maxlength="{{ form.fields.model.max_length }}"
+             autocomplete="off" placeholder="напр. Selection 900 Leg Press">
+      {% for error in form.model.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      <p class="app-queue-hint mt-2 mb-0">Только для этого места. Оставьте оба поля пустыми, чтобы убрать тренажёр.</p>
+
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>

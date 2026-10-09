@@ -7,6 +7,7 @@ from workouts.models import (
     ChangelogEntry,
     DeletedWorkout,
     Exercise,
+    ExerciseMachine,
     ExerciseNote,
     ExerciseSettings,
     Location,
@@ -87,6 +88,17 @@ class ExerciseSettingsAdmin(admin.ModelAdmin):
     list_filter = ("user",)
     search_fields = ("user__email", "exercise__name")
     autocomplete_fields = ("user", "exercise")
+
+
+@admin.register(ExerciseMachine)
+class ExerciseMachineAdmin(admin.ModelAdmin):
+    """Тренажёры пользователей: упражнение × место — производитель и модель."""
+
+    list_display = ("user", "exercise", "location", "brand", "model")
+    list_filter = ("user",)
+    search_fields = ("user__email", "exercise__name", "location__name", "brand", "model")
+    autocomplete_fields = ("user", "exercise", "location")
+    list_select_related = ("user", "exercise", "location")
 
 
 class StrengthSetInline(admin.TabularInline):

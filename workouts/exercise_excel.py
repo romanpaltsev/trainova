@@ -33,10 +33,15 @@ from workouts.models import (
     DEFAULT_WEIGHT_STEP,
     EQUIPMENT_MAX_LENGTH,
     EXERCISE_NAME_MAX_LENGTH,
+    LOCATION_NAME_MAX_LENGTH,
+    MACHINE_BRAND_MAX_LENGTH,
+    MACHINE_MODEL_MAX_LENGTH,
     MEASUREMENT_FIELDS,
     MUSCLE_GROUP_MAX_LENGTH,
     Exercise,
+    ExerciseMachine,
     ExerciseSettings,
+    Location,
     collapse_spaces,
     decimal_display,
     exercise_usage,
@@ -65,6 +70,19 @@ COLUMNS: tuple[excel.Column, ...] = (
 )
 # Без ID таблица законна: так её собирают руками, и строки ищутся по названию.
 REQUIRED_TITLES = ("Упражнение",)
+
+# Второй лист — тренажёры: строка = упражнение × место (ExerciseMachine). Своим
+# листом, а не колонками основного: у пары нет места в строке упражнения, а
+# колонка на каждое место сделала бы шапку зависимой от данных.
+MACHINE_SHEET_TITLE = "Тренажёры"
+MACHINE_COLUMNS: tuple[excel.Column, ...] = (
+    excel.Column("exercise_id", "ID упражнения", 14, "0"),
+    excel.Column("exercise", "Упражнение", 40),
+    excel.Column("location", "Место", 24),
+    excel.Column("brand", "Производитель", 22),
+    excel.Column("model", "Модель", 30),
+)
+MACHINE_REQUIRED_TITLES = ("Упражнение", "Место")
 # Справочник — это десятки строк, а не тысячи, как история. Предел держит
 # загрузку далеко от таймаута запроса: изменённая строка — до четырёх запросов.
 MAX_ROWS = 1_000
@@ -101,6 +119,12 @@ HELP_LINES = (
     "странице в приложении.",
     "",
     "«Чьё» и «Тренировок» — для справки, при загрузке они не читаются.",
+    "",
+    "Лист «Тренажёры» — на каком тренажёре вы делаете упражнение в каждом месте:",
+    "строка — упражнение и место, дальше производитель и модель. «Место» — название",
+    "одного из ваших мест, новых мест загрузка не заводит. Пустые производитель и модель",
+    "убирают тренажёр; строка, удалённая из листа, ничего не меняет. Листа нет в файле —",
+    "тренажёры не трогаются.",
     "",
     "Файл можно загружать повторно: то, что уже совпадает, останется как есть. Поэтому",
     "сохраните скачанный файл до правок: его загрузка вернёт справочник как было",
@@ -144,14 +168,34 @@ def _order(exercise):
     return (not exercise.muscle_group, exercise.muscle_group.casefold(), exercise.name.casefold())
 
 
+def machine_rows(user):
+    """Строки листа «Тренажёры»: все указанные тренажёры — один запрос."""
+    machines = (
+        ExerciseMachine.objects.filter(user=user)
+        .select_related("exercise", "location")
+        .order_by("exercise__name", "location__name")
+    )
+    return [
+        {
+            "exercise_id": machine.exercise_id,
+            "exercise": machine.exercise.name,
+            "location": machine.location.name,
+            "brand": machine.brand,
+            "model": machine.model,
+        }
+        for machine in machines
+    ]
+
+
 def build_workbook(user):
-    """Книга целиком: лист со справочником и лист с подсказкой."""
+    """Книга целиком: справочник, тренажёры и лист с подсказкой."""
     book = Workbook()
     sheet = book.active
     sheet.title = SHEET_TITLE
     rows = sheet_rows(user)
     excel.write_table(sheet, COLUMNS, rows)
     _measurement_dropdown(sheet, len(rows))
+    excel.write_table(book.create_sheet(MACHINE_SHEET_TITLE), MACHINE_COLUMNS, machine_rows(user))
     excel.write_help(book, HELP_LINES)
     return book
 
@@ -309,6 +353,56 @@ def _reject_history(titles):
         )
 
 
+@dataclass
+class MachineRow:
+    """Строка листа «Тренажёры», приведённая к типам модели."""
+
+    number: int
+    exercise_id: int | None = None
+    exercise: str = ""
+    location: str = ""
+    brand: str = ""
+    model: str = ""
+    errors: list[str] = field(default_factory=list)
+
+
+def _machine_row(number, values, index):
+    row = MachineRow(number=number)
+    cell = excel.cell_getter(values, index)
+    readers = {
+        "exercise_id": _cell_id,
+        "exercise": lambda value: _cell_limited(
+            value, limit=EXERCISE_NAME_MAX_LENGTH, what="Название"
+        ),
+        "location": lambda value: _cell_limited(
+            value, limit=LOCATION_NAME_MAX_LENGTH, what="Место"
+        ),
+        "brand": lambda value: _cell_limited(
+            value, limit=MACHINE_BRAND_MAX_LENGTH, what="Производитель"
+        ),
+        "model": lambda value: _cell_limited(value, limit=MACHINE_MODEL_MAX_LENGTH, what="Модель"),
+    }
+    for key, parser in readers.items():
+        try:
+            setattr(row, key, parser(cell(key)))
+        except ValueError as error:
+            row.errors.append(str(error))
+    return row
+
+
+def read_machine_sheet(stream):
+    """Строки листа «Тренажёры»; листа нет — пустой список."""
+    return excel.read_rows(
+        stream,
+        sheet_title=MACHINE_SHEET_TITLE,
+        columns=MACHINE_COLUMNS,
+        required_titles=MACHINE_REQUIRED_TITLES,
+        parse_row=_machine_row,
+        max_rows=MAX_ROWS,
+        optional=True,
+    )
+
+
 def read_sheet(stream):
     """Строки книги со справочником. Кидает excel.WorkbookError, если читать нечего."""
     return excel.read_rows(
@@ -338,6 +432,7 @@ class ExerciseReport(excel.ReportLog):
     unchanged: int = 0
     shared_skipped: list[str] = field(default_factory=list)
     measurement_changed: list[str] = field(default_factory=list)
+    machines: int = 0
 
     # Списки в отчёте короткие: таблицу друга на сотню строк перечислять целиком
     # незачем, число показано в итоге.
@@ -423,6 +518,10 @@ class Catalog:
 def import_workbook(user, stream):
     """Прочитать книгу и применить её к справочнику. Кидает excel.WorkbookError."""
     rows = read_sheet(stream)
+    # Второй лист читается вторым проходом по той же книге: read_rows открывает
+    # и закрывает её сам, а поток после первого чтения стоит в конце.
+    stream.seek(0)
+    machine_rows_ = read_machine_sheet(stream)
     report = ExerciseReport()
     catalog = Catalog(user)
     seen = {}
@@ -434,6 +533,10 @@ def import_workbook(user, stream):
             _apply_row(user, catalog, report, row, seen)
         except RowError as error:
             report.add_error(row.number, str(error))
+    # Тренажёры — после упражнений: строка листа может ссылаться на упражнение,
+    # которое только что завёл основной лист.
+    if machine_rows_:
+        _apply_machines(user, catalog, report, machine_rows_)
     _summarize(report)
     return report
 
@@ -599,6 +702,96 @@ def _step_change(catalog, report, exercise, row, measurement):
         report.add_warning(f"У «{row.name}» нет веса — шаг веса для него не нужен и пропущен.")
         return None
     return row.weight_step
+
+
+class Machines:
+    """Тренажёры пользователя в памяти: один запрос на загрузку.
+
+    Места подгружаются, только когда строка называет место, которого нет среди
+    уже указанных тренажёров: нетронутый лист обходится без этого запроса.
+    """
+
+    def __init__(self, user):
+        self.user = user
+        self.current = {}
+        self.places = {}
+        brands = set()
+        for machine in ExerciseMachine.objects.filter(user=user).select_related("location"):
+            self.current[(machine.exercise_id, machine.location_id)] = (
+                machine.brand,
+                machine.model,
+            )
+            self.places[machine.location.name.lower()] = machine.location
+            if machine.brand:
+                brands.add(machine.brand)
+        self.brands = sorted(brands)
+        self.all_places_loaded = False
+
+    def place(self, name):
+        key = collapse_spaces(name).lower()
+        if key not in self.places and not self.all_places_loaded:
+            for location in Location.objects.filter(owner=self.user):
+                self.places.setdefault(location.name.lower(), location)
+            self.all_places_loaded = True
+        return self.places.get(key)
+
+
+def _apply_machines(user, catalog, report, rows):
+    """Лист «Тренажёры»: та же логика, что у окна «Тренажёр», построчно.
+
+    Неизменённая строка ничего не пишет; пустые производитель и модель убирают
+    тренажёр. Ошибки — в общий журнал с указанием листа: номера строк у листов
+    свои.
+    """
+    machines = Machines(user)
+    seen = {}
+
+    def error(row, message):
+        report.add_error(f"{row.number} листа «{MACHINE_SHEET_TITLE}»", message)
+
+    for row in rows:
+        if row.errors:
+            error(row, " ".join(row.errors) + " Строка пропущена.")
+            continue
+        if row.exercise_id is not None:
+            exercise = catalog.by_pk.get(row.exercise_id)
+        else:
+            exercise = catalog.find(row.exercise) if row.exercise else None
+        if exercise is None:
+            error(row, "Такого упражнения нет в вашем справочнике — строка пропущена.")
+            continue
+        if not row.location:
+            error(row, "Не указано место — строка пропущена.")
+            continue
+        location = machines.place(row.location)
+        if location is None:
+            error(
+                row,
+                f"Места «{row.location}» нет среди ваших мест — строка пропущена. "
+                "Новое место заводится в приложении.",
+            )
+            continue
+        key = (exercise.pk, location.pk)
+        if key in seen:
+            error(row, f"Этот тренажёр уже был в строке {seen[key]} — повтор пропущен.")
+            continue
+        seen[key] = row.number
+        brand = normalize_facet(row.brand, machines.brands)
+        model = collapse_spaces(row.model)
+        if machines.current.get(key, ("", "")) == (brand, model):
+            continue
+        lookup = {"user": user, "exercise": exercise, "location": location}
+        if brand or model:
+            ExerciseMachine.objects.update_or_create(
+                **lookup, defaults={"brand": brand, "model": model}
+            )
+            machines.current[key] = (brand, model)
+            if brand and brand not in machines.brands:
+                machines.brands.append(brand)
+        else:
+            ExerciseMachine.objects.filter(**lookup).delete()
+            machines.current.pop(key, None)
+        report.machines += 1
 
 
 def _summarize(report):

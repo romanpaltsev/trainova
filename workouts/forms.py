@@ -8,6 +8,8 @@ from workouts.models import (
     BODY_METRIC_NAME_MAX_LENGTH,
     BODY_METRIC_UNIT_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
+    MACHINE_BRAND_MAX_LENGTH,
+    MACHINE_MODEL_MAX_LENGTH,
     BodyMeasurement,
     BodyMetric,
     CardioPart,
@@ -19,6 +21,7 @@ from workouts.models import (
     chosen_muscle_group,
     collapse_spaces,
     facets_for,
+    normalize_facet,
     parse_measurement_value,
 )
 
@@ -749,3 +752,27 @@ class BodyMetricForm(forms.Form):
         metric.unit = self.cleaned_data["unit"]
         metric.save()
         return metric
+
+
+class ExerciseMachineForm(forms.Form):
+    """Тренажёр упражнения в месте: производитель и модель, оба необязательные.
+
+    Пустые оба — «тренажёр не указан» (строка удаляется вьюхой). Производитель
+    приводится к уже принятому написанию (`known_brands`): «technogym» не
+    должен стать вторым брендом рядом с «Technogym».
+    """
+
+    brand = forms.CharField(
+        label="Производитель", max_length=MACHINE_BRAND_MAX_LENGTH, required=False
+    )
+    model = forms.CharField(label="Модель", max_length=MACHINE_MODEL_MAX_LENGTH, required=False)
+
+    def __init__(self, *args, known_brands=(), **kwargs):
+        self.known_brands = known_brands
+        super().__init__(*args, **kwargs)
+
+    def clean_brand(self):
+        return normalize_facet(self.cleaned_data["brand"], self.known_brands)
+
+    def clean_model(self):
+        return collapse_spaces(self.cleaned_data["model"])

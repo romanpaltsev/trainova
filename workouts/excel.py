@@ -502,7 +502,15 @@ NOT_A_WORKBOOK = (
 
 
 def read_rows(
-    stream, *, sheet_title, columns, required_titles, parse_row, max_rows, check_titles=None
+    stream,
+    *,
+    sheet_title,
+    columns,
+    required_titles,
+    parse_row,
+    max_rows,
+    check_titles=None,
+    optional=False,
 ):
     """Строки книги без записи в базу. Кидает WorkbookError, если читать нечего.
 
@@ -511,6 +519,8 @@ def read_rows(
     index) — номер в нём настоящий, как его видит человек в Excel. check_titles —
     проверка шапки сверх обязательных колонок: так справочник узнаёт по шапке
     файл с историей, который его обязательную колонку тоже содержит.
+    optional — дополнительный лист книги: нет листа с таким названием — нет и
+    строк (без подмены первым листом, как у основного).
     """
     try:
         book = load_workbook(stream, read_only=True, data_only=True)
@@ -519,6 +529,8 @@ def read_rows(
         # это не та книга. Падать пятисоткой на кривом файле нельзя.
         raise WorkbookError(NOT_A_WORKBOOK) from error
     try:
+        if optional and sheet_title not in book.sheetnames:
+            return []
         try:
             sheet = book[sheet_title] if sheet_title in book.sheetnames else book.worksheets[0]
         except IndexError as error:

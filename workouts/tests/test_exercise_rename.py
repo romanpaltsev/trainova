@@ -271,7 +271,7 @@ def test_equipment_page_queries_stay_in_budget(client, user, django_assert_max_n
     with_history(user, mine)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
+    with django_assert_max_num_queries(10 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_detail", args=[mine.pk]))
 
 

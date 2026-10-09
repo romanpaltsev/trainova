@@ -1662,7 +1662,30 @@ a.btn {
 }
 
 .app-exercise > .app-screen-head,
-.app-by-location .app-rows { margin-bottom: 0; }
+.app-by-location .app-rows,
+.app-machines .app-rows { margin-bottom: 0; }
+
+/* «Тренажёры» — сворачиваемая секция: заголовок и есть summary, шеврон
+   поворачивается вместо системного треугольника. */
+.app-machines-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  min-height: var(--app-tap-target);
+  margin-bottom: 0;
+  cursor: pointer;
+  list-style: none;
+}
+.app-machines-summary::-webkit-details-marker { display: none; }
+.app-machines-chevron { transition: var(--app-transition-ui); }
+.app-machines details[open] .app-machines-chevron { transform: rotate(180deg); }
+.app-machine-line {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+.app-machine-line svg,
+.app-note-btn svg { flex: 0 0 auto; }
 
 /* Настройки — одной карточкой на всех ширинах. На телефоне блоки стояли без
    подложки, но с её отступами: текст съезжал на 20px от вертикали страницы,
@@ -3215,7 +3238,8 @@ a.btn {
      заголовком и списком по отдельности: без order они уехали бы к шапке, а
      заголовок остался бы рядом с «Историей подходов». */
   .app-exercise > .app-by-location { order: 3; }
-  .app-exercise > .app-exercise-history { order: 4; }
+  .app-exercise > .app-machines { order: 4; }
+  .app-exercise > .app-exercise-history { order: 5; }
 
   /* График в панели крупнее: он и есть причина открыть упражнение */
   .app-exercise .app-chart-body { height: 360px; }

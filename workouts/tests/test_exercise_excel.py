@@ -96,7 +96,11 @@ def test_export_returns_xlsx_with_dated_filename(client, user):
     # Имя — по-русски, как у выгрузки истории: Django кодирует его по RFC 5987.
     assert "Справочник упражнений" in unquote(response["Content-Disposition"])
     book = load_workbook(io.BytesIO(content))
-    assert book.sheetnames == [exercise_excel.SHEET_TITLE, excel.HELP_SHEET_TITLE]
+    assert book.sheetnames == [
+        exercise_excel.SHEET_TITLE,
+        exercise_excel.MACHINE_SHEET_TITLE,
+        excel.HELP_SHEET_TITLE,
+    ]
 
 
 def test_export_filename_is_dated():

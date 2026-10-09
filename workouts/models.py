@@ -1139,6 +1139,91 @@ class ExerciseSettings(models.Model):
         return f"{self.exercise} · шаг {decimal_display(self.weight_step)} кг"
 
 
+MACHINE_BRAND_MAX_LENGTH = 60
+MACHINE_MODEL_MAX_LENGTH = 80
+# Снаряды, у которых тренировка предлагает «+ Тренажёр» сама. У штанги и
+# гантелей пустая кнопка на каждом упражнении была бы шумом; указать тренажёр
+# можно у любого упражнения — на его странице.
+MACHINE_EQUIPMENT = frozenset({"тренажёр", "тренажер", "блок"})
+
+
+def suggests_machine(exercise):
+    return (exercise.equipment or "").strip().lower() in MACHINE_EQUIPMENT
+
+
+def machine_label(brand, model):
+    """«Hammer Strength · ISO-Lateral»: одна строка на все экраны, без висячей «·»."""
+    return " · ".join(part for part in (brand, model) if part)
+
+
+class ExerciseMachine(models.Model):
+    """Тренажёр, на котором пользователь делает упражнение в конкретном месте.
+
+    Пара «упражнение × место», а не поле упражнения и не ExerciseSettings:
+    один «Жим ногами в тренажёре» в двух залах — две разные машины, а общие
+    упражнения одни на всех. Строки нет — тренажёр не указан; два пустых поля
+    удаляют строку. Все FK — CASCADE: тренажёр ничего не держит, удаление
+    места, упражнения или аккаунта убирает его само.
+
+    Это текущая настройка, а не снимок: итог старой тренировки показывает
+    тренажёр, указанный у места сейчас, — как и переименованное место.
+    """
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="пользователь",
+        on_delete=models.CASCADE,
+        related_name="exercise_machines",
+    )
+    exercise = models.ForeignKey(
+        Exercise, verbose_name="упражнение", on_delete=models.CASCADE, related_name="machines"
+    )
+    location = models.ForeignKey(
+        Location, verbose_name="место", on_delete=models.CASCADE, related_name="machines"
+    )
+    brand = models.CharField("производитель", max_length=MACHINE_BRAND_MAX_LENGTH, blank=True)
+    model = models.CharField("модель", max_length=MACHINE_MODEL_MAX_LENGTH, blank=True)
+
+    class Meta:
+        verbose_name = "тренажёр"
+        verbose_name_plural = "тренажёры"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "exercise", "location"],
+                name="unique_machine_per_exercise_location",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(brand="", model=""),
+                name="machine_is_not_empty",
+            ),
+        ]
+
+    def __str__(self):
+        return machine_label(self.brand, self.model)
+
+    @property
+    def label(self):
+        return machine_label(self.brand, self.model)
+
+
+def with_machine(queryset, user, location, *, exercise_ref="exercise"):
+    """Подмешать тренажёр упражнения в месте тренировки — подзапросами, без N+1.
+
+    machine_brand и machine_model; у тренировки без места — пустые строки
+    (подзапрос не строится вовсе).
+    """
+    if location is None:
+        empty = models.Value("", output_field=models.CharField())
+        return queryset.annotate(machine_brand=empty, machine_model=empty)
+    machines = ExerciseMachine.objects.filter(
+        user=user, location=location, exercise=models.OuterRef(exercise_ref)
+    )
+    return queryset.annotate(
+        machine_brand=Coalesce(models.Subquery(machines.values("brand")[:1]), models.Value("")),
+        machine_model=Coalesce(models.Subquery(machines.values("model")[:1]), models.Value("")),
+    )
+
+
 class CardioPart(models.Model):
     """Кардио-часть тренировки: бег, велосипед, лыжи — со своим временем.
 

@@ -15,6 +15,7 @@ from workouts.tests.budgets import SIDEBAR_QUERIES
 from workouts.tests.factories import (
     CardioPartFactory,
     ExerciseFactory,
+    ExerciseMachineFactory,
     ExerciseNoteFactory,
     ExerciseSettingsFactory,
     LocationFactory,
@@ -111,8 +112,9 @@ def test_exercise_page_query_budget(client, user, django_assert_max_num_queries)
     client.force_login(user)
     # Седьмой запрос — заметки упражнения (один на всю историю), восьмой — список
     # групп мышц для чипов, девятый — позиции упражнения в тренировках («каким
-    # по счёту делал»). Ни один не зависит от объёма истории.
-    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
+    # по счёту делал»), десятый — места с тренажёрами (он же подписывает
+    # тренажёр у записей истории). Ни один не зависит от объёма истории.
+    with django_assert_max_num_queries(10 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
@@ -123,7 +125,7 @@ def test_exercise_page_queries_do_not_scale_with_history(
     bench = fill_history(user, weeks=12)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
+    with django_assert_max_num_queries(10 + SIDEBAR_QUERIES):
         client.get(reverse("exercise_detail", args=[bench.pk]))
 
 
@@ -132,7 +134,7 @@ def test_exercise_panel_query_budget(client, user, django_assert_max_num_queries
     bench = fill_history(user)
 
     client.force_login(user)
-    with django_assert_max_num_queries(9):
+    with django_assert_max_num_queries(10):
         client.get(reverse("exercise_detail", args=[bench.pk]), headers={"HX-Request": "true"})
 
 
@@ -339,21 +341,23 @@ def test_data_transfer_page_query_budget(client, user, django_assert_max_num_que
 
 
 def own_catalog(user, count):
-    """Свои упражнения с личным шагом веса — у каждого строка настроек."""
+    """Свои упражнения с личным шагом веса и тренажёром в одном зале."""
+    gym = LocationFactory(owner=user, name="Зал")
     for number in range(count):
         exercise = ExerciseFactory(owner=user, name=f"Своё {number}")
         ExerciseSettingsFactory(user=user, exercise=exercise, weight_step=Decimal("1"))
+        ExerciseMachineFactory(user=user, exercise=exercise, location=gym)
 
 
 @pytest.mark.parametrize("count", [2, 12])
 def test_exercise_export_query_budget(client, user, django_assert_max_num_queries, count):
-    """Выгрузка справочника: два запроса на данные — упражнения со счётчиком
-    тренировок и шаги веса, — сколько бы упражнений ни было."""
+    """Выгрузка справочника: три запроса на данные — упражнения со счётчиком
+    тренировок, шаги веса и тренажёры, — сколько бы упражнений ни было."""
     own_catalog(user, count)
     client.force_login(user)
 
-    # Шесть: сессия, пользователь, транзакция запроса — и два на данные.
-    with django_assert_max_num_queries(6):
+    # Семь: сессия, пользователь, транзакция запроса — и три на данные.
+    with django_assert_max_num_queries(7):
         response = client.get(reverse("exercise_export"))
         b"".join(response.streaming_content)
 
@@ -368,7 +372,8 @@ def test_unchanged_exercise_import_query_budget(client, user, django_assert_max_
     upload = SimpleUploadedFile("справочник.xlsx", buffer.getvalue())
     client.force_login(user)
 
-    # Семь: сессия, пользователь, транзакция запроса, два на справочник и шаги
-    # и один — счётчик тренировок в ответной странице.
-    with django_assert_max_num_queries(7 + SIDEBAR_QUERIES):
+    # Восемь: сессия, пользователь, транзакция запроса, два на справочник и
+    # шаги, один на тренажёры (места — из него же) и один — счётчик тренировок
+    # в ответной странице.
+    with django_assert_max_num_queries(8 + SIDEBAR_QUERIES):
         client.post(reverse("exercise_import"), {"exercises-file": upload})

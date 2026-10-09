@@ -11,6 +11,7 @@ from workouts.models import (
     CardioPart,
     ChangelogEntry,
     Exercise,
+    ExerciseMachine,
     ExerciseNote,
     ExerciseSettings,
     Location,
@@ -62,6 +63,17 @@ class LocationFactory(factory.django.DjangoModelFactory):
 
     owner = factory.SubFactory(UserFactory)
     name = factory.Sequence(lambda n: f"Место {n}")
+
+
+class ExerciseMachineFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = ExerciseMachine
+
+    user = factory.SubFactory(UserFactory)
+    exercise = factory.SubFactory(ExerciseFactory)
+    location = factory.SubFactory(LocationFactory, owner=factory.SelfAttribute("..user"))
+    brand = "Technogym"
+    model = "Selection 900"
 
 
 class WorkoutFactory(factory.django.DjangoModelFactory):

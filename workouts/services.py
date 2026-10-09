@@ -21,10 +21,13 @@ from workouts.models import (
     StrengthSet,
     collapse_spaces,
     decimal_display,
+    machine_label,
     metric_display,
     order_exercises,
     rest_display,
     ru_plural,
+    suggests_machine,
+    with_machine,
     with_weight_step,
 )
 
@@ -235,11 +238,10 @@ def exercise_groups(workout):
     Сортировка идёт в Python по уже загруженным строкам: их в тренировке десятки,
     а оконная функция в SQL удорожила бы горячий запрос живого экрана.
     """
-    # Шаг веса подмешивается той же выборкой: отдельный запрос на упражнение
-    # сделал бы экран зависимым от их числа.
-    rows = list(
-        with_weight_step(workout.sets.select_related("exercise"), workout.user_id).order_by("id")
-    )
+    # Шаг веса и тренажёр места подмешиваются той же выборкой: отдельный
+    # запрос на упражнение сделал бы экран зависимым от их числа.
+    rows = with_weight_step(workout.sets.select_related("exercise"), workout.user_id)
+    rows = list(with_machine(rows, workout.user_id, workout.location_id).order_by("id"))
     # Заметки одним запросом на всю тренировку: в цикле по группам это был бы
     # запрос на упражнение, и бюджет экрана рос бы вместе с их числом.
     return group_sets(rows, notes_by_exercise(workout) if rows else {})
@@ -290,6 +292,13 @@ def group_sets(rows, notes=None):
         group["position"] = position
         group["sets"].sort(key=lambda item: item.set_number)
         group["note"] = notes.get(group["exercise"].pk, "")
+        # Тренажёр — из аннотации with_machine (одинаков у всех подходов
+        # упражнения); у выборок без неё, как в выгрузке, — пусто.
+        first = group["sets"][0]
+        group["machine"] = machine_label(
+            getattr(first, "machine_brand", ""), getattr(first, "machine_model", "")
+        )
+        group["suggests_machine"] = suggests_machine(group["exercise"])
         # Номер подхода на экране — позиция в списке: в set_number бывают пропуски.
         for set_position, row in enumerate(group["sets"], start=1):
             row.display_number = set_position

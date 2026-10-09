@@ -111,6 +111,8 @@
     </section>
   {% endif %}
 
+  {% include "workouts/_exercise_machines.html" %}
+
   {% comment %}
     Заголовок и карточки — одной секцией, как «По местам»: .app-exercise —
     флекс-колонка с зазором между блоками, и порознь заголовок отъехал бы от
@@ -133,6 +135,7 @@
         </div>
         <span class="app-live-exercise-meta">до {{ group.max_value_display }}</span>
       </div>
+      {% include "workouts/_machine_line.html" %}
       {% if group.note %}<p class="app-live-last">{{ group.note }}</p>{% endif %}
       <div class="app-live-sets">
         {% for set in group.sets %}

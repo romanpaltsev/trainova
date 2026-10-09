@@ -1,0 +1,39 @@
+{% comment %}
+  «Тренажёры»: на каком тренажёре упражнение делается в каждом месте
+  (ExerciseMachine, пара «упражнение × место» — у двух залов две машины).
+  Строка — место; тап открывает окно «Тренажёр» (exercise_machine).
+  Ждёт machine_places (views.machines_by_location), exercise, machines_open.
+
+  Раскрыта, когда тренажёр уместен (снаряд «Тренажёр»/«Блок») или уже указан;
+  у штанги и гантелей свёрнута в одну строку — указать можно, но не мешает.
+  Одной секцией: на ПК у прямых детей .app-exercise свой order.
+{% endcomment %}
+<section class="app-machines">
+  <details{% if machines_open %} open{% endif %}>
+    <summary class="app-section-title app-machines-summary">
+      Тренажёры
+      <svg class="app-machines-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </summary>
+    {% if machine_places %}
+      <div class="app-rows">
+        {% for place in machine_places %}
+          <button type="button" class="app-row"
+                  hx-get="{% url 'exercise_machine' exercise.pk place.pk %}"
+                  hx-target="#modal" hx-swap="innerHTML"
+                  aria-label="Тренажёр в месте «{{ place.name }}»: {{ place.machine|default:'не указан' }}">
+            <span class="app-row-icon">{% include "includes/pin.html" with size=20 only %}</span>
+            <span class="app-row-text">
+              <span class="app-row-name">{{ place.name }}</span>
+              <span class="app-row-meta">{{ place.machine|default:"тренажёр не указан" }}</span>
+            </span>
+            {% include "includes/pencil.html" %}
+          </button>
+        {% endfor %}
+      </div>
+    {% else %}
+      {% url 'my_locations' as locations_url %}
+      {% include "includes/empty_state.html" with text="Тренажёр указывается для места тренировки — сначала добавьте зал." cta_label="Мои места" cta_url=locations_url extra_class="app-empty-slim" %}
+    {% endif %}
+  </details>
+</section>
