@@ -61,11 +61,17 @@ def test_guest_page_has_no_sidebar(client):
         ("changelog", "Что нового"),
         # Страницы аккаунта открываются из профиля — за ним и числятся.
         ("account_change_password", "Профиль"),
+        # Раздел «Админка» — один пункт на все свои страницы (префикс admin_).
+        ("admin_home", "Админка"),
+        ("admin_users", "Админка"),
     ],
 )
 def test_sidebar_highlights_exactly_current_section(client, user, url_name, expected):
     """У пунктов «Моё» общий nav_active, поэтому подсветка идёт по имени маршрута:
     иначе на «Моих местах» горела бы вся группа."""
+    # Админ видит все пункты, поэтому и проверка «горит ровно один» строже.
+    user.is_staff = True
+    user.save(update_fields=["is_staff"])
     client.force_login(user)
 
     assert active_items(page(client, url_name)) == [expected]

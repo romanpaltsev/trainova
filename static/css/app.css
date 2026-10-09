@@ -3068,6 +3068,26 @@ a.btn {
   /* Кнопка удаления 44px не раздувает строку: высоту задают текстовые ячейки. */
   .app-catalog-table td.app-catalog-col-actions { padding-block: 0; }
 
+  /* ---------- Админка ----------
+
+     Пользователи — та же таблица, что у справочника (.app-catalog-table), а
+     телефонные строки прячутся. Строка таблицы здесь не кликабельна целиком:
+     ссылка одна, «Изменить», — поэтому курсор обычный. Состояние системы —
+     секции колонками доски. */
+  .app-admin-user-rows { display: none; }
+  .app-admin-users-table tbody tr { cursor: auto; }
+  .app-admin-users-table .app-admin-col-fit {
+    width: 1%;
+    white-space: nowrap;
+  }
+  .app-admin-users-table .app-admin-col-num { text-align: end; }
+  .app-admin-system {
+    display: grid;
+    grid-template-columns: repeat(var(--app-board-cols), minmax(0, 1fr));
+    gap: 0 var(--app-space-6);
+    align-items: start;
+  }
+
   /* ---------- Страница упражнения (и панель каталога с 1200) ---------- */
 
   /* Доска карточек (история подходов упражнения): колонки — токеном,

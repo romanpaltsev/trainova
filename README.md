@@ -24,7 +24,7 @@ docker compose exec web python manage.py createsuperuser
 ```
 
 Подтверждение email обязательно, поэтому свежесозданный суперюзер не сможет войти
-в приложение (в `/admin/` — сможет). Пометить его адрес подтверждённым:
+в приложение (в Django admin `/django-admin/` — сможет). Пометить его адрес подтверждённым:
 
 ```bash
 docker compose exec web python manage.py shell -c "

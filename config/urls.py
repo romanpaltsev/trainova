@@ -5,7 +5,9 @@ from django.urls import include, path
 from config import views
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    # Свой раздел «Админка» — на /admin/, встроенная админка Django — рядом.
+    path("django-admin/", admin.site.urls),
+    path("admin/", include("adminpanel.urls")),
     path("accounts/", include("allauth.urls")),
     path("manifest.webmanifest", views.manifest, name="manifest"),
     path("favicon.ico", views.favicon),

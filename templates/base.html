@@ -100,6 +100,18 @@
           <span class="visually-hidden">есть новые записи</span>
         {% endif %}
       </a>
+
+      {% comment %}
+        «Админка» — только администратору (User.is_admin, без запроса: user уже
+        загружен). Все её маршруты начинаются с admin_ — по префиксу и подсветка.
+      {% endcomment %}
+      {% if user.is_admin %}
+        <div class="app-sidebar-group"><span class="app-sidebar-label">Админка</span></div>
+        <a class="app-side-link{% if url_name|slice:':6' == 'admin_' %} is-active{% endif %}" href="{% url 'admin_home' %}" title="Админка">
+          {% include "includes/shield.html" with size=22 only %}
+          <span class="app-sidebar-label">Админка</span>
+        </a>
+      {% endif %}
     </nav>
   </aside>
   {% endwith %}

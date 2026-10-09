@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Состояние системы · Админка · Дневник тренировок{% endblock %}
+
+{% block content %}
+{% include "adminpanel/_head.html" with back="admin_home" title="Состояние системы" only %}
+
+{% comment %}
+  Секции — колонками доски (--app-board-cols): на телефоне одна под другой,
+  на ПК рядом. Строки — «название — значение», без переходов.
+{% endcomment %}
+<div class="app-admin-system">
+  <section>
+    <h2 class="app-section-title">Версии</h2>
+    <div class="app-rows">
+      {% for label, value in versions %}
+        <div class="app-row">
+          <span class="app-row-text"><span class="app-row-name">{{ label }}</span></span>
+          <span class="app-row-count num">{{ value }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section>
+    <h2 class="app-section-title">База данных</h2>
+    <div class="app-rows">
+      <div class="app-row">
+        <span class="app-row-text"><span class="app-row-name">Размер</span></span>
+        <span class="app-row-count num">{{ database_size|filesizeformat }}</span>
+      </div>
+      <div class="app-row">
+        <span class="app-row-text">
+          <span class="app-row-name">Миграции</span>
+          {% if pending_migrations %}
+            <span class="app-row-meta">не применены: {{ pending_migrations|join:", " }}</span>
+          {% else %}
+            <span class="app-row-meta">все применены</span>
+          {% endif %}
+        </span>
+        {% if pending_migrations %}<span class="app-row-count num">{{ pending_migrations|length }}</span>{% endif %}
+      </div>
+      {% for label, value in counts %}
+        <div class="app-row">
+          <span class="app-row-text"><span class="app-row-name">{{ label }}</span></span>
+          <span class="app-row-count num">{{ value }}</span>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% comment %}
+    То, что удалит ночная purge_deleted (её зовёт scripts/backup.sh после
+    дампа). Не ноль утром — повод заглянуть в журнал бэкапа.
+  {% endcomment %}
+  <section>
+    <h2 class="app-section-title">Ждёт ночной чистки</h2>
+    <div class="app-rows">
+      <div class="app-row">
+        <span class="app-row-text">
+          <span class="app-row-name">Корзина</span>
+          <span class="app-row-meta">тренировки старше 30 дней</span>
+        </span>
+        <span class="app-row-count num">{{ expired_trash }}</span>
+      </div>
+      <div class="app-row">
+        <span class="app-row-text">
+          <span class="app-row-name">Аккаунты</span>
+          <span class="app-row-meta">отсрочка удаления вышла</span>
+        </span>
+        <span class="app-row-count num">{{ expired_accounts }}</span>
+      </div>
+    </div>
+  </section>
+</div>
+{% endblock %}

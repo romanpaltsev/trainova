@@ -102,3 +102,12 @@ class User(AbstractUser):
     def initial(self):
         """Первая буква email — аватар пользователя в интерфейсе."""
         return self.email[:1].upper()
+
+    @property
+    def is_admin(self):
+        """Администратор проекта: ему открыт раздел «Админка», а удалить себя он не может.
+
+        Любой из двух флагов: суперпользователя можно оставить без is_staff
+        через Django admin, и тогда он всё равно должен оставаться админом.
+        """
+        return self.is_staff or self.is_superuser

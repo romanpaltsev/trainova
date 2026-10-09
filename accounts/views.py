@@ -171,7 +171,7 @@ class AccountDeletionView(LoginRequiredMixin, FormView):
 
     def dispatch(self, request, *args, **kwargs):
         user = request.user
-        if user.is_authenticated and (user.is_staff or user.is_superuser):
+        if user.is_authenticated and user.is_admin:
             messages.error(request, "Аккаунт администратора отсюда не удалить.")
             return redirect("profile")
         return super().dispatch(request, *args, **kwargs)

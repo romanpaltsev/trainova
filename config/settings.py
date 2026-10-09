@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     "allauth.account",
     "accounts",
     "workouts",
+    "adminpanel",
 ]
 
 MIDDLEWARE = [

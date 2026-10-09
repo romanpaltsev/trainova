@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Пользователи · Админка · Дневник тренировок{% endblock %}
+
+{% block content %}
+{% include "adminpanel/_head.html" with back="admin_home" title="Пользователи" only %}
+
+{% comment %}
+  Две раскладки одного списка, как у справочника упражнений: на телефоне —
+  строки, с 768 — таблица (стили .app-catalog-table). Список уже загружен
+  одним запросом (AdminUsersView), вторая раскладка запросов не стоит.
+  Правка пользователя — в Django admin: ссылка «изменить» у каждого.
+{% endcomment %}
+<div class="app-rows app-admin-user-rows">
+  {% for person in users %}
+    <a class="app-row" href="{% url 'admin:accounts_user_change' person.pk %}">
+      <span class="app-row-text">
+        <span class="app-row-name">{{ person.email }}</span>
+        <span class="app-row-meta">
+          {{ person.status }} · с {{ person.date_joined|date:"d.m.Y" }} ·
+          {% if person.workouts_count %}тренировок {{ person.workouts_count }}, последняя {{ person.last_workout_at|date:"d.m.Y" }}{% else %}тренировок нет{% endif %}
+          {% if not person.email_verified %} · почта не подтверждена{% endif %}
+        </span>
+      </span>
+      {% include "includes/chevron.html" %}
+    </a>
+  {% endfor %}
+</div>
+
+<div class="app-catalog-table app-admin-users-table">
+  <table>
+    <caption class="visually-hidden">Пользователи, свежие сверху</caption>
+    <thead>
+      <tr>
+        <th scope="col" class="app-catalog-col-name">Email</th>
+        <th scope="col" class="app-admin-col-fit">Статус</th>
+        <th scope="col" class="app-admin-col-fit">Регистрация</th>
+        <th scope="col" class="app-admin-col-fit">Последний вход</th>
+        <th scope="col" class="app-admin-col-fit app-admin-col-num">Тренировок</th>
+        <th scope="col" class="app-admin-col-fit">Последняя</th>
+        <th scope="col" class="app-admin-col-fit"><span class="visually-hidden">Действия</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for person in users %}
+        <tr>
+          <td>
+            <span class="app-row-name">{{ person.email }}</span>
+            {% if not person.email_verified %}<span class="app-row-meta">почта не подтверждена</span>{% endif %}
+          </td>
+          <td class="app-admin-col-fit">{{ person.status }}</td>
+          <td class="app-admin-col-fit num">{{ person.date_joined|date:"d.m.Y" }}</td>
+          {# Время — только в подсказке: на 1024 с ним колонке email оставалось ~150px. #}
+          <td class="app-admin-col-fit num"{% if person.last_login %} title="{{ person.last_login|date:'d.m.Y H:i' }}"{% endif %}>
+            {% if person.last_login %}{{ person.last_login|date:"d.m.Y" }}{% else %}<span class="app-catalog-none" aria-hidden="true">—</span><span class="visually-hidden">не входил</span>{% endif %}
+          </td>
+          <td class="app-admin-col-fit app-admin-col-num num">
+            {% if person.workouts_count %}{{ person.workouts_count }}{% else %}<span class="app-catalog-none" aria-hidden="true">—</span><span class="visually-hidden">нет</span>{% endif %}
+          </td>
+          <td class="app-admin-col-fit num">
+            {% if person.last_workout_at %}{{ person.last_workout_at|date:"d.m.Y" }}{% else %}<span class="app-catalog-none" aria-hidden="true">—</span><span class="visually-hidden">нет</span>{% endif %}
+          </td>
+          <td class="app-admin-col-fit">
+            <a class="app-link" href="{% url 'admin:accounts_user_change' person.pk %}">Изменить</a>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
