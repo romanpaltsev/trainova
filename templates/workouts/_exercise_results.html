@@ -47,52 +47,7 @@
         hx-disabled-elt="find button">
     <input type="hidden" name="name" value="{{ q }}">
     {% if circuit %}<input type="hidden" name="circuit" value="{{ circuit }}">{% endif %}
-    <div class="app-stepper-label mt-2">Измерение</div>
-    <div class="app-chips mb-2" role="group" aria-label="Измерение упражнения">
-      {% for value, label in measurement_choices %}
-        <input type="radio" name="measurement" id="new-measure-{{ value }}" value="{{ value }}"
-               class="app-chip-input" {% if selected_measurement == value %}checked{% endif %}>
-        <label class="app-chip" for="new-measure-{{ value }}">{{ label }}</label>
-      {% endfor %}
-    </div>
-
-    {% comment %}
-      Группа мышц: чипы из уже принятых значений и отдельное поле для своей.
-      Имена разные — своё значение перебивает чип по явному правилу на сервере,
-      а не по порядку полей в форме. Написание сервер приводит к уже принятому.
-    {% endcomment %}
-    <div class="app-stepper-label">Группа мышц</div>
-    <div class="app-chips mb-2" role="group" aria-label="Группа мышц"
-         x-data="{ own: '{{ selected_muscle_group|escapejs }}' }">
-      {% for group in muscle_groups %}
-        <input type="radio" name="muscle_group" id="new-group-{{ forloop.counter }}"
-               value="{{ group }}" class="app-chip-input"
-               {% if selected_muscle_group == group %}checked{% endif %} @change="own = ''">
-        <label class="app-chip" for="new-group-{{ forloop.counter }}">{{ group }}</label>
-      {% endfor %}
-      <input type="text" class="form-control app-group-input" name="muscle_group_own"
-             maxlength="{{ muscle_group_max_length }}" placeholder="своя"
-             aria-label="Своя группа мышц" x-model="own">
-    </div>
-
-    {% comment %}
-      Снаряд — вторая ось справочника, и правила у неё те же, что у группы мышц.
-      Выбор так же возвращается на круг: hx-include шлёт весь контейнер, и без
-      selected_equipment следующая буква сбросила бы его.
-    {% endcomment %}
-    <div class="app-stepper-label">Снаряд</div>
-    <div class="app-chips mb-2" role="group" aria-label="Снаряд"
-         x-data="{ own: '{{ selected_equipment|escapejs }}' }">
-      {% for equipment in equipment_list %}
-        <input type="radio" name="equipment" id="new-equipment-{{ forloop.counter }}"
-               value="{{ equipment }}" class="app-chip-input"
-               {% if selected_equipment == equipment %}checked{% endif %} @change="own = ''">
-        <label class="app-chip" for="new-equipment-{{ forloop.counter }}">{{ equipment }}</label>
-      {% endfor %}
-      <input type="text" class="form-control app-group-input" name="equipment_own"
-             maxlength="{{ equipment_max_length }}" placeholder="свой"
-             aria-label="Свой снаряд" x-model="own">
-    </div>
+    {% include "workouts/_exercise_new_fields.html" %}
     <button type="submit" class="app-pick-row app-pick-create">+ Создать «{{ q }}»</button>
   </form>
 {% endif %}

@@ -554,6 +554,50 @@ class ExerciseQuickForm(forms.ModelForm):
         )
 
 
+class ExerciseCreateForm(ExerciseQuickForm):
+    """«Создать» в справочнике: то же, что быстрое создание, но совпавшее имя — ошибка.
+
+    В живом режиме ввод существующего названия значит «добавь его», а здесь
+    человек заводит упражнение осознанно, и молча открыть чужое по смыслу —
+    «Жим лёжа» вместо своего — было бы обманом. Администратор выбирает ещё и
+    «Своё / Общее»: общее упражнение (owner=NULL) увидят все.
+    """
+
+    SCOPE_OWN = "own"
+    SCOPE_GLOBAL = "global"
+
+    scope = forms.ChoiceField(
+        choices=[(SCOPE_OWN, "Своё"), (SCOPE_GLOBAL, "Общее")], required=False
+    )
+
+    def __init__(self, *args, user, **kwargs):
+        super().__init__(*args, user=user, **kwargs)
+        # Поля нет вовсе — подменой запроса общее упражнение не создать.
+        if not user.is_admin:
+            del self.fields["scope"]
+
+    @property
+    def is_global(self):
+        return self.cleaned_data.get("scope") == self.SCOPE_GLOBAL
+
+    def clean(self):
+        cleaned = super().clean()
+        name = cleaned.get("name")
+        # Владелец ставится до проверок модели (_post_clean после clean): иначе
+        # уникальность имени сверялась бы так, будто упражнение общее.
+        self.instance.owner = None if self.is_global else self.user
+        if name:
+            # Общее сверяется со всеми общими (их уникальность держит база), своё —
+            # со всем, что человек видит: общий «Жим лёжа» дублировать незачем.
+            if self.is_global:
+                same = Exercise.objects.global_only()
+            else:
+                same = Exercise.objects.visible_to(self.user)
+            if same.filter(name__iexact=name).exists():
+                self.add_error("name", "Такое упражнение уже есть в справочнике.")
+        return cleaned
+
+
 class XlsxUploadForm(forms.Form):
     """Книга Excel — с историей или со справочником. Здесь — только размер и расширение.
 

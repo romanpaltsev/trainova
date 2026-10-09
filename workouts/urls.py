@@ -8,6 +8,7 @@ urlpatterns = [
     path("dashboard/week/", views.DashboardWeekView.as_view(), name="dashboard_week"),
     path("dashboard/stats/", views.DashboardStatsView.as_view(), name="dashboard_stats"),
     path("exercises/", views.ExerciseListView.as_view(), name="exercise_list"),
+    path("exercises/new/", views.ExerciseCreateView.as_view(), name="exercise_create"),
     path("exercises/<int:pk>/", views.ExerciseDetailView.as_view(), name="exercise_detail"),
     path("exercises/<int:pk>/delete/", views.ExerciseDeleteView.as_view(), name="exercise_delete"),
     path(

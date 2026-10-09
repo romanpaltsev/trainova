@@ -13,7 +13,19 @@
 {% endcomment %}
 <div class="app-catalog" data-exercise-catalog>
 <div class="app-catalog-list">
-<h1 class="app-page-title">Упражнения</h1>
+{% comment %}
+  «Создать» — рядом с заголовком: справочник — место, где упражнения заводят
+  осознанно, а не только по ходу тренировки. Модалка — ExerciseCreateView.
+{% endcomment %}
+<div class="app-catalog-head">
+  <h1 class="app-page-title mb-0">Упражнения</h1>
+  <button type="button" class="btn btn-accent app-catalog-create"
+          hx-get="{% url 'exercise_create' %}" hx-target="#modal" hx-swap="innerHTML">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+    Создать
+  </button>
+</div>
 
 {% comment %}
   Две оси фильтров, каждая — своя прокручиваемая строка: сверху «Все/Мои» и
@@ -223,7 +235,8 @@
   {% if query or group_filter or equipment_filter %}
     {% include "includes/empty_state.html" with text="По этому запросу упражнений нет." %}
   {% elif mine_only %}
-    {% include "includes/empty_state.html" with title="Своих упражнений пока нет" text="Они появляются, когда в живом режиме вы добавляете упражнение с новым названием." cta_label="Все упражнения" cta_url=request.path %}
+    {% url 'exercise_create' as create_url %}
+    {% include "includes/empty_state.html" with title="Своих упражнений пока нет" text="Заведите своё упражнение — или добавьте новое название прямо в тренировке." cta_label="Создать упражнение" cta_hx_get=create_url %}
   {% else %}
     {% include "includes/empty_state.html" with text="Справочник пуст — запустите команду seed." %}
   {% endif %}

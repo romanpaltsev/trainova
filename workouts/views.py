@@ -31,6 +31,7 @@ from workouts.forms import (
     BodyMetricForm,
     CardioPartForm,
     CardioWorkoutForm,
+    ExerciseCreateForm,
     ExerciseQuickForm,
     SportForm,
     StrengthTimeForm,
@@ -2359,6 +2360,61 @@ class ExerciseEquipmentView(LoginRequiredMixin, View):
                 "exercise": exercise,
                 "can_edit_measurement": True,
                 **equipment_context(exercise, facets_for(request.user), saved=True),
+            },
+        )
+
+
+class ExerciseCreateView(LoginRequiredMixin, View):
+    """«Создать» в справочнике: модалка с названием, единицей, группой и снарядом.
+
+    Поля — те же, что у создания в живом режиме (_exercise_new_fields.html), но
+    совпавшее имя здесь ошибка формы (ExerciseCreateForm). Успех — HX-Redirect
+    на страницу нового упражнения: там его сразу видно и можно настроить шаг.
+    """
+
+    template_name = "workouts/_exercise_create_modal.html"
+
+    def get(self, request):
+        return self.modal(request, ExerciseCreateForm(user=request.user))
+
+    def post(self, request):
+        form = ExerciseCreateForm(request.POST, user=request.user)
+        if form.is_valid():
+            try:
+                with transaction.atomic():
+                    exercise = form.save()
+            except IntegrityError:
+                # Параллельная вкладка успела завести то же имя между проверкой и INSERT.
+                form.add_error("name", "Такое упражнение уже есть в справочнике.")
+            else:
+                url = reverse("exercise_detail", args=[exercise.pk])
+                return HttpResponse(headers={"HX-Redirect": url})
+        return self.modal(request, form)
+
+    def modal(self, request, form):
+        facets = facets_for(request.user)
+        data = form.data
+        chosen = data.get("measurement", "")
+        return render(
+            request,
+            self.template_name,
+            {
+                "form": form,
+                "name": data.get("name", ""),
+                "scope": data.get("scope") or ExerciseCreateForm.SCOPE_OWN,
+                "exercise_max_length": EXERCISE_NAME_MAX_LENGTH,
+                "measurement_choices": Exercise.Measurement.choices,
+                "selected_measurement": (
+                    chosen
+                    if chosen in Exercise.Measurement.values
+                    else Exercise.Measurement.WEIGHT_REPS
+                ),
+                "muscle_groups": facets.muscle_groups,
+                "selected_muscle_group": chosen_facet_value(request, "muscle_group").strip(),
+                "muscle_group_max_length": MUSCLE_GROUP_MAX_LENGTH,
+                "equipment_list": facets.equipment,
+                "selected_equipment": chosen_facet_value(request, "equipment").strip(),
+                "equipment_max_length": EQUIPMENT_MAX_LENGTH,
             },
         )
 

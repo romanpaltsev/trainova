@@ -1,0 +1,47 @@
+{% comment %}
+  «Создать» в справочнике (ExerciseCreateView). Успех — HX-Redirect на страницу
+  нового упражнения, ошибка — эта же модалка с подсказкой. Поля единицы, группы
+  и снаряда — общий партиал с созданием в живом режиме. «Своё / Общее» видит
+  только администратор: у остальных поля scope в форме нет вовсе.
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="exercise-create-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="exercise-create-title">Новое упражнение</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <form hx-post="{% url 'exercise_create' %}" hx-target="#modal" hx-swap="innerHTML"
+          hx-disabled-elt="find button[type=submit]">
+      {% csrf_token %}
+      <label class="form-label" for="exercise-create-name">Название</label>
+      <input type="text" name="name" id="exercise-create-name" class="form-control"
+             maxlength="{{ exercise_max_length }}" value="{{ name }}"
+             autocomplete="off" autofocus required>
+      {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+
+      {% if user.is_admin %}
+        <div class="app-stepper-label mt-3">Кому</div>
+        <div class="app-chips mb-2" role="group" aria-label="Кому видно упражнение">
+          <input type="radio" name="scope" id="new-scope-own" value="own" class="app-chip-input"
+                 {% if scope != "global" %}checked{% endif %}>
+          <label class="app-chip" for="new-scope-own">Своё</label>
+          <input type="radio" name="scope" id="new-scope-global" value="global" class="app-chip-input"
+                 {% if scope == "global" %}checked{% endif %}>
+          <label class="app-chip" for="new-scope-global">Общее — для всех</label>
+        </div>
+      {% endif %}
+
+      {% include "workouts/_exercise_new_fields.html" %}
+
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Создать</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>
