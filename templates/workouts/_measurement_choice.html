@@ -6,7 +6,7 @@
   Смена единицы не меняет записанные подходы: у каждого свой снимок единицы,
   поэтому старая история читается так, как её записали.
 {% endcomment %}
-<div id="measurement-choice" class="app-profile-block">
+<div id="measurement-choice" class="app-profile-block" data-summary="{{ exercise.get_measurement_display }}">
   <div class="app-profile-block-title">Измерение</div>
   {% if can_edit %}
     <div class="app-chips" role="group" aria-label="Измерение упражнения">

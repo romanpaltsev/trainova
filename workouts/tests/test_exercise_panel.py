@@ -146,3 +146,22 @@ def test_exercise_detail_highlights_catalog_in_nav(client, user):
     response = client.get(reverse("exercise_detail", args=[exercise.pk]))
 
     assert response.context["nav_active"] == "exercises"
+
+
+def test_settings_fold_once_the_exercise_has_history(client, user):
+    """Настройки свёрнуты у упражнения с историей: в зале открывают ради неё.
+
+    У нового раскрыты — настроить его и есть задача. Свёрнутая строка называет
+    текущие значения, чтобы не раскрывать ради одного взгляда.
+    """
+    fresh = ExerciseFactory(name="Новое", owner=user, muscle_group="Ноги", equipment="Тренажёр")
+    client.force_login(user)
+    url = reverse("exercise_detail", args=[fresh.pk])
+
+    assert 'class="app-settings is-open"' in client.get(url).content.decode()
+
+    StrengthSetFactory(workout=WorkoutFactory(user=user), exercise=fresh, set_number=1)
+    content = client.get(url).content.decode()
+
+    assert 'class="app-settings"' in content
+    assert "Вес × повторы · шаг 2,5 кг · Ноги · Тренажёр" in content

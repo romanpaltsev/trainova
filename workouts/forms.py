@@ -417,6 +417,32 @@ class CardioPartForm(forms.ModelForm):
         return part
 
 
+class FinishDurationForm(forms.Form):
+    """Сколько на самом деле длилась забытая тренировка.
+
+    Обычное завершение считает длительность от начала, и для тренировки,
+    которую забыли завершить вечером, это были бы сутки. Поэтому у забытой
+    (`Workout.is_stale`) завершение спрашивает время; дольше, чем прошло с
+    начала, она длиться не могла.
+    """
+
+    duration_hours, duration_minutes = duration_fields()
+
+    def __init__(self, *args, elapsed_min, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.elapsed_min = elapsed_min
+
+    def clean(self):
+        cleaned = super().clean()
+        if "duration_hours" in cleaned and "duration_minutes" in cleaned:
+            error = clean_duration(cleaned, required=True)
+            if error:
+                self.add_error(*error)
+            elif cleaned["duration_min"] > self.elapsed_min:
+                self.add_error("duration_hours", "Тренировка идёт меньше — проверьте время.")
+        return cleaned
+
+
 class StrengthTimeForm(forms.Form):
     """Когда была силовая тренировка и сколько длилась.
 

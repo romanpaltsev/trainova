@@ -17,6 +17,20 @@
   со степперами, справа отдых, план, выполненное, кардио), с 1200 три зоны.
   Порядок в разметке остаётся мобильным — колонки делает CSS.
 {% endcomment %}
+{% comment %}
+  Забытая тренировка: идёт часами, и часы в шапке её не выдают. Плашка стоит до
+  сетки экрана, а не в ней: у живого экрана на ПК ряды заданы явно, и новый
+  блок сбил бы их. Завершение у такой спрашивает настоящую длительность.
+{% endcomment %}
+{% if workout.is_stale %}
+  <div class="app-alert app-alert-info has-action" role="status">
+    <span>Тренировка идёт уже {{ workout.elapsed_display }} — похоже, её забыли завершить.</span>
+    <button type="button" class="app-alert-action"
+            hx-get="{% url 'workout_finish' workout.pk %}" hx-target="#modal" hx-swap="innerHTML">
+      Завершить
+    </button>
+  </div>
+{% endif %}
 <div class="app-live-screen">
 {% comment %}
   Полоса «связи нет». Пока её нет, неудачный запрос на этом экране проходит

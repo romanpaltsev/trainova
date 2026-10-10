@@ -3,7 +3,7 @@
   «Группа мышц»: у своих упражнений чипы уже принятых значений плюс поле для
   своего, у глобальных приглушённая строка (их правит только админ).
 {% endcomment %}
-<div id="equipment-choice" class="app-profile-block">
+<div id="equipment-choice" class="app-profile-block" data-summary="{{ exercise.equipment }}">
   <div class="app-profile-block-title">Снаряд</div>
   {% if can_edit %}
     <form hx-post="{% url 'exercise_equipment' exercise.pk %}"

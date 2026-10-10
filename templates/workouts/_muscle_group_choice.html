@@ -3,7 +3,7 @@
   принятых значений плюс поле для своей; у глобальных приглушённая строка, их
   правит только админ. Приём тот же, что у блока «Измерение».
 {% endcomment %}
-<div id="muscle-group-choice" class="app-profile-block">
+<div id="muscle-group-choice" class="app-profile-block" data-summary="{{ exercise.muscle_group }}">
   <div class="app-profile-block-title">Группа мышц</div>
   {% if can_edit %}
     <form hx-post="{% url 'exercise_muscle_group' exercise.pk %}"

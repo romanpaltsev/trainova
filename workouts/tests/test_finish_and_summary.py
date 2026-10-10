@@ -101,6 +101,92 @@ def test_finish_modal_shows_done_count(client, user):
     assert "Выполнено подходов: 2" in content
 
 
+# ---------- Забытая тренировка ----------
+
+
+def test_live_screen_flags_a_forgotten_workout(client, user):
+    """Идёт дольше четырёх часов — плашка «похоже, забыли» с «Завершить»."""
+    client.force_login(user)
+    fresh = active_started_ago(user, 3 * 60)
+
+    assert (
+        "забыли завершить"
+        not in client.get(reverse("workout_live", args=[fresh.pk])).content.decode()
+    )
+
+    fresh.started_at = timezone.now() - timedelta(hours=28)
+    fresh.save(update_fields=["started_at"])
+    content = client.get(reverse("workout_live", args=[fresh.pk])).content.decode()
+    assert "Тренировка идёт уже 28 ч — похоже, её забыли завершить." in content
+
+
+def test_forgotten_workout_asks_duration_with_estimate(client, user):
+    """Окно забытой подставляет время до последнего выполненного подхода."""
+    client.force_login(user)
+    workout = active_started_ago(user, 28 * 60)
+    StrengthSetFactory(
+        workout=workout,
+        set_number=1,
+        done=True,
+        done_at=workout.started_at + timedelta(minutes=64, seconds=10),
+    )
+
+    response = client.get(reverse("workout_finish", args=[workout.pk]))
+
+    assert response.context["form"].initial == {"duration_hours": 1, "duration_minutes": 5}
+    assert 'hx-post="' in response.content.decode()
+
+
+def test_forgotten_workout_is_finished_with_given_duration(client, user):
+    client.force_login(user)
+    workout = active_started_ago(user, 28 * 60)
+    StrengthSetFactory(workout=workout, set_number=1, done=True)
+    url = reverse("workout_finish", args=[workout.pk])
+
+    response = client.post(
+        url, {"duration_hours": "1", "duration_minutes": "10"}, HTTP_HX_REQUEST="true"
+    )
+
+    workout.refresh_from_db()
+    assert response.headers["HX-Redirect"] == reverse("workout_summary", args=[workout.pk])
+    assert workout.duration_min == 70
+
+
+def test_forgotten_empty_workout_is_discarded_without_asking(client, user):
+    """Нечего записывать — нечего и спрашивать: завершение просто стирает её."""
+    client.force_login(user)
+    workout = active_started_ago(user, 28 * 60)
+    StrengthSetFactory(workout=workout, set_number=1, done=False)
+
+    assert client.get(reverse("workout_finish", args=[workout.pk])).context["form"] is None
+    client.post(reverse("workout_finish", args=[workout.pk]))
+
+    assert not Workout.objects.filter(pk=workout.pk).exists()
+
+
+@pytest.mark.parametrize(
+    ("hours", "minutes", "error"),
+    [
+        ("", "", "Укажите длительность тренировки."),
+        ("6", "0", "Тренировка идёт меньше — проверьте время."),
+    ],
+)
+def test_forgotten_workout_needs_a_sane_duration(client, user, hours, minutes, error):
+    client.force_login(user)
+    workout = active_started_ago(user, 5 * 60)
+    StrengthSetFactory(workout=workout, set_number=1, done=True)
+
+    response = client.post(
+        reverse("workout_finish", args=[workout.pk]),
+        {"duration_hours": hours, "duration_minutes": minutes},
+        HTTP_HX_REQUEST="true",
+    )
+
+    workout.refresh_from_db()
+    assert error in response.content.decode()
+    assert workout.duration_min is None
+
+
 def test_summary_shows_exercises_and_total_tonnage(client, user):
     client.force_login(user)
     workout = WorkoutFactory(user=user, duration_min=62)

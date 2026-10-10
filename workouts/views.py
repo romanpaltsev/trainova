@@ -5,6 +5,7 @@
 """
 
 import io
+import math
 from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
@@ -43,6 +44,7 @@ from workouts.forms import (
     CatalogRequestForm,
     ExerciseCreateForm,
     ExerciseQuickForm,
+    FinishDurationForm,
     MachineCreateForm,
     MachineNameForm,
     SportForm,
@@ -1689,10 +1691,22 @@ class WorkoutFinishView(LoginRequiredMixin, View):
                 summary_url = reverse("workout_summary", args=[workout.pk])
                 return HttpResponse(headers={"HX-Redirect": summary_url})
             return redirect("workout_summary", pk=workout.pk)
+        form = None
+        if asks_duration(workout):
+            form = FinishDurationForm(
+                elapsed_min=workout.elapsed_min, initial=finish_estimate(workout)
+            )
+        return self.render_modal(request, workout, form)
+
+    def render_modal(self, request, workout, form):
         return render(
             request,
             "workouts/_finish_modal.html",
-            {"workout": workout, "done_count": workout.sets.filter(done=True).count()},
+            {
+                "workout": workout,
+                "done_count": workout.sets.filter(done=True).count(),
+                "form": form,
+            },
         )
 
     def post(self, request, pk):
@@ -1700,6 +1714,15 @@ class WorkoutFinishView(LoginRequiredMixin, View):
         if workout.is_finished:
             # Даблтап или кнопка «назад»: тренировка уже завершена.
             return redirect("workout_summary", pk=workout.pk)
+        duration = max(1, min(MAX_DURATION_HOURS * 60, workout.elapsed_min))
+        if asks_duration(workout):
+            # Забытая: время с начала — это сутки, а не тренировка. Окно с
+            # ошибкой возвращается в #modal (форма шлёт hx-post), успех — тем же
+            # редиректом, что и без неё, только через HX-Redirect.
+            form = FinishDurationForm(request.POST, elapsed_min=workout.elapsed_min)
+            if not form.is_valid():
+                return self.render_modal(request, workout, form)
+            duration = form.cleaned_data["duration_min"]
         workout.sets.filter(done=False).delete()
         # Упражнение, которое так и не сделали, уходит вместе с плановыми
         # подходами — и его заметка тоже.
@@ -1710,14 +1733,46 @@ class WorkoutFinishView(LoginRequiredMixin, View):
         if not workout.sets.exists() and not workout.cardio_parts.exists():
             workout.delete()
             messages.info(request, "Тренировка не записана: нет ни подходов, ни кардио.")
-            return redirect("workout_history")
-        workout.duration_min = max(1, min(MAX_DURATION_HOURS * 60, workout.elapsed_min))
+            return finish_redirect(request, reverse("workout_history"))
+        workout.duration_min = duration
         workout.save(update_fields=["duration_min"])
         messages.success(request, "Тренировка записана.")
         if not workout.sets.exists():
             # Подходов нет — дом такой тренировки форма кардио, а не итог.
-            return redirect("workout_edit", pk=workout.pk)
-        return redirect("workout_summary", pk=workout.pk)
+            return finish_redirect(request, reverse("workout_edit", args=[workout.pk]))
+        return finish_redirect(request, reverse("workout_summary", args=[workout.pk]))
+
+
+def asks_duration(workout):
+    """Спрашивать ли длительность при завершении — только у забытой, которую запишут.
+
+    Без выполненных подходов и кардио тренировка при завершении стирается, и
+    обязательное поле времени только мешало бы её выбросить.
+    """
+    return workout.is_stale and (
+        workout.sets.filter(done=True).exists() or workout.cardio_parts.exists()
+    )
+
+
+def finish_redirect(request, url):
+    """Переход после завершения: из окна забытой (htmx) — HX-Redirect, иначе 302."""
+    if request.headers.get("HX-Request"):
+        return HttpResponse(headers={"HX-Redirect": url})
+    return redirect(url)
+
+
+def finish_estimate(workout):
+    """Подсказка длительности забытой тренировки — до последнего выполненного подхода.
+
+    Меток нет (ничего не выполнили или подходы записаны без них) — поле пустое:
+    угадывать длительность не из чего.
+    """
+    last = workout.sets.filter(done_at__isnull=False).aggregate(last=Max("done_at"))["last"]
+    if last is None:
+        return {}
+    minutes = max(1, math.ceil((last - workout.started_at).total_seconds() / 60))
+    hours, minutes = divmod(minutes, 60)
+    return {"duration_hours": hours or None, "duration_minutes": minutes or None}
 
 
 class WorkoutSummaryView(LoginRequiredMixin, View):

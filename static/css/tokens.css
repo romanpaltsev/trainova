@@ -30,6 +30,11 @@
   --app-sport-bike: #eb6834;
   --app-sport-run: #1baf7a;
   --app-sport-ski: #eda100;
+  /* Остальные виды спорта (свои и новые общие) — слоты Sport.palette */
+  --app-sport-extra-1: #8a5cd8;
+  --app-sport-extra-2: #d4407e;
+  --app-sport-extra-3: #1792b5;
+  --app-sport-extra-4: #9c6b3c;
 
   --app-shadow-card: 0 1px 2px rgba(15, 23, 32, 0.04);
   /* Тень шторки — влево, на таблицу под ней */
@@ -65,6 +70,10 @@
   --app-sport-bike: #d95926;
   --app-sport-run: #199e70;
   --app-sport-ski: #c98500;
+  --app-sport-extra-1: #9d7bea;
+  --app-sport-extra-2: #e0619a;
+  --app-sport-extra-3: #2ba6c8;
+  --app-sport-extra-4: #b58658;
 
   --app-shadow-card: none;
   --app-shadow-drawer: -8px 0 24px rgba(0, 0, 0, 0.45);

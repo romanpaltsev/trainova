@@ -94,3 +94,38 @@ def test_anonymous_cannot_create_sport(client):
 
     assert response.status_code == 302
     assert not Sport.objects.filter(name="Гребля").exists()
+
+
+# ---------- Цвет ----------
+
+
+def test_own_sports_get_distinct_colors_not_the_run_color(user, other_user):
+    """Свой кардио-вид раньше красился цветом бега и был неотличим от него."""
+    SportFactory(name="Бег", category=Sport.Category.CARDIO, owner=None)
+    rowing = SportFactory(name="Гребля", category=Sport.Category.CARDIO, owner=user)
+    swim = SportFactory(name="Плавание", category=Sport.Category.CARDIO, owner=user)
+    crossfit = SportFactory(name="Кроссфит", category=Sport.Category.STRENGTH, owner=user)
+    theirs = SportFactory(name="Йога", category=Sport.Category.CARDIO, owner=other_user)
+
+    assert [rowing.color_key, swim.color_key, crossfit.color_key] == [
+        "extra-1",
+        "extra-2",
+        "extra-3",
+    ]
+    # Чужие виды на выбор слота не влияют: человек их не видит.
+    assert theirs.color_key == "extra-1"
+
+
+def test_known_names_keep_their_colors(user):
+    own_run = SportFactory(name="бег", category=Sport.Category.CARDIO, owner=user)
+
+    assert own_run.color_key == "run"
+    assert own_run.palette is None
+
+
+def test_own_sport_avoids_slots_of_shared_ones(user):
+    SportFactory(name="Плавание", category=Sport.Category.CARDIO, owner=None)
+
+    rowing = SportFactory(name="Гребля", category=Sport.Category.CARDIO, owner=user)
+
+    assert rowing.color_key == "extra-2"

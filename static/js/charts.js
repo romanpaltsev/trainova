@@ -21,6 +21,10 @@ window.appCharts = (function () {
         bike: cssVar("--app-sport-bike"),
         run: cssVar("--app-sport-run"),
         ski: cssVar("--app-sport-ski"),
+        "extra-1": cssVar("--app-sport-extra-1"),
+        "extra-2": cssVar("--app-sport-extra-2"),
+        "extra-3": cssVar("--app-sport-extra-3"),
+        "extra-4": cssVar("--app-sport-extra-4"),
       },
     };
   }

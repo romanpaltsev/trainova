@@ -12,9 +12,10 @@ import pytest
 from django.urls import reverse
 from django.utils import timezone
 
-from workouts.models import CardioPart, Sport, Workout
+from workouts.models import CardioPart, Exercise, Sport, Workout
 from workouts.tests.factories import (
     CardioPartFactory,
+    ExerciseFactory,
     SportFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -323,6 +324,59 @@ def test_mixed_workout_appears_once_in_history(client, user, strength, run):
     content = client.get(f"{reverse('workout_history')}?sport={run.pk}").content.decode()
 
     assert content.count(f'id="workout-{mixed.pk}"') == 1
+
+
+def test_mixed_card_names_both_parts_and_shows_distance(client, user, strength, run):
+    """Карточка смешанной: «Грудь + Бег», тоннаж и дистанция, «Повторить», итог."""
+    chest = ExerciseFactory(name="Жим лёжа", muscle_group="Грудь")
+    mixed = WorkoutFactory(user=user, sport=strength, duration_min=60)
+    StrengthSetFactory(workout=mixed, exercise=chest, set_number=1, weight_kg=100, reps=5)
+    CardioPartFactory(workout=mixed, sport=run, duration_min=20, distance_km=Decimal("3.5"))
+    CardioPartFactory(workout=mixed, sport=run, duration_min=10, distance_km=Decimal("1.5"))
+    client.force_login(user)
+
+    content = client.get(reverse("workout_history")).content.decode()
+
+    assert "Грудь + Бег" in content
+    assert ">5 км<" in content
+    assert "500 кг" in content
+    assert reverse("workout_summary", args=[mixed.pk]) in content
+    assert reverse("workout_repeat", args=[mixed.pk]) in content
+
+
+def test_cardio_hosted_workout_with_sets_opens_its_summary(client, user, strength, run):
+    """Экран выбирается содержимым: подходы есть — карточка ведёт на итог."""
+    ride = WorkoutFactory(user=user, sport=run, duration_min=60)
+    StrengthSetFactory(workout=ride, set_number=1)
+    CardioPartFactory(workout=ride, sport=run, duration_min=60, distance_km=10)
+    client.force_login(user)
+
+    content = client.get(reverse("workout_history")).content.decode()
+
+    assert reverse("workout_summary", args=[ride.pk]) in content
+    assert reverse("workout_edit", args=[ride.pk]) not in content
+
+
+def test_dashboard_row_labels_hold_time(client, user, strength, run):
+    """Удержание в строке — с подписью, иначе «0:49 · 1:45» — две длительности."""
+    plank = ExerciseFactory(name="Планка", measurement=Exercise.Measurement.TIME)
+    mixed = WorkoutFactory(user=user, sport=strength, duration_min=49)
+    StrengthSetFactory(
+        workout=mixed,
+        exercise=plank,
+        set_number=1,
+        measurement=Exercise.Measurement.TIME,
+        weight_kg=0,
+        reps=0,
+        duration_sec=105,
+    )
+    CardioPartFactory(workout=mixed, sport=run, duration_min=30, distance_km=Decimal("7.1"))
+    client.force_login(user)
+
+    content = client.get(reverse("dashboard")).content.decode()
+
+    assert "удержание\u00a01:45 · 7,1\u00a0км" in content
+    assert "Смешанная" in content
 
 
 def test_sport_used_only_as_a_part_is_not_called_unused(client, user, strength):

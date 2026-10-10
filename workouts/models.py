@@ -28,10 +28,18 @@ GLOBAL_SPORT_COLORS = {
     "бег": "run",
     "лыжи": "ski",
 }
+# Цвета остальных видов спорта — токены --app-sport-extra-1..N (Sport.palette).
+SPORT_PALETTE_SIZE = 4
 
 
 # Границы и шаг отдыха: одни и те же для значения по умолчанию в профиле
 # (User.rest_seconds_default) и для отдыха отдельной тренировки (Workout.rest_seconds).
+# Через сколько идущая тренировка считается забытой: силовая дольше четырёх
+# часов почти не бывает, а вот незавершённая вечером — бывает. Завершение такой
+# спрашивает настоящую длительность, иначе в историю легла бы «тренировка» на
+# сутки (её длительность — время с начала, обрезанное до MAX_DURATION_HOURS).
+STALE_WORKOUT_MINUTES = 4 * 60
+
 REST_MIN_SECONDS = 15
 REST_MAX_SECONDS = 600
 REST_DELTAS = {"-15", "15"}
@@ -149,6 +157,12 @@ class Sport(CatalogItem):
 
     name = models.CharField("название", max_length=60)
     category = models.CharField("категория", max_length=10, choices=Category)
+    # Слот дополнительной палитры (--app-sport-extra-N) у вида спорта вне
+    # четвёрки GLOBAL_SPORT_COLORS. Без него свой «Гребля» красился цветом бега
+    # и в чипах, ленте и графике был неотличим от бега. Слот выдаётся один раз,
+    # при создании (save), а не считается из pk: у двух своих видов спорта
+    # остаток от деления совпадал бы через раз.
+    palette = models.PositiveSmallIntegerField("цвет", null=True, blank=True, editable=False)
 
     class Meta(CatalogItem.Meta):
         abstract = False
@@ -172,17 +186,44 @@ class Sport(CatalogItem):
             ),
         ]
 
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.palette is None and not self.known_color:
+            self.palette = free_palette_slot(self.owner_id)
+        super().save(*args, **kwargs)
+
     @property
     def is_strength(self):
         return self.category == self.Category.STRENGTH
 
     @property
+    def known_color(self):
+        return GLOBAL_SPORT_COLORS.get(self.name.strip().lower())
+
+    @property
     def color_key(self):
-        """Ключ цветового токена --app-sport-*; для личных видов — по категории."""
-        known = GLOBAL_SPORT_COLORS.get(self.name.strip().lower())
-        if known:
-            return known
+        """Ключ цветового токена --app-sport-*: свой у четвёрки, иначе слот палитры."""
+        if self.known_color:
+            return self.known_color
+        if self.palette is not None:
+            return f"extra-{self.palette % SPORT_PALETTE_SIZE + 1}"
+        # Запись, созданная в обход save (bulk_create): прежнее правило.
         return "strength" if self.is_strength else "run"
+
+
+def free_palette_slot(owner_id):
+    """Наименее занятый слот среди видов спорта, которые человек видит вместе.
+
+    Свои виды видны рядом с общими, поэтому у своего учитываются и общие; у
+    общего — только общие. При равенстве — меньший номер: первые свои получают
+    разные цвета, повторы начинаются только после SPORT_PALETTE_SIZE штук.
+    """
+    visible = (
+        Q(owner__isnull=True) if owner_id is None else Q(owner__isnull=True) | Q(owner_id=owner_id)
+    )
+    used = Counter(
+        Sport.objects.filter(visible, palette__isnull=False).values_list("palette", flat=True)
+    )
+    return min(range(SPORT_PALETTE_SIZE), key=lambda slot: (used[slot], slot))
 
 
 class Exercise(CatalogItem):
@@ -765,6 +806,24 @@ class Workout(models.Model):
         return int((timezone.now() - self.started_at).total_seconds() // 60)
 
     @property
+    def is_stale(self):
+        """Идёт так долго, что её, похоже, забыли завершить."""
+        return (
+            self.started_at is not None
+            and self.duration_min is None
+            and self.elapsed_min >= STALE_WORKOUT_MINUTES
+        )
+
+    @property
+    def elapsed_display(self):
+        """Сколько идёт тренировка — «5 ч» или «2 дн»: для плашки забытой."""
+        hours = self.elapsed_min // 60
+        if hours < 48:
+            return f"{hours} ч"
+        days = hours // 24
+        return f"{days} {ru_plural(days, 'день', 'дня', 'дней')}"
+
+    @property
     def workload(self):
         """Третья метрика силовой карточки: тоннаж, повторы или удержание.
 
@@ -784,6 +843,18 @@ class Workout(models.Model):
         if seconds:
             return {"label": "удержание", "value": rest_display(seconds)}
         return {"label": "тоннаж", "value": NO_VALUE}
+
+    @property
+    def cardio_distance_display(self):
+        """Сумма дистанций кардио-частей как «7,1» или None, если её не мерили.
+
+        Третья метрика карточки смешанной тренировки. Части ждём prefetch'ем
+        (`cardio_parts_prefetch`), как и всё в ленте.
+        """
+        distances = [part.distance for part in self.cardio_parts.all() if part.distance]
+        if not distances:
+            return None
+        return decimal_display(sum(distances))
 
     @property
     def effective_rest_seconds(self):

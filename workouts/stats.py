@@ -580,10 +580,18 @@ def workout_row(workout, today):
     # тоннаж, и дистанции частей. Пустой список невозможен — тренировка без
     # подходов и без частей не записывается.
     pieces = []
-    workload = workout.workload["value"]
-    if workload != NO_VALUE:
-        pieces.append(workload)
-    pieces += [f"{part.distance_display} км" for part in workout.cardio_parts.all()]
+    workload = workout.workload
+    if workload["value"] != NO_VALUE:
+        # Удержание пишется как время, и «0:49 · 1:45» читалось бы двумя
+        # длительностями — ему нужна подпись. У тоннажа и повторов единица
+        # уже в значении.
+        if workload["label"] == "удержание":
+            pieces.append(f"удержание\u00a0{workload['value']}")
+        else:
+            pieces.append(workload["value"])
+    # Неразрывный пробел: на 375px строка переносится, и «км» не должно
+    # уезжать от числа на следующую строку.
+    pieces += [f"{part.distance_display}\u00a0км" for part in workout.cardio_parts.all()]
     metric = " · ".join(pieces) if pieces else NO_VALUE
     # Подходы есть — значит, у тренировки есть силовая часть: Sum по пустому
     # джойну даёт None, а по подходам планки — ноль, но не None.
@@ -787,12 +795,32 @@ def attach_muscle_groups(user, workouts):
 
     Отдельная функция, а не свойство модели: свойство читало бы подходы у каждой
     тренировки и превращало ленту в N+1.
+
+    У смешанной к группам дописываются виды спорта её кардио-частей — «Грудь +
+    Бег»: без них заезд на 34 км в ленте назывался бы «Пресс». Только когда
+    части уже забраны prefetch'ем (лента, «Последние»): у одиночного экрана
+    тренировки части стоят отдельным блоком, а лишний запрос сдвинул бы бюджет.
     """
     workouts = list(workouts)
     labels = muscle_groups_by_workout(user, [workout.pk for workout in workouts])
     for workout in workouts:
-        workout.muscle_groups = labels.get(workout.pk, "")
+        label = labels.get(workout.pk, "")
+        cardio = cardio_sport_names(workout)
+        if label and cardio:
+            label = f"{label} + {cardio}"
+        workout.muscle_groups = label
     return workouts
+
+
+def cardio_sport_names(workout):
+    """Виды спорта кардио-частей через «·» в порядке ввода — или "" без prefetch."""
+    if "cardio_parts" not in getattr(workout, "_prefetched_objects_cache", {}):
+        return ""
+    names = []
+    for part in workout.cardio_parts.all():
+        if part.sport.name not in names:
+            names.append(part.sport.name)
+    return " · ".join(names)
 
 
 def exercise_positions(user, workout_ids, exercise):

@@ -11,7 +11,7 @@
   прежнее значение поля «свой» — а оно перебивает чип, и выбор не применялся бы.
 {% endcomment %}
 {% if shows_weight_step %}
-<div id="weight-step-choice" class="app-profile-block">
+<div id="weight-step-choice" class="app-profile-block" data-summary="шаг {{ weight_step_display }} кг">
   <div class="app-profile-block-title">Шаг веса</div>
   <div class="app-chips" role="group" aria-label="Шаг веса">
     {% for choice in weight_step_choices %}

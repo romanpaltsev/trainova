@@ -50,15 +50,41 @@
   {% endif %}
 
   {% comment %}
-    Обёртка обязана быть отдельным элементом: каждый блок настроек свопает сам
-    себя по outerHTML, и контейнер ряда не должен участвовать в свопе.
+    Настройки на телефоне свёрнуты, если упражнение уже делали: их трогают
+    редко, а развёрнутые они занимали полтора экрана до истории и графика, ради
+    которых страницу открывают в зале. У нового упражнения раскрыты — настроить
+    его и есть задача. Свёрнутая строка показывает текущие значения: их собирает
+    Alpine из data-summary блоков после каждого свопа (блоки свопают сами себя),
+    а до него стоит та же строка с сервера. С 768 переключателя нет и настройки
+    всегда видны — там это компактный ряд.
+
+    Обёртка ряда обязана быть отдельным элементом: каждый блок настроек свопает
+    сам себя по outerHTML, и контейнер ряда не должен участвовать в свопе.
   {% endcomment %}
-  <div class="app-settings-row">
-    {% include "workouts/_measurement_choice.html" %}
-    {% include "workouts/_weight_step_choice.html" %}
-    {% include "workouts/_muscle_group_choice.html" %}
-    {% include "workouts/_equipment_choice.html" %}
-  </div>
+  <section class="app-settings{% if not history %} is-open{% endif %}"
+           x-data="{ open: {{ history|yesno:'false,true' }}, summary: '' }"
+           x-init="summary = [...$el.querySelectorAll('[data-summary]')].map(b => b.dataset.summary).filter(Boolean).join(' · ')"
+           @htmx:after-settle="summary = [...$el.querySelectorAll('[data-summary]')].map(b => b.dataset.summary).filter(Boolean).join(' · ')"
+           :class="{ 'is-open': open }">
+    <button type="button" class="app-settings-toggle" @click="open = !open"
+            aria-controls="exercise-settings" :aria-expanded="open.toString()"
+            aria-expanded="{{ history|yesno:'false,true' }}">
+      <span class="app-settings-toggle-text">
+        <span class="app-section-title app-machines-summary mb-0">
+          Настройки
+          <svg class="app-machines-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </span>
+        <span class="app-settings-summary" x-text="summary">{{ exercise.get_measurement_display }}{% if shows_weight_step %} · шаг {{ weight_step_display }} кг{% endif %}{% if exercise.muscle_group %} · {{ exercise.muscle_group }}{% endif %}{% if exercise.equipment %} · {{ exercise.equipment }}{% endif %}</span>
+      </span>
+    </button>
+    <div class="app-settings-row" id="exercise-settings">
+      {% include "workouts/_measurement_choice.html" %}
+      {% include "workouts/_weight_step_choice.html" %}
+      {% include "workouts/_muscle_group_choice.html" %}
+      {% include "workouts/_equipment_choice.html" %}
+    </div>
+  </section>
 
   {% if chart.values|length == 1 %}
     {% include "includes/empty_state.html" with text="График появится со второй тренировки с этим упражнением." extra_class="app-empty-slim" %}

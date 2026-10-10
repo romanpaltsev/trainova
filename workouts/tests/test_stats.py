@@ -320,7 +320,7 @@ def test_latest_workouts_metric_for_strength_and_cardio(user):
     rows = stats.latest_workouts(user, today=TODAY)
 
     assert rows[0]["meta"] == "сегодня · 1:02 · 800 кг"
-    assert rows[1]["meta"] == "вчера · 1:24 · 32,4 км"
+    assert rows[1]["meta"] == "вчера · 1:24 · 32,4\u00a0км"
 
 
 def test_latest_workouts_ignore_other_users_workouts(user, other_user):

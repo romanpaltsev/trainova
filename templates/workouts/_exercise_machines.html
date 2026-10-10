@@ -31,7 +31,15 @@
           </button>
         {% endfor %}
       </div>
-      <a class="app-link d-inline-block mt-2" href="{% url 'my_machines' %}">Мои тренажёры</a>
+      {% comment %}
+        Акцентом и со стрелкой: серая полужирная подпись между «Тренажёрами» и
+        «Историей подходов» читалась как заголовок ещё одной секции.
+      {% endcomment %}
+      <a class="app-link app-link-accent app-link-go" href="{% url 'my_machines' %}">
+        Мои тренажёры
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      </a>
     {% else %}
       {% url 'my_locations' as locations_url %}
       {% include "includes/empty_state.html" with text="Тренажёр указывается для места тренировки — сначала добавьте зал." cta_label="Мои места" cta_url=locations_url extra_class="app-empty-slim" %}

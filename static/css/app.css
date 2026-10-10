@@ -855,6 +855,16 @@ a.btn {
 
 .app-link-accent { color: var(--app-accent-text); }
 
+/* Ссылка «перейти дальше» под списком: строчным текстом и стрелкой, чтобы не
+   спорить с заголовками секций. Высота — тач-таргет. */
+.app-link-go {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  min-height: var(--app-tap-target);
+  font-size: 0.875rem;
+}
+
 /* Ссылка-действие, которое открывает окно, — кнопка с видом .app-link. */
 .app-link-button {
   padding: 0;
@@ -1732,6 +1742,43 @@ a.btn {
    читалось как отдельная форма, а на 1200px ещё и задавало ширину колонки. */
 .app-settings-row .app-group-input { width: 9rem; }
 
+/* Настройки упражнения на телефоне сворачиваются (см. _exercise_detail_body):
+   кнопка — заголовок секции со строкой текущих значений, как «Тренажёры». */
+.app-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  width: 100%;
+  min-height: var(--app-tap-target);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+
+.app-settings-toggle-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app-settings-summary {
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: 0.875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Заголовок с шевроном — тот же, что у «Тренажёров»; высоту тач-таргета даёт
+   кнопка целиком, а не строка заголовка. */
+.app-settings-toggle .app-machines-summary { min-height: 0; }
+.app-settings.is-open .app-settings-toggle { margin-bottom: var(--app-space-2); }
+.app-settings.is-open .app-machines-chevron { transform: rotate(180deg); }
+.app-settings:not(.is-open) > .app-settings-row { display: none; }
+
 /* ---------- Дашборд ---------- */
 
 .app-dash-head {
@@ -2150,6 +2197,25 @@ a.btn {
   flex: 0 0 auto;
   color: var(--app-text-secondary);
   font-weight: 400;
+}
+
+/* Число того, что ждёт действия (у «Админки»: новые обращения и заявки), —
+   акцентной плашкой, а не цифрой: серым «3» оно читалось как количество
+   записей рядом с «Мои места 2». */
+.app-count-badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 var(--app-space-2);
+  border-radius: var(--app-radius-pill);
+  background-color: var(--app-accent);
+  color: var(--app-on-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .app-row.is-danger,
@@ -3218,7 +3284,11 @@ a.btn {
      графика над ней, и правый край экрана становился рваным. Отступ между
      рядами дают сами блоки (их padding), поэтому зазора между рядами нет:
      с ним второй ряд отъезжал на 48px от первого. */
-  .app-settings-row {
+  /* С 768 настройки — компактный ряд, сворачивать нечего: переключателя нет,
+     ряд виден и у «свёрнутых» (класс состояния остаётся от телефона). */
+  .app-settings-toggle { display: none; }
+  .app-settings-row,
+  .app-settings:not(.is-open) > .app-settings-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, max-content));
     column-gap: var(--app-space-6);
@@ -3252,7 +3322,7 @@ a.btn {
   .app-exercise > .app-screen-head { order: 0; }
   .app-exercise > .app-chart-card,
   .app-exercise > .app-empty { order: 1; }
-  .app-exercise > .app-settings-row { order: 2; }
+  .app-exercise > .app-settings { order: 2; }
   /* Сводка по местам — над длинной историей подходов. Своей секцией, а не
      заголовком и списком по отдельности: без order они уехали бы к шапке, а
      заголовок остался бы рядом с «Историей подходов». */
@@ -3786,9 +3856,8 @@ a.btn {
   /* У «Админки» в развёрнутой панели вместо точки — число новых обращений. */
   :root:not([data-sidebar-collapsed]) .app-side-dot-rail { display: none; }
   :root:not([data-sidebar-collapsed]) .app-side-count {
+    display: inline-flex;
     margin-left: auto;
-    color: var(--app-text-secondary);
-    font-size: 0.75rem;
   }
   :root:not([data-sidebar-collapsed]) .app-sidebar-group {
     display: block;
@@ -3963,7 +4032,7 @@ a.btn {
      и сжимаемые — у своего упражнения чипы групп и снарядов переносятся
      внутри блока, а не выталкивают его за край. Шторка — не прямой ребёнок
      main, её правило не задевает. */
-  :where(.app-main) > .app-exercise > .app-settings-row {
+  :where(.app-main) > .app-exercise > .app-settings > .app-settings-row {
     grid-template-columns: repeat(4, minmax(0, max-content));
   }
 
