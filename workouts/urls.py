@@ -12,6 +12,11 @@ urlpatterns = [
     path("exercises/<int:pk>/", views.ExerciseDetailView.as_view(), name="exercise_detail"),
     path("exercises/<int:pk>/delete/", views.ExerciseDeleteView.as_view(), name="exercise_delete"),
     path(
+        "exercises/<int:pk>/make-global/",
+        views.MakeGlobalView.as_view(),
+        name="exercise_make_global",
+    ),
+    path(
         "exercises/<int:pk>/measurement/",
         views.ExerciseMeasurementView.as_view(),
         name="exercise_measurement",
@@ -47,6 +52,11 @@ urlpatterns = [
         "profile/machines/new/<str:kind>/",
         views.MachineCreateView.as_view(),
         name="machine_create",
+    ),
+    path(
+        "profile/machines/<str:kind>/<int:pk>/make-global/",
+        views.MakeGlobalView.as_view(),
+        name="machine_make_global",
     ),
     path(
         "profile/machines/<str:kind>/<int:pk>/rename/",

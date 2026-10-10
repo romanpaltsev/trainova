@@ -1,0 +1,37 @@
+{% comment %}
+  «Сделать общим» у администратора (MakeGlobalView): подтверждение перевода
+  своей записи в общий справочник. error — общая с тем же названием уже есть
+  (twin_url — ссылка на неё, если у записи есть своя страница).
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="make-global-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="make-global-title">Сделать общим</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="mb-2">
+      {% if kind == "exercise" %}
+        Упражнение «{{ item.name }}» станет общим — его увидят все. Ваши тренировки с ним останутся как есть.
+      {% elif kind == "brand" %}
+        Производитель «{{ item.name }}» станет общим — его увидят все. Ваши модели этого производителя останутся вашими.
+      {% else %}
+        Модель «{{ item.name }}» станет общей — её увидят все.{% if not item.brand.is_global %} Вместе с ней общим станет производитель «{{ item.brand.name }}».{% endif %}
+      {% endif %}
+    </p>
+    <p class="app-queue-hint mb-0">Вернуть запись в свои потом нельзя: ею смогут пользоваться другие.</p>
+    {% if error %}
+      <div class="app-alert app-alert-danger mt-3 mb-0">
+        {{ error }}{% if twin_url %} <a href="{{ twin_url }}">Открыть его</a>{% endif %}
+      </div>
+    {% endif %}
+    <form hx-post="{{ post_url }}" hx-target="#modal" hx-swap="innerHTML"
+          hx-disabled-elt="find button" class="d-flex gap-2 mt-3">
+      <button type="submit" class="btn btn-accent flex-fill"{% if error %} disabled{% endif %}>Сделать общим</button>
+      <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+    </form>
+  </div>
+</div>

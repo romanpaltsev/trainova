@@ -34,7 +34,7 @@
   <h2 class="app-section-title" id="machines-own-title">Свои производители</h2>
   <div class="app-rows app-rows-board">
     {% for brand in own_brands %}
-      {% include "workouts/_machine_brand_group.html" %}
+      {% include "workouts/_machine_brand_group.html" with share=share_action %}
     {% empty %}
       {% url 'machine_create' 'brand' as create_url %}
       {% include "includes/empty_state.html" with text="Своих производителей пока нет." cta_label="Добавить производителя" cta_hx_get=create_url extra_class="app-empty-slim" %}
@@ -49,7 +49,7 @@
       {% for brand, models in own_models_of_shared %}
         <div class="app-machine-group">
           {% for model in models %}
-            {% include "workouts/_machine_item_row.html" with item=model kind="model" uses=model.uses_label meta=brand.name only %}
+            {% include "workouts/_machine_item_row.html" with item=model kind="model" uses=model.uses_label meta=brand.name share=share_action only %}
           {% endfor %}
           {% include "workouts/_machine_add_model.html" %}
         </div>

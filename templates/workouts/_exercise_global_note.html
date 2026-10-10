@@ -1,11 +1,34 @@
 {% comment %}
-  Администратору на общем упражнении: правки на этой странице увидят все, а
-  удалить его можно, только пока его нет ни в одной тренировке (ExerciseDeleteView
-  проверит и скажет). Остальным строки нет — у них общее упражнение не правится.
+  Строки под заголовком упражнения:
+  — администратору на общем: правки на этой странице увидят все, а удалить его
+    можно, только пока его нет ни в одной тренировке (ExerciseDeleteView
+    проверит и скажет);
+  — администратору на своём: «Сделать общим» (MakeGlobalView);
+  — у общего, пришедшего заявкой: автор. Почту видит только администратор,
+    сам автор — «Вы добавили», остальные — «участником» без имени: пользователи
+    друг друга не видят (пункт 7 CLAUDE.md).
 {% endcomment %}
 {% if can_edit and exercise.is_global %}
   <div class="app-queue-hint app-exercise-global-note">
     Общее упражнение — изменения увидят все.
     <a class="app-link" href="{% url 'exercise_delete' exercise.pk %}">Удалить</a>
+  </div>
+{% elif can_edit and user.is_admin %}
+  <div class="app-queue-hint app-exercise-global-note">
+    Своё упражнение.
+    <button type="button" class="app-link app-link-button"
+            hx-get="{% url 'exercise_make_global' exercise.pk %}"
+            hx-target="#modal" hx-swap="innerHTML">Сделать общим</button>
+  </div>
+{% endif %}
+{% if exercise.is_global and exercise.contributed_by_id %}
+  <div class="app-queue-hint app-exercise-global-note">
+    {% if exercise.contributed_by_id == user.pk %}
+      Вы добавили это упражнение в общий справочник.
+    {% elif user.is_admin %}
+      Добавлено участником: {{ exercise.contributed_by.email }}
+    {% else %}
+      Добавлено участником.
+    {% endif %}
   </div>
 {% endif %}

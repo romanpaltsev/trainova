@@ -123,6 +123,25 @@ class CatalogItem(models.Model):
         return self.owner_id is None
 
 
+def contributor_field():
+    """Автор общей записи, пришедшей заявкой пользователя (CatalogRequest).
+
+    Пусто — запись завёл администратор, она ещё своя или автор удалил аккаунт
+    (SET_NULL: общая запись остаётся «от участника»). Видят его только сам автор
+    («Вы добавили») и администратор; остальным — «Добавлено участником» без
+    имени: пользователи друг друга не видят (пункт 7 CLAUDE.md).
+    """
+    return models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="автор",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="Пользователь, чья заявка добавила запись в общий справочник.",
+    )
+
+
 class Sport(CatalogItem):
     class Category(models.TextChoices):
         STRENGTH = "strength", "Силовая"
@@ -188,6 +207,7 @@ class Exercise(CatalogItem):
         default=Measurement.WEIGHT_REPS,
         help_text="Килограммы с повторами, только повторы или время удержания.",
     )
+    contributed_by = contributor_field()
 
     class Meta(CatalogItem.Meta):
         abstract = False
@@ -1165,6 +1185,7 @@ class MachineBrand(CatalogItem):
     """
 
     name = models.CharField("название", max_length=MACHINE_BRAND_MAX_LENGTH)
+    contributed_by = contributor_field()
 
     class Meta(CatalogItem.Meta):
         abstract = False
@@ -1208,6 +1229,7 @@ class MachineModel(CatalogItem):
         related_name="models",
     )
     name = models.CharField("название", max_length=MACHINE_MODEL_MAX_LENGTH)
+    contributed_by = contributor_field()
 
     class Meta(CatalogItem.Meta):
         abstract = False

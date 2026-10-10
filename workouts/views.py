@@ -24,7 +24,7 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
-from workouts import excel, excel_import, exercise_excel, services, stats, trash
+from workouts import contributions, excel, excel_import, exercise_excel, services, stats, trash
 from workouts.forms import (
     MAX_DURATION_HOURS,
     BodyMeasurementForm,
@@ -2311,7 +2311,12 @@ def last_workout_label(moment, today):
 
 def visible_exercise_with_step(user, pk):
     """Видимое упражнение вместе с шагом веса этого пользователя — одним запросом."""
-    queryset = with_weight_step(Exercise.objects.visible_to(user), user.pk, exercise_ref="pk")
+    # Автор общей записи — JOIN'ом: администратору страница показывает его почту.
+    queryset = with_weight_step(
+        Exercise.objects.visible_to(user).select_related("contributed_by"),
+        user.pk,
+        exercise_ref="pk",
+    )
     return get_object_or_404(queryset, pk=pk)
 
 
@@ -3163,15 +3168,20 @@ class MyMachinesView(LoginRequiredMixin, TemplateView):
         context = {
             "own_brands": own_brands,
             "own_models_of_shared": sorted(foreign.items(), key=lambda pair: pair[0].name),
+            # Действие у своих записей: администратор делает общим сам.
+            "share_action": "global" if user.is_admin else "",
             "nav_active": "profile",
         }
         if user.is_admin:
-            shared_models = MachineModel.objects.global_only().annotate(
-                uses=Count("exercise_machines")
+            shared_models = (
+                MachineModel.objects.global_only()
+                .select_related("contributed_by")
+                .annotate(uses=Count("exercise_machines"))
             )
             context["show_shared"] = True
             context["shared_brands"] = label_machine_uses(
                 MachineBrand.objects.global_only()
+                .select_related("contributed_by")
                 .annotate(uses=Count("exercise_machines"))
                 .prefetch_related(Prefetch("models", queryset=shared_models, to_attr="own_models"))
             )
@@ -3220,6 +3230,66 @@ class MachineCreateView(LoginRequiredMixin, View):
         if "brand" in form.fields:
             context["brands"] = form.fields["brand"].queryset
         return render(request, self.template_name, context)
+
+
+class MakeGlobalView(LoginRequiredMixin, View):
+    """«Сделать общим» у администратора: своё упражнение, производитель или модель.
+
+    GET — окно подтверждения, POST — перевод (contributions.make_global): та же
+    строка меняет владельца, поэтому свои тренировки и тренажёры админа с ней
+    остаются. Не-администратору, чужое и уже общее — 404. Общая с тем же
+    названием — то же окно с текстом и ссылкой на неё. Успех — HX-Refresh:
+    окно открывают и со страницы упражнения (в том числе из шторки), и с «Моих
+    тренажёров».
+    """
+
+    template_name = "workouts/_make_global_modal.html"
+
+    def get(self, request, **kwargs):
+        return self.modal(request, self.get_item())
+
+    def post(self, request, **kwargs):
+        item = self.get_item()
+        try:
+            contributions.make_global(item)
+        except contributions.DuplicateError as error:
+            return self.modal(request, item, error=error)
+        response = HttpResponse()
+        response["HX-Refresh"] = "true"
+        return response
+
+    def kind(self):
+        return self.kwargs.get("kind", "exercise")
+
+    def get_item(self):
+        model = {"exercise": Exercise, **MACHINE_KINDS}.get(self.kind())
+        if model is None or not self.request.user.is_admin:
+            raise Http404
+        items = model.objects.filter(owner=self.request.user)
+        if model is MachineModel:
+            items = items.select_related("brand")
+        return get_object_or_404(items, pk=self.kwargs["pk"])
+
+    def modal(self, request, item, *, error=None):
+        kind = self.kind()
+        if kind == "exercise":
+            post_url = reverse("exercise_make_global", args=[item.pk])
+        else:
+            post_url = reverse("machine_make_global", args=[kind, item.pk])
+        twin_url = ""
+        if error is not None and isinstance(error.existing, Exercise):
+            twin_url = reverse("exercise_detail", args=[error.existing.pk])
+        return render(
+            request,
+            self.template_name,
+            {
+                "item": item,
+                "kind": kind,
+                "post_url": post_url,
+                "error": error,
+                "twin_url": twin_url,
+            },
+        )
 
 
 class MachineItemMixin(LoginRequiredMixin):

@@ -855,6 +855,15 @@ a.btn {
 
 .app-link-accent { color: var(--app-accent-text); }
 
+/* Ссылка-действие, которое открывает окно, — кнопка с видом .app-link. */
+.app-link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+}
+
 /* ---------- Экраны входа/регистрации ---------- */
 
 .app-auth {
