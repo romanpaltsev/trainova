@@ -1232,14 +1232,29 @@ class ExerciseSettings(models.Model):
 
 MACHINE_BRAND_MAX_LENGTH = 60
 MACHINE_MODEL_MAX_LENGTH = 80
-# Снаряды, у которых тренировка предлагает «+ Тренажёр» сама. У штанги и
-# гантелей пустая кнопка на каждом упражнении была бы шумом; указать тренажёр
-# можно у любого упражнения — на его странице.
+# Снаряды-тренажёры: у них запись справочника тренажёров так и называется —
+# «Тренажёр». У гантелей, штанги, гири производитель и модель тоже есть (решение
+# 11.10.2026: блины и гантели в разных залах разные), но там это «Производитель».
 MACHINE_EQUIPMENT = frozenset({"тренажёр", "тренажер", "блок"})
+# Снаряды без производителя: собственный вес. Им пустая кнопка не предлагается.
+NO_MAKER_EQUIPMENT = frozenset({"своё тело", "свое тело", "собственный вес"})
+
+
+def _equipment(exercise):
+    return (exercise.equipment or "").strip().lower()
 
 
 def suggests_machine(exercise):
-    return (exercise.equipment or "").strip().lower() in MACHINE_EQUIPMENT
+    """Предлагать ли указать производителя пустой кнопкой — у любого снаряда, кроме
+    собственного веса. Снаряд не указан — не знаем, что это, и не предлагаем;
+    указать можно и тогда, на странице упражнения."""
+    equipment = _equipment(exercise)
+    return bool(equipment) and equipment not in NO_MAKER_EQUIPMENT
+
+
+def is_machine(exercise):
+    """Тренажёр или блок — запись называется «Тренажёр», а не «Производитель»."""
+    return _equipment(exercise) in MACHINE_EQUIPMENT
 
 
 def machine_label(brand, model):

@@ -3,18 +3,19 @@
   Параметры: group, workout, editable (необязателен).
 
   editable — кнопка, открывающая окно «Тренажёр» (exercise_machine); без места у
-  тренировки её нет: тренажёр живёт у пары «упражнение × место». Пустая кнопка
-  появляется только у тренажёров и блоков (group.suggests_machine), иначе у
-  каждой штанги висело бы лишнее «+ Тренажёр».
+  тренировки её нет: тренажёр живёт у пары «упражнение × место». Пустая кнопка —
+  у любого снаряда, кроме собственного веса (group.suggests_machine): у гантелей
+  и блинов производитель тоже есть. У тренажёров и блоков она «Тренажёр», у
+  остальных — «Производитель» (group.is_machine).
 {% endcomment %}
 {% if editable and workout.location_id %}
   {% if group.machine or group.suggests_machine %}
     <button type="button" class="app-note-btn{% if not group.machine %} is-empty{% endif %}"
-            aria-label="{% if group.machine %}Изменить тренажёр: {{ group.machine }}{% else %}Указать тренажёр{% endif %}"
+            aria-label="{% if group.machine %}Изменить {% if group.is_machine %}тренажёр{% else %}производителя{% endif %}: {{ group.machine }}{% elif group.is_machine %}Указать тренажёр{% else %}Указать производителя{% endif %}"
             hx-get="{% url 'exercise_machine' group.exercise.pk workout.location_id %}"
             hx-target="#modal" hx-swap="innerHTML">
       {% include "includes/machine.html" %}
-      <span>{% if group.machine %}{{ group.machine }}{% else %}Тренажёр{% endif %}</span>
+      <span>{% if group.machine %}{{ group.machine }}{% elif group.is_machine %}Тренажёр{% else %}Производитель{% endif %}</span>
     </button>
   {% endif %}
 {% elif group.machine %}

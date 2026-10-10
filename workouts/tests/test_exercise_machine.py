@@ -332,14 +332,41 @@ def test_live_screen_offers_machine_for_machine_exercises(client, user, press, g
     assert url(press, gym) in html
 
 
-def test_live_screen_does_not_offer_machine_for_barbell(client, user, gym):
+def test_live_screen_offers_maker_for_barbell_and_dumbbells(client, user, gym):
+    """У блинов и гантелей производитель тоже есть — кнопка «Производитель»."""
     squat = ExerciseFactory(name="Присед", owner=None, equipment="Штанга")
     workout = live_workout(user, gym, squat)
     client.force_login(user)
 
     html = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
 
+    assert "Указать производителя" in html
     assert "Указать тренажёр" not in html
+    assert url(squat, gym) in html
+
+
+@pytest.mark.parametrize("equipment", ["Своё тело", ""])
+def test_live_screen_does_not_offer_maker_for_bodyweight(client, user, gym, equipment):
+    pullup = ExerciseFactory(name="Подтягивания", owner=None, equipment=equipment)
+    workout = live_workout(user, gym, pullup)
+    client.force_login(user)
+
+    html = client.get(reverse("workout_live", args=[workout.pk])).content.decode()
+
+    assert "Указать производителя" not in html
+    assert "Указать тренажёр" not in html
+
+
+def test_dumbbell_page_and_modal_say_maker_not_machine(client, user, gym):
+    dumbbells = ExerciseFactory(name="Жим гантелей", owner=None, equipment="Гантели")
+    client.force_login(user)
+
+    page = client.get(reverse("exercise_detail", args=[dumbbells.pk])).content.decode()
+    modal = client.get(url(dumbbells, gym)).content.decode()
+
+    assert "производитель не указан" in page
+    assert "тренажёр не указан" not in page
+    assert "Производитель и модель для «Жим гантелей»" in modal
 
 
 def test_workout_without_place_has_no_machine(client, user, press):

@@ -23,6 +23,7 @@ from workouts.models import (
     StrengthSet,
     collapse_spaces,
     decimal_display,
+    is_machine,
     machine_label,
     metric_display,
     order_exercises,
@@ -353,6 +354,7 @@ def group_sets(rows, notes=None):
             getattr(first, "machine_brand", ""), getattr(first, "machine_model", "")
         )
         group["suggests_machine"] = suggests_machine(group["exercise"])
+        group["is_machine"] = is_machine(group["exercise"])
         # Номер подхода на экране — позиция в списке: в set_number бывают пропуски.
         for set_position, row in enumerate(group["sets"], start=1):
             row.display_number = set_position

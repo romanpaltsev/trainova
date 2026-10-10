@@ -1,5 +1,7 @@
 {% comment %}
-  Окно «Тренажёр» (ExerciseMachineView): выбор из справочника в два шага.
+  Окно «Тренажёр» (ExerciseMachineView): выбор из справочника в два шага. У
+  гантелей, штанги и прочих не-тренажёров (is_machine ложно) та же запись
+  называется «Производитель и модель».
   brand пуст — шаг 1, производители (общие и свои, у своих метка «моё»);
   brand задан — шаг 2, модели этого производителя и «Модель не знаю».
   Строки шага 2 сохраняют сразу (ответ — HX-Refresh), строки шага 1 — открывают
@@ -20,7 +22,7 @@
              stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
-    <p class="app-queue-hint mb-3">Тренажёр для «{{ exercise.name }}» · {{ location.name }}</p>
+    <p class="app-queue-hint mb-3">{% if is_machine %}Тренажёр{% else %}Производитель и модель{% endif %} для «{{ exercise.name }}» · {{ location.name }}</p>
 
     {% if brand %}
       <button type="button" class="btn btn-quiet mb-3"
@@ -96,7 +98,7 @@
     {% if machine %}
       <button type="button" class="btn btn-danger-quiet w-100 mt-3" hx-post="{{ machine_url }}"
               hx-vals='{"action": "remove"}' hx-target="#modal" hx-swap="innerHTML"
-              hx-disabled-elt="this">Убрать тренажёр</button>
+              hx-disabled-elt="this">{% if is_machine %}Убрать тренажёр{% else %}Убрать производителя{% endif %}</button>
     {% endif %}
   </div>
 </div>

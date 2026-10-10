@@ -94,6 +94,7 @@ from workouts.models import (
     decimal_display,
     exercise_usage,
     facets_for,
+    is_machine,
     machine_label,
     measurement_delta,
     measurement_display,
@@ -2124,6 +2125,7 @@ def exercise_detail_context(request, exercise, *, in_panel):
         "history": list(reversed(progress)),
         "machine_places": places,
         "machines_open": suggests_machine(exercise) or any(place.machine for place in places),
+        "is_machine": is_machine(exercise),
         "chart": {
             "labels": [group["label"] for group in progress],
             "values": [group["max_value"] for group in progress],
@@ -2609,6 +2611,7 @@ class ExerciseMachineView(LoginRequiredMixin, View):
             "machine": machine,
             "brand": brand,
             "is_admin": user.is_admin,
+            "is_machine": is_machine(exercise),
         }
         if brand is None:
             context["brands"] = MachineBrand.objects.visible_to(user)
