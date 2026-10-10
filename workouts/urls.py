@@ -48,6 +48,17 @@ urlpatterns = [
     ),
     path("profile/sports/", views.MySportsView.as_view(), name="my_sports"),
     path("profile/machines/", views.MyMachinesView.as_view(), name="my_machines"),
+    path("profile/requests/", views.MyRequestsView.as_view(), name="my_requests"),
+    path(
+        "profile/requests/new/<str:kind>/<int:pk>/",
+        views.CatalogProposeView.as_view(),
+        name="catalog_propose",
+    ),
+    path(
+        "profile/requests/<int:pk>/withdraw/",
+        views.CatalogWithdrawView.as_view(),
+        name="catalog_withdraw",
+    ),
     path(
         "profile/machines/new/<str:kind>/",
         views.MachineCreateView.as_view(),

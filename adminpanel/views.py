@@ -2,8 +2,9 @@
 
 Раздел в основном показывает — правка данных по-прежнему в Django admin
 (/django-admin/), и страницы ведут туда ссылками. Исключение — ответы на
-обратную связь: ответ уходит автору письмом, и это работа раздела, а не
-таблицы. Новый сервис — новая вьюха с маршрутом admin_* и строкой на главной.
+обратную связь и решение по заявкам в общий справочник: ответ и решение
+уходят автору письмом, и это работа раздела, а не таблицы. Новый сервис —
+новая вьюха с маршрутом admin_* и строкой на главной.
 """
 
 import platform
@@ -18,6 +19,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.db.models import Count, Exists, Max, OuterRef, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
@@ -26,8 +28,16 @@ from accounts.models import User
 from feedback import notify
 from feedback.forms import FeedbackAdminForm, FeedbackMessageForm
 from feedback.models import Feedback, FeedbackMessage
-from workouts import trash
-from workouts.models import BodyMeasurement, CardioPart, DeletedWorkout, StrengthSet, Workout
+from workouts import contributions, request_notify, trash
+from workouts.forms import CatalogRejectForm
+from workouts.models import (
+    BodyMeasurement,
+    CardioPart,
+    CatalogRequest,
+    DeletedWorkout,
+    StrengthSet,
+    Workout,
+)
 
 
 class AdminRequiredMixin(LoginRequiredMixin):
@@ -55,6 +65,9 @@ class AdminHomeView(AdminPageMixin, TemplateView):
         return super().get_context_data(**kwargs) | {
             "users_count": User.objects.count(),
             "new_feedback_count": Feedback.objects.filter(status=Feedback.Status.NEW).count(),
+            "pending_requests_count": CatalogRequest.objects.filter(
+                status=CatalogRequest.Status.PENDING
+            ).count(),
         }
 
 
@@ -232,6 +245,98 @@ class AdminFeedbackDetailView(AdminRequiredMixin, View):
                 "status_form": status_form,
                 "form": form,
                 "admin_view": True,
+                "nav_active": "profile",
+            },
+        )
+
+
+REQUEST_STATUS_FILTERS = [
+    ("pending", "Ждут"),
+    ("accepted", "Приняты"),
+    ("rejected", "Отклонены"),
+    ("all", "Все"),
+]
+
+
+class AdminRequestsView(AdminPageMixin, TemplateView):
+    """Заявки в общий справочник: по умолчанию — ждущие решения, старые сверху
+    (их ждут дольше); остальные срезы — свежие сверху. Фильтр — ?status=…"""
+
+    template_name = "adminpanel/requests.html"
+
+    def get_context_data(self, **kwargs):
+        status = self.request.GET.get("status", "pending")
+        if status not in dict(REQUEST_STATUS_FILTERS):
+            status = "pending"
+        items = CatalogRequest.objects.select_related("user", "exercise", "brand", "model__brand")
+        if status != "all":
+            items = items.filter(status=status)
+        if status == "pending":
+            items = items.order_by("created_at", "pk")
+        return super().get_context_data(**kwargs) | {
+            "items": items,
+            "status": status,
+            "statuses": REQUEST_STATUS_FILTERS,
+        }
+
+
+class AdminRequestDetailView(AdminRequiredMixin, View):
+    """Заявка: запись, автор, комментарий — и «Принять» или «Отклонить» с причиной.
+
+    Принятие делает запись общей (contributions.accept). Общая с тем же
+    названием уже есть — принять нельзя: страница показывает её, а отказ с
+    причиной остаётся. Решение уходит автору письмом.
+    """
+
+    template_name = "adminpanel/request_detail.html"
+
+    def get(self, request, pk):
+        return self.page(request, self.get_object(pk), CatalogRejectForm())
+
+    def post(self, request, pk):
+        req = self.get_object(pk)
+        form = CatalogRejectForm()
+        try:
+            if request.POST.get("action") == "accept":
+                req = contributions.accept(req)
+                notice = "Принято: запись теперь в общем справочнике, автору ушло письмо."
+            else:
+                form = CatalogRejectForm(request.POST)
+                if not form.is_valid():
+                    return self.page(request, req, form)
+                req = contributions.reject(req, form.cleaned_data["reason"])
+                notice = "Заявка отклонена, автору ушло письмо."
+        except ValueError as error:
+            # Дубль общей записи или заявку уже решили в соседней вкладке.
+            messages.error(request, str(error))
+            return redirect("admin_request_detail", pk=req.pk)
+        request_notify.request_decided(request, req)
+        messages.success(request, notice)
+        return redirect("admin_requests")
+
+    def get_object(self, pk):
+        return get_object_or_404(
+            CatalogRequest.objects.select_related("user", "exercise", "brand", "model__brand"),
+            pk=pk,
+        )
+
+    def page(self, request, req, form):
+        item = req.item
+        problem = None
+        if req.is_pending and not item.is_global:
+            problem = contributions.blocker(item)
+        twin_url = ""
+        if problem is not None and req.kind == "exercise":
+            twin_url = reverse("exercise_detail", args=[problem.existing.pk])
+        return render(
+            request,
+            self.template_name,
+            {
+                "req": req,
+                "item": item,
+                "problem": problem,
+                "twin_url": twin_url,
+                "form": form,
                 "nav_active": "profile",
             },
         )

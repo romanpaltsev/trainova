@@ -1,0 +1,8 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}{{ req.user.email }} предлагает добавить в общий справочник {{ req.get_kind_display|lower }} «{{ req.item.name }}»{% if req.kind == "model" %} ({{ req.model.brand.name }}){% endif %}.
+{% if req.comment %}
+Комментарий:
+
+{{ req.comment }}
+{% endif %}
+Принять или отклонить: {{ url }}{% endautoescape %}{% endblock content %}

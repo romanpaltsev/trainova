@@ -24,13 +24,23 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
-from workouts import contributions, excel, excel_import, exercise_excel, services, stats, trash
+from workouts import (
+    contributions,
+    excel,
+    excel_import,
+    exercise_excel,
+    request_notify,
+    services,
+    stats,
+    trash,
+)
 from workouts.forms import (
     MAX_DURATION_HOURS,
     BodyMeasurementForm,
     BodyMetricForm,
     CardioPartForm,
     CardioWorkoutForm,
+    CatalogRequestForm,
     ExerciseCreateForm,
     ExerciseQuickForm,
     MachineCreateForm,
@@ -62,6 +72,7 @@ from workouts.models import (
     WEIGHT_STEP_CHOICES,
     BodyMeasurement,
     BodyMetric,
+    CatalogRequest,
     ChangelogEntry,
     Exercise,
     ExerciseMachine,
@@ -2312,8 +2323,19 @@ def last_workout_label(moment, today):
 def visible_exercise_with_step(user, pk):
     """Видимое упражнение вместе с шагом веса этого пользователя — одним запросом."""
     # Автор общей записи — JOIN'ом: администратору страница показывает его почту.
+    # Последняя своя заявка в общий справочник (строка статуса) — подзапросами
+    # в том же SELECT: бюджет страницы упражнения не двигается.
+    latest = CatalogRequest.objects.filter(exercise=OuterRef("pk"), user=user).order_by(
+        "-created_at", "-pk"
+    )
     queryset = with_weight_step(
-        Exercise.objects.visible_to(user).select_related("contributed_by"),
+        Exercise.objects.visible_to(user)
+        .select_related("contributed_by")
+        .annotate(
+            request_pk=Subquery(latest.values("pk")[:1]),
+            request_status=Subquery(latest.values("status")[:1]),
+            request_reason=Subquery(latest.values("reason")[:1]),
+        ),
         user.pk,
         exercise_ref="pk",
     )
@@ -3150,11 +3172,12 @@ class MyMachinesView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         user = self.request.user
-        own_models = MachineModel.objects.filter(owner=user).annotate(
-            uses=Count("exercise_machines")
+        own_models = with_request_status(
+            MachineModel.objects.filter(owner=user).annotate(uses=Count("exercise_machines")),
+            "model",
         )
         own_brands = (
-            MachineBrand.objects.filter(owner=user)
+            with_request_status(MachineBrand.objects.filter(owner=user), "brand")
             .annotate(uses=Count("exercise_machines"))
             .prefetch_related(Prefetch("models", queryset=own_models, to_attr="own_models"))
         )
@@ -3168,8 +3191,9 @@ class MyMachinesView(LoginRequiredMixin, TemplateView):
         context = {
             "own_brands": own_brands,
             "own_models_of_shared": sorted(foreign.items(), key=lambda pair: pair[0].name),
-            # Действие у своих записей: администратор делает общим сам.
-            "share_action": "global" if user.is_admin else "",
+            # Действие у своих записей: администратор делает общим сам,
+            # остальные предлагают заявкой.
+            "share_action": "global" if user.is_admin else "propose",
             "nav_active": "profile",
         }
         if user.is_admin:
@@ -3290,6 +3314,97 @@ class MakeGlobalView(LoginRequiredMixin, View):
                 "twin_url": twin_url,
             },
         )
+
+
+CATALOG_KINDS = {"exercise": Exercise, **MACHINE_KINDS}
+
+
+def latest_request(queryset_field):
+    """Последняя заявка на запись — подзапросом к строке справочника.
+
+    Своё видит только владелец, поэтому и заявки на него — только его.
+    """
+    return CatalogRequest.objects.filter(**{queryset_field: OuterRef("pk")}).order_by(
+        "-created_at", "-pk"
+    )
+
+
+def with_request_status(queryset, field):
+    """request_status и request_reason последней заявки — без запроса на строку."""
+    latest = latest_request(field)
+    return queryset.annotate(
+        request_status=Subquery(latest.values("status")[:1]),
+        request_reason=Subquery(latest.values("reason")[:1]),
+    )
+
+
+class CatalogProposeView(LoginRequiredMixin, View):
+    """«Предложить в общий справочник»: окно с комментарием и заявка.
+
+    Только своё и только не-администратору: у администратора на том же месте
+    «Сделать общим». Ожидающая заявка на запись уже есть — то же окно с
+    текстом. Админам уходит письмо; ответ — HX-Refresh: окно открывают со
+    страницы упражнения и с «Моих тренажёров».
+    """
+
+    template_name = "workouts/_catalog_propose_modal.html"
+
+    def get(self, request, kind, pk):
+        return self.modal(request, self.get_item(), CatalogRequestForm())
+
+    def post(self, request, kind, pk):
+        item = self.get_item()
+        form = CatalogRequestForm(request.POST)
+        if form.is_valid():
+            try:
+                req = contributions.propose(request.user, item, form.cleaned_data["comment"])
+            except ValueError as error:
+                form.add_error(None, str(error))
+            else:
+                request_notify.new_request(request, req)
+                response = HttpResponse()
+                response["HX-Refresh"] = "true"
+                return response
+        return self.modal(request, item, form)
+
+    def get_item(self):
+        model = CATALOG_KINDS.get(self.kwargs["kind"])
+        if model is None or self.request.user.is_admin:
+            raise Http404
+        items = model.objects.filter(owner=self.request.user)
+        if model is MachineModel:
+            items = items.select_related("brand")
+        return get_object_or_404(items, pk=self.kwargs["pk"])
+
+    def modal(self, request, item, form):
+        context = {"item": item, "kind": self.kwargs["kind"], "form": form}
+        return render(request, self.template_name, context)
+
+
+class CatalogWithdrawView(LoginRequiredMixin, View):
+    """«Отозвать» — своя ожидающая заявка удаляется: решать больше нечего."""
+
+    def post(self, request, pk):
+        req = get_object_or_404(
+            CatalogRequest.objects.filter(user=request.user, status=CatalogRequest.Status.PENDING),
+            pk=pk,
+        )
+        req.delete()
+        response = HttpResponse()
+        response["HX-Refresh"] = "true"
+        return response
+
+
+class MyRequestsView(LoginRequiredMixin, TemplateView):
+    """«Мои заявки»: свои заявки в общий справочник со статусом и причиной отказа."""
+
+    template_name = "workouts/my_requests.html"
+
+    def get_context_data(self, **kwargs):
+        items = CatalogRequest.objects.filter(user=self.request.user).select_related(
+            "exercise", "brand", "model__brand"
+        )
+        return super().get_context_data(**kwargs) | {"items": items, "nav_active": "profile"}
 
 
 class MachineItemMixin(LoginRequiredMixin):

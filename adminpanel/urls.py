@@ -13,4 +13,10 @@ urlpatterns = [
         views.AdminFeedbackDetailView.as_view(),
         name="admin_feedback_detail",
     ),
+    path("requests/", views.AdminRequestsView.as_view(), name="admin_requests"),
+    path(
+        "requests/<int:pk>/",
+        views.AdminRequestDetailView.as_view(),
+        name="admin_request_detail",
+    ),
 ]

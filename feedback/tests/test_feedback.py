@@ -365,11 +365,11 @@ def test_sidebar_shows_dot_and_admin_counter(client, user, admin_user):
     client.force_login(user)
     html = client.get(reverse("dashboard")).content.decode()
     assert "есть новый ответ" in html
-    assert "новых обращений" not in html
+    assert "ждут решения" not in html
 
     client.force_login(admin_user)
     html = client.get(reverse("dashboard")).content.decode()
-    assert "новых обращений: 2" in html
+    assert "ждут решения: 2" in html
     assert "есть новый ответ" not in html
 
 
@@ -377,7 +377,7 @@ def test_admin_counter_hidden_when_nothing_is_new(client, admin_user, user):
     Feedback.objects.create(user=user, text="Закрытое", status="done")
     client.force_login(admin_user)
 
-    assert "новых обращений" not in client.get(reverse("profile")).content.decode()
+    assert "ждут решения" not in client.get(reverse("profile")).content.decode()
 
 
 def admin_list(client, **params):

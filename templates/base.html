@@ -128,13 +128,13 @@
           {% include "includes/shield.html" with size=22 only %}
           <span class="app-sidebar-label">Админка</span>
           {% comment %}
-            Число новых обращений: в развёрнутой панели — числом в конце строки,
+            Число новых обращений и заявок: в развёрнутой панели — числом в конце строки,
             в «рельсе» число прячется вместе с подписями, и остаётся точка.
           {% endcomment %}
           {% if admin_new_feedback %}
             <span class="app-sport-dot app-side-dot app-side-dot-rail" style="--dot: var(--app-accent-text)" aria-hidden="true"></span>
             <span class="app-side-count app-sidebar-label num">{{ admin_new_feedback }}</span>
-            <span class="visually-hidden">новых обращений: {{ admin_new_feedback }}</span>
+            <span class="visually-hidden">ждут решения: {{ admin_new_feedback }}</span>
           {% endif %}
         </a>
       {% endif %}

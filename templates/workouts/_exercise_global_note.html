@@ -4,6 +4,9 @@
     можно, только пока его нет ни в одной тренировке (ExerciseDeleteView
     проверит и скажет);
   — администратору на своём: «Сделать общим» (MakeGlobalView);
+  — остальным на своём: заявка в общий справочник и статус последней
+    (exercise.request_* — подзапросы visible_exercise_with_step,
+    CatalogProposeView);
   — у общего, пришедшего заявкой: автор. Почту видит только администратор,
     сам автор — «Вы добавили», остальные — «участником» без имени: пользователи
     друг друга не видят (пункт 7 CLAUDE.md).
@@ -19,6 +22,19 @@
     <button type="button" class="app-link app-link-button"
             hx-get="{% url 'exercise_make_global' exercise.pk %}"
             hx-target="#modal" hx-swap="innerHTML">Сделать общим</button>
+  </div>
+{% elif can_edit %}
+  <div class="app-queue-hint app-exercise-global-note">
+    {% if exercise.request_status == "pending" %}
+      Заявка в общий справочник на рассмотрении.
+      <button type="button" class="app-link app-link-button"
+              hx-post="{% url 'catalog_withdraw' exercise.request_pk %}">Отозвать</button>
+    {% else %}
+      {% if exercise.request_status == "rejected" %}Заявку отклонили: {{ exercise.request_reason }}{% endif %}
+      <button type="button" class="app-link app-link-button"
+              hx-get="{% url 'catalog_propose' 'exercise' exercise.pk %}"
+              hx-target="#modal" hx-swap="innerHTML">{% if exercise.request_status %}Отправить снова{% else %}Предложить в общий справочник{% endif %}</button>
+    {% endif %}
   </div>
 {% endif %}
 {% if exercise.is_global and exercise.contributed_by_id %}

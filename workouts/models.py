@@ -1336,6 +1336,97 @@ def with_machine(queryset, user, location, *, exercise_ref="exercise"):
     )
 
 
+CATALOG_REQUEST_TEXT_MAX_LENGTH = 500
+
+
+class CatalogRequest(models.Model):
+    """Заявка пользователя: добавить своё упражнение, производителя или модель
+    в общий справочник (решение 10.10.2026).
+
+    Администратор принимает — запись сама становится общей
+    (contributions.make_global, автор — в contributed_by), или отклоняет с
+    причиной. Ссылка на запись — CASCADE: удалил своё — заявка ушла вместе с
+    ним. Повтор после отказа — новая заявка; ожидающая на запись одна
+    (частичные UniqueConstraint), а заполнена ровно та ссылка, что у kind.
+    """
+
+    class Kind(models.TextChoices):
+        EXERCISE = "exercise", "Упражнение"
+        BRAND = "brand", "Производитель"
+        MODEL = "model", "Модель тренажёра"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "На рассмотрении"
+        ACCEPTED = "accepted", "Принято"
+        REJECTED = "rejected", "Отклонено"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="автор",
+        on_delete=models.CASCADE,
+        related_name="catalog_requests",
+    )
+    kind = models.CharField("что", max_length=10, choices=Kind)
+    exercise = models.ForeignKey(
+        Exercise, on_delete=models.CASCADE, null=True, blank=True, related_name="requests"
+    )
+    brand = models.ForeignKey(
+        MachineBrand, on_delete=models.CASCADE, null=True, blank=True, related_name="requests"
+    )
+    model = models.ForeignKey(
+        MachineModel, on_delete=models.CASCADE, null=True, blank=True, related_name="requests"
+    )
+    comment = models.CharField(
+        "комментарий автора", max_length=CATALOG_REQUEST_TEXT_MAX_LENGTH, blank=True
+    )
+    status = models.CharField("статус", max_length=10, choices=Status, default=Status.PENDING)
+    reason = models.CharField(
+        "причина отказа", max_length=CATALOG_REQUEST_TEXT_MAX_LENGTH, blank=True
+    )
+    created_at = models.DateTimeField("отправлена", default=timezone.now)
+    decided_at = models.DateTimeField("рассмотрена", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "заявка в общий справочник"
+        verbose_name_plural = "заявки в общий справочник"
+        ordering = ["-created_at", "-pk"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(
+                    kind="exercise", exercise__isnull=False, brand__isnull=True, model__isnull=True
+                )
+                | Q(kind="brand", exercise__isnull=True, brand__isnull=False, model__isnull=True)
+                | Q(kind="model", exercise__isnull=True, brand__isnull=True, model__isnull=False),
+                name="catalog_request_item_matches_kind",
+            ),
+            models.CheckConstraint(
+                condition=~Q(status="rejected") | ~Q(reason=""),
+                name="rejected_request_has_reason",
+                violation_error_message="Укажите причину отказа.",
+            ),
+            *(
+                models.UniqueConstraint(
+                    fields=[field],
+                    condition=Q(status="pending"),
+                    name=f"unique_pending_{field}_request",
+                    violation_error_message="Заявка уже на рассмотрении.",
+                )
+                for field in ("exercise", "brand", "model")
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_kind_display()} «{self.item.name}»"
+
+    @property
+    def item(self):
+        return self.exercise or self.brand or self.model
+
+    @property
+    def is_pending(self):
+        return self.status == self.Status.PENDING
+
+
 class CardioPart(models.Model):
     """Кардио-часть тренировки: бег, велосипед, лыжи — со своим временем.
 

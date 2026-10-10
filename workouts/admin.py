@@ -4,6 +4,7 @@ from workouts.models import (
     BodyMeasurement,
     BodyMetric,
     CardioPart,
+    CatalogRequest,
     ChangelogEntry,
     DeletedWorkout,
     Exercise,
@@ -207,3 +208,19 @@ class ChangelogEntryAdmin(admin.ModelAdmin):
     list_filter = ("kind", "is_published")
     date_hierarchy = "published_at"
     search_fields = ("title", "body")
+
+
+@admin.register(CatalogRequest)
+class CatalogRequestAdmin(admin.ModelAdmin):
+    """Заявки в общий справочник — только посмотреть: решают их в «Админке»
+    (принятие делает запись общей и пишет автору, это не правка строки)."""
+
+    list_display = ("__str__", "user", "status", "created_at", "decided_at")
+    list_filter = ("status", "kind")
+    search_fields = ("user__email", "exercise__name", "brand__name", "model__name")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

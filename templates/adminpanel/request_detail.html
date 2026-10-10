@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Заявка · Админка · Дневник тренировок{% endblock %}
+
+{% block content %}
+{% include "adminpanel/_head.html" with back="admin_requests" title="Заявка" only %}
+
+{% comment %}
+  Заявка в общий справочник (AdminRequestDetailView): что предлагают, кто и
+  зачем — и решение. problem — общая с тем же названием уже есть: принять
+  нельзя, только отклонить с причиной. Решение уходит автору письмом.
+{% endcomment %}
+<div class="app-feedback">
+  <section aria-labelledby="request-item-title">
+    <h2 class="app-section-title" id="request-item-title">{{ req.get_kind_display }} от {{ req.user.email }}</h2>
+    <div class="app-card app-panel">
+      <p class="app-row-name mb-1">{% if req.kind == "model" %}{{ item.brand.name }} · {% endif %}{{ item.name }}</p>
+      {% if req.kind == "exercise" %}
+        <p class="app-queue-hint mb-0">
+          {{ item.get_measurement_display }}{% if item.muscle_group %} · {{ item.muscle_group }}{% endif %}{% if item.equipment %} · {{ item.equipment }}{% endif %}
+        </p>
+      {% elif req.kind == "model" and not item.brand.is_global %}
+        <p class="app-queue-hint mb-0">Производитель «{{ item.brand.name }}» — тоже личный: станет общим вместе с моделью.</p>
+      {% endif %}
+      <p class="app-queue-hint mt-2 mb-0">Отправлена {{ req.created_at|date:"d.m.Y H:i" }} · {{ req.get_status_display|lower }}{% if req.decided_at %} {{ req.decided_at|date:"d.m.Y H:i" }}{% endif %}</p>
+      {% if req.comment %}
+        <p class="mt-3 mb-0"><span class="app-queue-hint">Комментарий автора:</span><br>{{ req.comment|linebreaksbr }}</p>
+      {% endif %}
+      {% if req.status == "rejected" %}
+        <p class="mt-3 mb-0"><span class="app-queue-hint">Причина отказа:</span><br>{{ req.reason }}</p>
+      {% endif %}
+    </div>
+  </section>
+
+  {% if req.is_pending %}
+    <section aria-labelledby="request-decision-title">
+      <h2 class="app-section-title" id="request-decision-title">Решение</h2>
+      <div class="app-card app-panel">
+        {% if problem %}
+          <div class="app-alert app-alert-danger">
+            {{ problem }} Принять нельзя — отклоните с причиной.{% if twin_url %} <a href="{{ twin_url }}">Открыть общее</a>{% endif %}
+          </div>
+        {% else %}
+          <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="accept">
+            <button type="submit" class="btn btn-accent app-btn-fill">Принять в общий справочник</button>
+          </form>
+          <p class="app-queue-hint mt-2 mb-3">Запись станет общей, автор останется в ней указан.</p>
+        {% endif %}
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="action" value="reject">
+          <label class="form-label" for="{{ form.reason.id_for_label }}">Причина отказа</label>
+          {{ form.reason }}
+          {% for error in form.reason.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+          <button type="submit" class="btn btn-quiet app-btn-fill mt-3">Отклонить</button>
+        </form>
+      </div>
+    </section>
+  {% endif %}
+</div>
+{% endblock %}

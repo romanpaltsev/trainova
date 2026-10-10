@@ -2,7 +2,9 @@
   Строка записи справочника тренажёров на «Моих тренажёрах»: название —
   кнопка переименования (карандаш внутри, приём строк мест), справа удаление.
   Ждёт item, kind (brand | model), uses, meta (необязательна); share="global" —
-  иконка «Сделать общим» (администратору у своих записей); author — почта
+  иконка «Сделать общим» (администратору у своих записей), share="propose" —
+  «Предложить в общий список» и статус последней заявки (item.request_status
+  из with_request_status; на рассмотрении — иконки нет); author — почта
   автора общей записи, пришедшей заявкой (только в секции администратора).
 {% endcomment %}
 <div class="app-row{% if kind == 'model' %} app-machine-model-row{% endif %}">
@@ -11,7 +13,7 @@
           hx-target="#modal" hx-swap="innerHTML"
           aria-label="Переименовать {{ item.name }}">
     <span class="app-row-name">{{ item.name }}{% include "includes/pencil.html" %}</span>
-    <span class="app-row-meta">{% if meta %}{{ meta }} · {% endif %}{{ uses }}{% if author %} · добавил {{ author }}{% endif %}</span>
+    <span class="app-row-meta">{% if meta %}{{ meta }} · {% endif %}{{ uses }}{% if author %} · добавил {{ author }}{% endif %}{% if share == "propose" and item.request_status == "pending" %} · заявка на рассмотрении{% elif share == "propose" and item.request_status == "rejected" %} · отклонено: {{ item.request_reason }}{% endif %}</span>
   </button>
   {% if share == "global" %}
     <button type="button" class="app-icon-btn" title="Сделать общим"
@@ -21,6 +23,12 @@
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/>
       </svg>
+    </button>
+  {% elif share == "propose" and item.request_status != "pending" %}
+    <button type="button" class="app-icon-btn" title="Предложить в общий список"
+            hx-get="{% url 'catalog_propose' kind item.pk %}" hx-target="#modal" hx-swap="innerHTML"
+            aria-label="Предложить в общий список: {{ item.name }}">
+      {% include "includes/share_up.html" %}
     </button>
   {% endif %}
   <a class="app-icon-btn app-row-delete" href="{% url 'machine_delete' kind item.pk %}"

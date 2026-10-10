@@ -8,6 +8,7 @@ from workouts import excel, excel_import, services
 from workouts.models import (
     BODY_METRIC_NAME_MAX_LENGTH,
     BODY_METRIC_UNIT_MAX_LENGTH,
+    CATALOG_REQUEST_TEXT_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
     BodyMeasurement,
     BodyMetric,
@@ -837,3 +838,26 @@ class MachineCreateForm(MachineNameForm):
         if self.model is MachineModel:
             fields["brand"] = self.cleaned_data["brand"]
         return self.model.objects.create(**fields)
+
+
+class CatalogRequestForm(forms.Form):
+    """Заявка в общий справочник: комментарий автора необязателен."""
+
+    comment = forms.CharField(
+        required=False,
+        max_length=CATALOG_REQUEST_TEXT_MAX_LENGTH,
+        widget=forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+    )
+
+    def clean_comment(self):
+        return self.cleaned_data["comment"].strip()
+
+
+class CatalogRejectForm(forms.Form):
+    """Отказ по заявке — только с причиной: её получит автор."""
+
+    reason = forms.CharField(
+        max_length=CATALOG_REQUEST_TEXT_MAX_LENGTH,
+        error_messages={"required": "Укажите причину отказа."},
+        widget=forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+    )

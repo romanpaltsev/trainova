@@ -1,0 +1,1 @@
+{% autoescape off %}{% if req.status == "accepted" %}Заявка принята{% else %}Заявка отклонена{% endif %} — Дневник тренировок{% endautoescape %}

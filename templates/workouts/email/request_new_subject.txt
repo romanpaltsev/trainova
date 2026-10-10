@@ -1,0 +1,1 @@
+{% autoescape off %}Заявка в общий справочник: {{ req.get_kind_display|lower }} «{{ req.item.name }}»{% endautoescape %}

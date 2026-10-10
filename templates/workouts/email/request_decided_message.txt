@@ -1,0 +1,8 @@
+{% extends "account/email/base_message.txt" %}
+{% block content %}{% autoescape off %}{% if req.status == "accepted" %}Спасибо! {{ req.get_kind_display }} «{{ req.item.name }}» теперь в общем справочнике — им смогут пользоваться все. Ваши тренировки с ним остались как есть.{% else %}Заявку добавить {{ req.get_kind_display|lower }} «{{ req.item.name }}» в общий справочник отклонили.
+
+Причина: {{ req.reason }}
+
+Запись осталась у вас — пользоваться ею можно как прежде.{% endif %}
+
+Все заявки: {{ url }}{% endautoescape %}{% endblock content %}

@@ -188,6 +188,18 @@
         {% include "includes/chevron.html" %}
       </a>
 
+      {% if not user.is_admin %}
+        {% comment %}Администратор заявок не шлёт — он делает своё общим сам.{% endcomment %}
+        <a class="app-row" href="{% url 'my_requests' %}">
+          <span class="app-row-icon">{% include "includes/share_up.html" %}</span>
+          <span class="app-row-text">
+            <span class="app-row-name">Мои заявки</span>
+            <span class="app-row-meta">в общий справочник</span>
+          </span>
+          {% include "includes/chevron.html" %}
+        </a>
+      {% endif %}
+
       <a class="app-row" href="{% url 'feedback' %}">
         <span class="app-row-icon">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -219,7 +231,7 @@
             <span class="app-row-meta">пользователи и состояние системы</span>
           </span>
           {% if admin_new_feedback %}
-            <span class="app-row-count num" title="Новых обращений">{{ admin_new_feedback }}</span>
+            <span class="app-row-count num" title="Новые обращения и заявки">{{ admin_new_feedback }}</span>
           {% endif %}
           {% include "includes/chevron.html" %}
         </a>

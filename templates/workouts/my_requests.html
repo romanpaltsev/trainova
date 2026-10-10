@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Мои заявки · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Мои заявки</h1>
+</div>
+
+{% comment %}
+  Свои заявки в общий справочник (MyRequestsView), свежие сверху. Упражнение —
+  ссылкой на его страницу (своё или уже общее — автору видно всегда);
+  ожидающую можно отозвать прямо здесь.
+{% endcomment %}
+<p class="app-queue-hint mb-3">
+  Своё упражнение предлагают на его странице, производителя и модель — на «Моих тренажёрах».
+  Принятая запись становится общей, решение приходит на почту.
+</p>
+
+<div class="app-rows app-rows-board">
+  {% for req in items %}
+    <div class="app-row">
+      <span class="app-row-text">
+        <span class="app-row-name">
+          {% if req.kind == "exercise" %}
+            <a class="text-reset text-decoration-none" href="{% url 'exercise_detail' req.exercise.pk %}">{{ req.exercise.name }}</a>
+          {% elif req.kind == "model" %}
+            {{ req.model.brand.name }} · {{ req.model.name }}
+          {% else %}
+            {{ req.brand.name }}
+          {% endif %}
+        </span>
+        <span class="app-row-meta">{{ req.get_kind_display }} · {{ req.created_at|date:"d.m.Y" }} · {{ req.get_status_display|lower }}</span>
+        {% if req.status == "rejected" %}<span class="app-row-meta">Причина: {{ req.reason }}</span>{% endif %}
+        {% if req.comment %}<span class="app-row-meta">Ваш комментарий: {{ req.comment }}</span>{% endif %}
+      </span>
+      {% if req.is_pending %}
+        <button type="button" class="btn btn-quiet" hx-post="{% url 'catalog_withdraw' req.pk %}"
+                hx-disabled-elt="this">Отозвать</button>
+      {% endif %}
+    </div>
+  {% empty %}
+    {% include "includes/empty_state.html" with text="Заявок пока нет." %}
+  {% endfor %}
+</div>
+{% endblock %}

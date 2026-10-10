@@ -5,7 +5,7 @@ from django.utils.functional import SimpleLazyObject
 
 from accounts.models import User
 from feedback.models import Feedback, FeedbackMessage
-from workouts.models import ChangelogEntry
+from workouts.models import CatalogRequest, ChangelogEntry
 
 
 def honeypot(request):
@@ -22,8 +22,9 @@ def badge_counts(user):
     """Бейджи панели одним запросом к строке пользователя.
 
     badge_changelog — есть непрочитанные новости, badge_feedback — есть
-    непрочитанный ответ на обращение, badge_admin_new — сколько обращений ждут
-    администратора (только у админа: остальным подзапрос даже не строится).
+    непрочитанный ответ на обращение, badge_admin_new — сколько новых обращений
+    и заявок в общий справочник ждут администратора (только у админа:
+    остальным подзапросы даже не строятся).
     """
     # Имена с префиксом badge_: «feedback» уже занято обратной связью User.
     annotations = {
@@ -40,9 +41,16 @@ def badge_counts(user):
             .annotate(n=Count("pk"))
             .values("n")
         )
+        pending = (
+            CatalogRequest.objects.filter(status=CatalogRequest.Status.PENDING)
+            .order_by()
+            .values("status")
+            .annotate(n=Count("pk"))
+            .values("n")
+        )
         annotations["badge_admin_new"] = Coalesce(
             Subquery(new, output_field=IntegerField()), Value(0)
-        )
+        ) + Coalesce(Subquery(pending, output_field=IntegerField()), Value(0))
     return User.objects.filter(pk=user.pk).values(**annotations).get()
 
 

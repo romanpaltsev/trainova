@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}Заявки · Админка · Дневник тренировок{% endblock %}
+
+{% block content %}
+{% include "adminpanel/_head.html" with back="admin_home" title="Заявки в общий справочник" only %}
+
+{% comment %}
+  Заявки пользователей (AdminRequestsView): чипы статуса — тот же .app-filters,
+  что у обращений; по умолчанию ждущие решения, старые сверху.
+{% endcomment %}
+<div class="app-chips app-filters mb-3" role="group" aria-label="Статус">
+  {% for value, label in statuses %}
+    <a class="app-chip {% if status == value %}is-active{% endif %}"
+       href="{% url 'admin_requests' %}{% if value != 'pending' %}?status={{ value }}{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="app-rows app-rows-board">
+  {% for req in items %}
+    <a class="app-row" href="{% url 'admin_request_detail' req.pk %}">
+      <span class="app-row-text">
+        <span class="app-row-name">{% if req.kind == "model" %}{{ req.model.brand.name }} · {% endif %}{{ req.item.name }}</span>
+        <span class="app-row-meta">{{ req.get_kind_display }} · {{ req.user.email }}</span>
+        <span class="app-row-meta">{{ req.created_at|date:"d.m.Y H:i" }} · {{ req.get_status_display }}{% if req.comment %} · есть комментарий{% endif %}</span>
+      </span>
+      {% include "includes/chevron.html" %}
+    </a>
+  {% empty %}
+    {% include "includes/empty_state.html" with text="Заявок нет." %}
+  {% endfor %}
+</div>
+{% endblock %}
