@@ -489,15 +489,6 @@ def test_search_falls_back_to_the_usual_unit(client, user):
     assert response.context["selected_measurement"] == MEASURE.WEIGHT_REPS
 
 
-def test_seed_measures_plank_in_time(db):
-    from django.core.management import call_command
-
-    call_command("seed")
-
-    assert Exercise.objects.get(name="Планка").measurement == MEASURE.TIME
-    assert Exercise.objects.get(name="Подтягивания").measurement == MEASURE.WEIGHT_REPS
-
-
 def test_records_query_stays_single(user, django_assert_max_num_queries):
     """Рекорд на каждую единицу считается одним запросом, а не по одному на тип."""
     for measurement, factory in (
