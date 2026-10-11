@@ -1,0 +1,4 @@
+{% comment %}Подсказки моделей производителя из блока «Тренажёр» (CardioMachineModelsView).{% endcomment %}
+<datalist id="cardio-models">
+  {% for name in machine_models %}<option value="{{ name }}"></option>{% endfor %}
+</datalist>

@@ -63,6 +63,17 @@
         {% include "workouts/_duration_fields.html" with label="Время кардио" optional=True %}
       </div>
 
+      {% comment %}
+        Место части — место тренировки: скрытым полем, чтобы блок «Тренажёр»
+        подставил прошлое именно отсюда. Форма части его не читает.
+      {% endcomment %}
+      <input type="hidden" name="location" value="{{ workout.location_id|default:'' }}">
+      {% if part %}
+        {% include "workouts/_cardio_machine_fields.html" %}
+      {% else %}
+        {% include "workouts/_cardio_machine_fields.html" with prefill_on=True %}
+      {% endif %}
+
       <div class="d-flex gap-2">
         <button type="submit" class="btn btn-accent flex-fill">
           {% if part %}Сохранить{% else %}Добавить{% endif %}

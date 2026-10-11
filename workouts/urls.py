@@ -144,6 +144,14 @@ urlpatterns = [
         views.CardioWorkoutFormView.as_view(planned=True),
         name="cardio_prepare",
     ),
+    # Блок «Тренажёр» кардио-форм: подстановка прошлого по виду спорта и месту
+    # и подсказки моделей выбранного производителя.
+    path("workouts/cardio/machine/", views.CardioMachineView.as_view(), name="cardio_machine"),
+    path(
+        "workouts/cardio/machine/models/",
+        views.CardioMachineModelsView.as_view(),
+        name="cardio_machine_models",
+    ),
     path("workouts/<int:pk>/edit/", views.CardioWorkoutFormView.as_view(), name="workout_edit"),
     path("workouts/<int:pk>/delete/", views.WorkoutDeleteView.as_view(), name="workout_delete"),
     # День черновика. Отдельный эндпоинт, а не поле в форме: силовой черновик

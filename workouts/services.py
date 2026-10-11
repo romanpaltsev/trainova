@@ -8,12 +8,13 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Max
+from django.db.models import Count, F, Max, Q
 from django.utils import timezone
 
 from workouts.models import (
     MEASUREMENT_FIELDS,
     METRIC_FIELDS,
+    CardioPart,
     Exercise,
     ExerciseNote,
     Location,
@@ -202,6 +203,28 @@ def machine_model_for_name(user, brand, name, *, shared=False):
             )
     except IntegrityError:
         return existing()
+
+
+def last_cardio_machine(user, sport, location):
+    """Последняя часть этого вида спорта в этом месте, где тренажёр или настройки указаны.
+
+    Источник подстановки в форму кардио: «та же дорожка, уклон как в прошлый
+    раз». Место строго то же (None — тоже место: «не указано»): в другом зале
+    другая дорожка, и подставить её было бы враньём. Черновики не в счёт — у
+    них тренажёр мог быть только загадан.
+    """
+    return (
+        CardioPart.objects.filter(
+            workout__user=user,
+            workout__duration_min__isnull=False,
+            sport=sport,
+            workout__location=location,
+        )
+        .filter(Q(brand__isnull=False) | Q(incline_pct__isnull=False) | Q(level__isnull=False))
+        .select_related("brand", "model")
+        .order_by("-workout__started_at", "-id")
+        .first()
+    )
 
 
 def last_sets(user, exercise):

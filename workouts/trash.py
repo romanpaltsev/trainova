@@ -21,6 +21,8 @@ from workouts.models import (
     Exercise,
     ExerciseNote,
     Location,
+    MachineBrand,
+    MachineModel,
     Sport,
     StrengthSet,
     Workout,
@@ -64,6 +66,8 @@ def _snapshot(workout, sets, parts, notes):
     sports = {workout.sport_id: workout.sport}
     sports.update({part.sport_id: part.sport for part in parts})
     locations = {workout.location_id: workout.location} if workout.location_id else {}
+    brands = {part.brand_id: part.brand for part in parts if part.brand_id}
+    machine_models = {part.model_id: part.model for part in parts if part.model_id}
     return {
         "v": 1,
         "objects": serializers.serialize("python", [workout, *sets, *parts, *notes]),
@@ -85,6 +89,13 @@ def _snapshot(workout, sets, parts, notes):
                 for pk, item in sports.items()
             },
             "locations": {str(pk): {"name": item.name} for pk, item in locations.items()},
+            # Тренажёры кардио-частей: модель — с именем производителя, чтобы
+            # пропавшая нашлась или завелась у нужного.
+            "brands": {str(pk): {"name": item.name} for pk, item in brands.items()},
+            "models": {
+                str(pk): {"name": item.name, "brand_id": item.brand_id}
+                for pk, item in machine_models.items()
+            },
         },
     }
 
@@ -106,7 +117,7 @@ def move_to_trash(workout, *, title, subtitle):
         if locked is None:
             return None
         sets = list(locked.sets.select_related("exercise").order_by("id"))
-        parts = list(locked.cardio_parts.select_related("sport").order_by("id"))
+        parts = list(locked.cardio_parts.select_related("sport", "brand", "model").order_by("id"))
         notes = list(locked.exercise_notes.select_related("exercise").order_by("id"))
         entry = DeletedWorkout.objects.create(
             user_id=locked.user_id,
@@ -164,6 +175,45 @@ def _resolve_catalogs(user, workout, sets, parts, notes, refs):
     return exercises, sports, locations
 
 
+def _relink_machines(user, parts, refs):
+    """Тренажёр кардио-частей: по id, а пропавший — по имени (или без него).
+
+    У снимков до появления тренажёров ссылок нет — ветка их не касается. Модель
+    без найденного производителя теряется вместе с ним: модель без
+    производителя запрещена констрейнтом.
+    """
+    brand_ids = {part.brand_id for part in parts} - {None}
+    model_ids = {part.model_id for part in parts} - {None}
+    if not brand_ids:
+        return
+    brand_refs = refs.get("brands", {})
+    model_refs = refs.get("models", {})
+    visible_brands = MachineBrand.objects.visible_to(user).in_bulk(brand_ids)
+    visible_models = MachineModel.objects.visible_to(user).in_bulk(model_ids)
+    brands = {}
+    for source_id in brand_ids:
+        if source_id in visible_brands:
+            brands[source_id] = visible_brands[source_id]
+        elif str(source_id) in brand_refs:
+            brands[source_id] = services.machine_brand_for_name(
+                user, brand_refs[str(source_id)]["name"]
+            )
+    for part in parts:
+        brand = brands.get(part.brand_id)
+        part.brand_id = brand.pk if brand else None
+        model = visible_models.get(part.model_id)
+        if brand is None:
+            part.model_id = None
+        elif model is not None and model.brand_id == brand.pk:
+            part.model_id = model.pk
+        elif str(part.model_id) in model_refs:
+            part.model_id = services.machine_model_for_name(
+                user, brand, model_refs[str(part.model_id)]["name"]
+            ).pk
+        else:
+            part.model_id = None
+
+
 def _relink(user, workout, sets, parts, notes, refs):
     """Переставить ссылки восстановленных строк на записи, которые есть сейчас."""
     exercises, sports, locations = _resolve_catalogs(user, workout, sets, parts, notes, refs)
@@ -185,6 +235,7 @@ def _relink(user, workout, sets, parts, notes, refs):
     workout.current_exercise_id = current if current in by_target else None
     for part in parts:
         part.sport_id = sports[part.sport_id]
+    _relink_machines(user, parts, refs)
     kept_notes, seen = [], set()
     for note in sorted(notes, key=lambda item: item.pk):
         note.exercise_id = exercises[note.exercise_id]

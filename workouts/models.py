@@ -28,6 +28,12 @@ GLOBAL_SPORT_COLORS = {
     "бег": "run",
     "лыжи": "ski",
 }
+# Настройки кардио-тренажёра (CardioPart): уклон дорожки бывает и отрицательным,
+# уровень нагрузки у велотренажёров и эллипсов — от 1 до пары десятков.
+CARDIO_INCLINE_MIN = Decimal("-10")
+CARDIO_INCLINE_MAX = Decimal("40")
+CARDIO_LEVEL_MAX = 100
+
 # Цвета остальных видов спорта — токены --app-sport-extra-1..N (Sport.palette).
 SPORT_PALETTE_SIZE = 4
 
@@ -1565,14 +1571,83 @@ class CardioPart(models.Model):
     # тренировке, где общее время включает силовую часть.
     duration_min = models.PositiveIntegerField("длительность, мин", null=True, blank=True)
     avg_heart_rate = models.PositiveSmallIntegerField("средний пульс", null=True, blank=True)
+    # Тренажёр и его настройки — у самой части, а не парой «вид спорта × место»,
+    # как ExerciseMachine у силовой (решение 11.10.2026). Уклон и уровень меняются
+    # от тренировки к тренировке, это результат занятия, как дистанция, — их
+    # место в записи. Тренажёр рядом с ними по той же причине: пробежка по
+    # улице и на дорожке — одна «Бег», и «текущая настройка места» соврала бы.
+    # Повторять ввод не приходится: форма подставляет значения прошлой части
+    # того же вида спорта в том же месте (services.last_cardio_machine).
+    # Ссылки на справочник — RESTRICT, как у ExerciseMachine (пункт 4 CLAUDE.md).
+    brand = models.ForeignKey(
+        MachineBrand,
+        verbose_name="производитель",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="cardio_parts",
+    )
+    model = models.ForeignKey(
+        MachineModel,
+        verbose_name="модель",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="cardio_parts",
+    )
+    incline_pct = models.DecimalField(
+        "уклон, %",
+        max_digits=3,
+        decimal_places=1,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(CARDIO_INCLINE_MIN), MaxValueValidator(CARDIO_INCLINE_MAX)],
+    )
+    level = models.PositiveSmallIntegerField(
+        "уровень нагрузки",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(CARDIO_LEVEL_MAX)],
+    )
 
     class Meta:
         verbose_name = "кардио-часть"
         verbose_name_plural = "кардио-части"
         ordering = ["id"]
+        constraints = [
+            # Модель без производителя не бывает — как у ExerciseMachine, где
+            # brand обязателен. Что модель принадлежит именно этому производителю,
+            # констрейнтом не выразить; это держит форма (services.machine_model_for_name).
+            models.CheckConstraint(
+                condition=Q(model__isnull=True) | Q(brand__isnull=False),
+                name="cardio_part_model_needs_brand",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.sport} · {self.distance_display} км"
+
+    @property
+    def machine(self):
+        """«Technogym · Run 1000» или "" — тренажёр части одной строкой."""
+        if not self.brand_id:
+            return ""
+        return machine_label(self.brand.name, self.model.name if self.model_id else "")
+
+    @property
+    def settings_display(self):
+        """«уклон 5 % · уровень 8» или "" — настройки тренажёра в строке части."""
+        pieces = []
+        if self.incline_pct is not None:
+            pieces.append(f"уклон\u00a0{decimal_display(Decimal(str(self.incline_pct)))}\u00a0%")
+        if self.level is not None:
+            pieces.append(f"уровень\u00a0{self.level}")
+        return " · ".join(pieces)
+
+    @property
+    def machine_line(self):
+        """Тренажёр и настройки вместе: «Technogym · Run · уклон 5 %»."""
+        return " · ".join(piece for piece in (self.machine, self.settings_display) if piece)
 
     @property
     def distance(self):

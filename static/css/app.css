@@ -515,6 +515,28 @@ body {
   white-space: nowrap;
 }
 
+/* Тренажёр и настройки части — последней строкой (order) под названием,
+   с отступом на точку и зазор: текст встаёт на одну вертикаль с названием. */
+.app-cardio-part-machine {
+  display: flex;
+  flex-basis: 100%;
+  align-items: center;
+  gap: var(--app-space-1);
+  order: 1;
+  padding-left: calc(0.625rem + var(--app-space-2));
+  color: var(--app-text-secondary);
+  font-size: 0.875rem;
+}
+
+.app-cardio-part-machine svg { flex: none; }
+
+/* Блок «Тренажёр» кардио-формы: заголовок-переключатель, как у «Тренажёров»
+   на странице упражнения. */
+.app-cardio-machine > summary { list-style: none; }
+.app-cardio-machine > summary::-webkit-details-marker { display: none; }
+.app-cardio-machine[open] .app-machines-chevron { transform: rotate(180deg); }
+.app-cardio-machine[open] > summary { margin-bottom: var(--app-space-2); }
+
 .app-cardio-add { margin-top: var(--app-space-1); }
 
 /* Предложение подготовить тренировку на введённый будущий день. Отделено от

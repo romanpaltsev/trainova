@@ -1,0 +1,71 @@
+{% comment %}
+  «Тренажёр» кардио-части: производитель и модель текстом с подсказками и
+  настройки — уклон дорожки и уровень нагрузки. Один партиал на форму кардио
+  и окно «+ Кардио»; поля из forms.cardio_machine_fields, имена у всех одни.
+
+  Свёрнут в строку, пока пуст: пробежке по улице он не нужен (machine_open).
+  Смена вида спорта или места перезапрашивает блок (CardioMachineView) — он
+  приходит заполненным как в прошлый раз в этом месте. Набранное руками не
+  затирается: метку machine_prefilled Alpine снимает при первом вводе, и
+  сервер на такой запрос отвечает 204. На правке перезапроса нет (prefill_on).
+
+  Радио вида спорта и места в hx-include без :checked — htmx сам берёт только
+  отмеченные.
+
+  Ждёт machine_form, machine_brands, machine_models, machine_open, filled_by.
+{% endcomment %}
+<div class="mb-3" id="cardio-machine"
+     x-data="{ auto: {{ filled_by|yesno:'true,false' }} }" @input="auto = false"
+     {% if prefill_on %}
+       hx-get="{% url 'cardio_machine' %}"
+       hx-trigger="change[target.name==='sport'||target.name==='location'||target.name==='location_own'] from:closest form"
+       hx-include="[name='sport'], [name='location'], [name='location_own'], #cardio-machine"
+       hx-target="this" hx-swap="outerHTML"
+     {% endif %}>
+  <input type="hidden" name="machine_prefilled" :value="auto ? '1' : ''" value="{{ filled_by|yesno:'1,' }}">
+  <details class="app-cardio-machine"{% if machine_open %} open{% endif %}>
+    <summary class="form-label app-machines-summary">
+      <span>Тренажёр <span class="text-muted-app">· необязательно</span></span>
+      <svg class="app-machines-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </summary>
+    {% if filled_by %}
+      <p class="app-queue-hint mb-2">Как в прошлый раз{% if filled_by.workout.started_at %} — {{ filled_by.workout.started_at|date:"j b" }}{% endif %}.</p>
+    {% endif %}
+    {% with f=machine_form %}
+    <div class="app-field-grid">
+      <div>
+        <label class="form-label" for="{{ f.machine_brand.id_for_label }}">{{ f.machine_brand.label }}</label>
+        <input type="text" name="machine_brand" id="{{ f.machine_brand.id_for_label }}"
+               class="form-control" list="cardio-brands" autocomplete="off"
+               maxlength="{{ f.fields.machine_brand.max_length }}" placeholder="напр. Technogym"
+               value="{{ f.machine_brand.value|default:'' }}"
+               hx-get="{% url 'cardio_machine_models' %}" hx-trigger="change"
+               hx-target="#cardio-models" hx-swap="outerHTML">
+        {% for error in f.machine_brand.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ f.machine_model.id_for_label }}">{{ f.machine_model.label }}</label>
+        {{ f.machine_model }}
+        {% for error in f.machine_model.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+    </div>
+    <div class="app-field-grid">
+      <div>
+        <label class="form-label" for="{{ f.incline_pct.id_for_label }}">{{ f.incline_pct.label }}</label>
+        {{ f.incline_pct }}
+        {% for error in f.incline_pct.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div>
+        <label class="form-label" for="{{ f.level.id_for_label }}">{{ f.level.label }}</label>
+        {{ f.level }}
+        {% for error in f.level.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+    </div>
+    {% endwith %}
+    <datalist id="cardio-brands">
+      {% for name in machine_brands %}<option value="{{ name }}"></option>{% endfor %}
+    </datalist>
+    {% include "workouts/_cardio_models_datalist.html" %}
+  </details>
+</div>

@@ -8,8 +8,13 @@ from workouts import excel, excel_import, services
 from workouts.models import (
     BODY_METRIC_NAME_MAX_LENGTH,
     BODY_METRIC_UNIT_MAX_LENGTH,
+    CARDIO_INCLINE_MAX,
+    CARDIO_INCLINE_MIN,
+    CARDIO_LEVEL_MAX,
     CATALOG_REQUEST_TEXT_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
+    MACHINE_BRAND_MAX_LENGTH,
+    MACHINE_MODEL_MAX_LENGTH,
     BodyMeasurement,
     BodyMetric,
     CardioPart,
@@ -107,6 +112,130 @@ def time_field():
     )
 
 
+def cardio_machine_fields():
+    """Тренажёр кардио-части и его настройки: четыре необязательных поля.
+
+    Кортеж, как у duration_fields: формам нужны одинаковые поля, а базовый класс
+    не подошёл бы — одна из них ModelForm. Имена полей одни у всех потребителей:
+    на них завязаны партиал _cardio_machine_fields.html и CardioMachineView.
+
+    Производитель и модель — текстом с подсказками (datalist), а не выбором из
+    списка: окна выбора поверх формы не откроешь, а новое название — обычное
+    дело. Запись справочника заводится только при сохранении части (контракт
+    machine_*_for_name: совпало имя — это он), иначе форма, упавшая на другой
+    ошибке, засорила бы справочник. Уклон — localize: «2,5» с запятой.
+    """
+    return (
+        forms.CharField(
+            label="Производитель",
+            required=False,
+            max_length=MACHINE_BRAND_MAX_LENGTH,
+            widget=forms.TextInput(
+                attrs={
+                    "class": "form-control",
+                    "list": "cardio-brands",
+                    "autocomplete": "off",
+                    "placeholder": "напр. Technogym",
+                }
+            ),
+        ),
+        forms.CharField(
+            label="Модель",
+            required=False,
+            max_length=MACHINE_MODEL_MAX_LENGTH,
+            widget=forms.TextInput(
+                attrs={"class": "form-control", "list": "cardio-models", "autocomplete": "off"}
+            ),
+        ),
+        forms.DecimalField(
+            label="Уклон, %",
+            required=False,
+            max_digits=3,
+            decimal_places=1,
+            min_value=CARDIO_INCLINE_MIN,
+            max_value=CARDIO_INCLINE_MAX,
+            localize=True,
+            error_messages={
+                "invalid": "Уклон — это число, например 2,5.",
+                "min_value": "Уклон — от −10 до 40 %%.",
+                "max_value": "Уклон — от −10 до 40 %%.",
+                "max_decimal_places": "Уклон — с одним знаком после запятой.",
+                "max_digits": "Уклон — от −10 до 40 %%.",
+            },
+            widget=forms.TextInput(
+                attrs={"class": "form-control", "inputmode": "decimal", "placeholder": "напр. 3"}
+            ),
+        ),
+        forms.IntegerField(
+            label="Уровень нагрузки",
+            required=False,
+            min_value=1,
+            max_value=CARDIO_LEVEL_MAX,
+            error_messages={
+                "invalid": "Уровень — целое число.",
+                "min_value": f"Уровень — от 1 до {CARDIO_LEVEL_MAX}.",
+                "max_value": f"Уровень — от 1 до {CARDIO_LEVEL_MAX}.",
+            },
+            widget=forms.NumberInput(
+                attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "напр. 8"}
+            ),
+        ),
+    )
+
+
+CARDIO_MACHINE_FIELDS = ("machine_brand", "machine_model", "incline_pct", "level")
+
+
+def cardio_machine_initial(part):
+    """Значения полей тренажёра из части — для правки и для подстановки прошлого."""
+    if part is None:
+        return {}
+    return {
+        "machine_brand": part.brand.name if part.brand_id else "",
+        "machine_model": part.model.name if part.model_id else "",
+        # «4», а не «4,0»: поле с одним знаком после запятой рисовало бы ноль.
+        "incline_pct": (
+            part.incline_pct.to_integral()
+            if part.incline_pct is not None and part.incline_pct == part.incline_pct.to_integral()
+            else part.incline_pct
+        ),
+        "level": part.level,
+    }
+
+
+def clean_cardio_machine(form, cleaned):
+    """Модель без производителя не сохранить — сказать об этом у поля модели."""
+    brand = collapse_spaces(cleaned.get("machine_brand") or "")
+    model = collapse_spaces(cleaned.get("machine_model") or "")
+    if model and not brand:
+        form.add_error("machine_brand", "Укажите производителя модели.")
+
+
+def has_cardio_machine(cleaned):
+    return any(cleaned.get(name) not in (None, "") for name in CARDIO_MACHINE_FIELDS)
+
+
+def apply_cardio_machine(user, part, cleaned):
+    """Перенести тренажёр и настройки из формы в часть (без save)."""
+    brand_name = collapse_spaces(cleaned.get("machine_brand") or "")
+    model_name = collapse_spaces(cleaned.get("machine_model") or "")
+    brand = services.machine_brand_for_name(user, brand_name) if brand_name else None
+    part.brand = brand
+    part.model = (
+        services.machine_model_for_name(user, brand, model_name)
+        if brand is not None and model_name
+        else None
+    )
+    part.incline_pct = cleaned.get("incline_pct")
+    part.level = cleaned.get("level")
+
+
+class CardioMachineForm(forms.Form):
+    """Только поля тренажёра — для перерисовки блока (CardioMachineView)."""
+
+    machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
+
+
 class CardioWorkoutForm(forms.Form):
     """Кардио-тренировка целиком: и Workout, и CardioPart.
 
@@ -184,6 +313,7 @@ class CardioWorkoutForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
     )
+    machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
 
     def __init__(self, *args, user, instance=None, planned=False, **kwargs):
         self.user = user
@@ -260,6 +390,7 @@ class CardioWorkoutForm(forms.Form):
             "distance_km": cardio.distance_km if cardio else None,
             "avg_heart_rate": cardio.avg_heart_rate if cardio else None,
             "note": workout.note,
+            **cardio_machine_initial(cardio),
         }
 
     def clean(self):
@@ -270,6 +401,7 @@ class CardioWorkoutForm(forms.Form):
             error = clean_duration(cleaned, required=not self.planned)
             if error:
                 self.add_error(*error)
+        clean_cardio_machine(self, cleaned)
         if "date" in cleaned:
             # Проверяем собранный момент, а не дату: сегодняшнее число с
             # временем 23:00 в десять утра — это будущее, и одна дата такое
@@ -320,7 +452,9 @@ class CardioWorkoutForm(forms.Form):
         workout.save()
 
         distance = self.cleaned_data.get("distance_km")
-        if distance is None:
+        # Тренажёр держит строку части так же, как цель по дистанции: у плана
+        # «на дорожке, уклон 5» без километров — законная заготовка.
+        if distance is None and not has_cardio_machine(self.cleaned_data):
             # «Цели по дистанции нет» выражается отсутствием строки — тот же
             # приём, что у ExerciseNote. Ветка delete сегодня всегда попадает в
             # пустоту (planned бывает только у новой тренировки), но делает
@@ -337,6 +471,7 @@ class CardioWorkoutForm(forms.Form):
             # Пульс есть только у состоявшейся тренировки: у плана поля нет,
             # а на записи черновика оно придёт из формы как обычно.
             part.avg_heart_rate = self.cleaned_data.get("avg_heart_rate")
+            apply_cardio_machine(self.user, part, self.cleaned_data)
             part.save()
         return workout
 
@@ -353,6 +488,7 @@ class CardioPartForm(forms.ModelForm):
     """
 
     duration_hours, duration_minutes = duration_fields()
+    machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
 
     class Meta:
         model = CardioPart
@@ -389,6 +525,8 @@ class CardioPartForm(forms.ModelForm):
             hours, minutes = divmod(self.instance.duration_min or 0, 60)
             self.initial.setdefault("duration_hours", hours or None)
             self.initial.setdefault("duration_minutes", minutes or None)
+            for name, value in cardio_machine_initial(self.instance).items():
+                self.initial.setdefault(name, value)
 
     def clean_distance_km(self):
         distance = self.cleaned_data.get("distance_km")
@@ -404,11 +542,13 @@ class CardioPartForm(forms.ModelForm):
             error = clean_duration(cleaned, required=False)
             if error:
                 self.add_error(*error)
+        clean_cardio_machine(self, cleaned)
         return cleaned
 
     def save(self, commit=True):
         part = super().save(commit=False)
         part.workout = self.workout
+        apply_cardio_machine(self.user, part, self.cleaned_data)
         # Ноль значит «не указывал»: у части это NULL, и тогда скорость с темпом
         # просто не считаются — врать про них хуже, чем промолчать.
         part.duration_min = self.cleaned_data.get("duration_min") or None

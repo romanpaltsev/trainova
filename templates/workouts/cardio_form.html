@@ -134,6 +134,17 @@
     {% for error in form.location_own.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
   </div>
 
+  {% comment %}
+    Тренажёр — после места: блок подставляет прошлое по виду спорта и месту,
+    и порядок полей повторяет эту зависимость. Подстановка — только у новой
+    тренировки: на правке она подменила бы записанное.
+  {% endcomment %}
+  {% if workout %}
+    {% include "workouts/_cardio_machine_fields.html" %}
+  {% else %}
+    {% include "workouts/_cardio_machine_fields.html" with prefill_on=True %}
+  {% endif %}
+
   <div class="mb-3">
     <label class="form-label" for="{{ form.note.id_for_label }}">{{ form.note.label }}</label>
     {{ form.note }}

@@ -36,9 +36,11 @@ from workouts import (
     trash,
 )
 from workouts.forms import (
+    CARDIO_MACHINE_FIELDS,
     MAX_DURATION_HOURS,
     BodyMeasurementForm,
     BodyMetricForm,
+    CardioMachineForm,
     CardioPartForm,
     CardioWorkoutForm,
     CatalogRequestForm,
@@ -50,6 +52,7 @@ from workouts.forms import (
     SportForm,
     StrengthTimeForm,
     XlsxUploadForm,
+    cardio_machine_initial,
 )
 from workouts.models import (
     BODY_METRIC_NAME_MAX_LENGTH,
@@ -74,6 +77,7 @@ from workouts.models import (
     WEIGHT_STEP_CHOICES,
     BodyMeasurement,
     BodyMetric,
+    CardioPart,
     CatalogRequest,
     ChangelogEntry,
     Exercise,
@@ -254,13 +258,19 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
 
     def get(self, request, **kwargs):
         instance = self.get_instance()
+        initial = self.preselected(request, instance)
+        filled_by = None
+        if initial and "sport" in initial:
+            # Вид спорта пришёл из чузера — блок «Тренажёр» сразу как в прошлый
+            # раз в месте по умолчанию (его же форма ставит в чипы места).
+            filled_by = services.last_cardio_machine(
+                request.user, initial["sport"], Location.objects.default_for(request.user)
+            )
+            initial |= cardio_machine_initial(filled_by)
         form = CardioWorkoutForm(
-            user=request.user,
-            instance=instance,
-            planned=self.planned,
-            initial=self.preselected(request, instance),
+            user=request.user, instance=instance, planned=self.planned, initial=initial
         )
-        return self.render_form(form, instance)
+        return self.render_form(form, instance, filled_by=filled_by)
 
     def preselected(self, request, instance):
         """Вид спорта и день из чузера «+» (?sport=, ?planned_for=): подсказка, а не адрес.
@@ -313,11 +323,13 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
             return redirect(reverse("workout_history") + f"#workout-{workout.pk}")
         return self.render_form(form, instance)
 
-    def render_form(self, form, instance):
+    def render_form(self, form, instance, filled_by=None):
         return render(
             self.request,
             self.template_name,
-            {
+            cardio_machine_context(self.request.user, form)
+            | {
+                "filled_by": filled_by,
                 "form": form,
                 "workout": instance,
                 # Чипы мест берём из queryset'а самой формы: тогда «что видно» и
@@ -331,6 +343,105 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
                 # «записать», а не «сохранить изменения» — тренировки ещё не было.
                 "recording_plan": instance is not None and instance.is_planned,
                 "nav_active": "history" if instance and not instance.is_planned else "add",
+            },
+        )
+
+
+def cardio_machine_context(user, form, *, brand_name=None):
+    """Контекст блока «Тренажёр»: форма, подсказки производителей и моделей.
+
+    Раскрыт блок, когда в нём что-то есть: у пробежки по улице он не нужен и
+    сворачивается в одну строку.
+    """
+    if brand_name is None:
+        brand_name = form["machine_brand"].value() or ""
+    return {
+        "machine_form": form,
+        "machine_brands": MachineBrand.objects.visible_to(user).values_list("name", flat=True),
+        "machine_models": cardio_model_names(user, brand_name),
+        "machine_open": any(form[name].value() not in (None, "") for name in CARDIO_MACHINE_FIELDS),
+    }
+
+
+def cardio_model_names(user, brand_name):
+    """Названия моделей видимого производителя с таким именем — для подсказок."""
+    brand_name = collapse_spaces(brand_name)
+    if not brand_name:
+        return []
+    brand = (
+        MachineBrand.objects.visible_to(user)
+        .filter(name__iexact=brand_name)
+        .order_by(F("owner").desc(nulls_last=True))
+        .first()
+    )
+    if brand is None:
+        return []
+    return list(
+        MachineModel.objects.visible_to(user).filter(brand=brand).values_list("name", flat=True)
+    )
+
+
+def chosen_sport_and_location(request, data):
+    """Вид спорта и место из запроса блока «Тренажёр» — только свои и общие.
+
+    Мусор и чужие id молча дают None: это подсказка, а не запись, и 404 здесь
+    был бы грубостью. Новое место, набранное текстом, ещё не существует — у
+    него прошлого нет.
+    """
+    sport_id = data.get("sport", "")
+    sport = None
+    if sport_id.isdecimal():
+        sport = (
+            Sport.objects.visible_to(request.user)
+            .filter(category=Sport.Category.CARDIO, pk=int(sport_id))
+            .first()
+        )
+    location_id = data.get("location", "")
+    location = None
+    if location_id.isdecimal():
+        location = Location.objects.filter(owner=request.user, pk=int(location_id)).first()
+    return sport, location
+
+
+class CardioMachineView(LoginRequiredMixin, View):
+    """Блок «Тренажёр» кардио-формы, заполненный как в прошлый раз.
+
+    Зовётся сменой вида спорта или места. Если в блоке набрано руками — 204, и
+    htmx ничего не трогает: подстановка не должна затирать введённое. А вот
+    подставленное сервером (machine_prefilled=1, Alpine снимает метку при
+    первом вводе) заменяется: сменили «Бег» на «Велосипед» — дорожка уходит.
+    """
+
+    def get(self, request):
+        typed = any(request.GET.get(name, "").strip() for name in CARDIO_MACHINE_FIELDS)
+        if typed and request.GET.get("machine_prefilled") != "1":
+            return HttpResponse(status=204)
+        sport, location = chosen_sport_and_location(request, request.GET)
+        if location is None and request.GET.get("location_own", "").strip():
+            last = None
+        else:
+            last = services.last_cardio_machine(request.user, sport, location) if sport else None
+        form = CardioMachineForm(initial=cardio_machine_initial(last))
+        return render(
+            request,
+            "workouts/_cardio_machine_fields.html",
+            # prefill_on: блок приходит на место себя же и должен сохранить
+            # перезапрос — иначе вторая смена вида спорта уже ничего бы не дала.
+            cardio_machine_context(request.user, form) | {"filled_by": last, "prefill_on": True},
+        )
+
+
+class CardioMachineModelsView(LoginRequiredMixin, View):
+    """Подсказки моделей производителя, набранного в блоке «Тренажёр»."""
+
+    def get(self, request):
+        return render(
+            request,
+            "workouts/_cardio_models_datalist.html",
+            {
+                "machine_models": cardio_model_names(
+                    request.user, request.GET.get("machine_brand", "")
+                )
             },
         )
 
@@ -1433,7 +1544,8 @@ class WorkoutCardioPartView(LoginRequiredMixin, View):
         return render(
             request,
             "workouts/_cardio_part_modal.html",
-            {
+            cardio_machine_context(request.user, form)
+            | {
                 "workout": workout,
                 "form": form,
                 "part": part,
@@ -3190,21 +3302,31 @@ class LocationDeleteView(CatalogDeleteView):
 MACHINE_KINDS = {"brand": MachineBrand, "model": MachineModel}
 
 
-def machine_uses_label(count):
-    """«у 2 упражнений» или «не используется» — подпись записи справочника тренажёров."""
-    if not count:
-        return "не используется"
-    word = ru_plural(count, "упражнения", "упражнений", "упражнений")
-    return f"у {count} {word}"
+def machine_uses_label(count, cardio=0):
+    """«у 2 упражнений · в 3 кардио» или «не используется» — подпись записи справочника."""
+    pieces = []
+    if count:
+        pieces.append(f"у {count} {ru_plural(count, 'упражнения', 'упражнений', 'упражнений')}")
+    if cardio:
+        pieces.append(f"в {cardio} кардио")
+    return " · ".join(pieces) or "не используется"
+
+
+# Использование записи справочника: тренажёры упражнений и кардио-части. distinct —
+# два джойна в одном запросе иначе перемножили бы друг друга.
+MACHINE_USES = {
+    "uses": Count("exercise_machines", distinct=True),
+    "cardio_uses": Count("cardio_parts", distinct=True),
+}
 
 
 def label_machine_uses(items):
-    """Подписи «у N упражнений» — производителям и их моделям из prefetch."""
+    """Подписи использования — производителям и их моделям из prefetch."""
     items = list(items)
     for item in items:
-        item.uses_label = machine_uses_label(item.uses)
+        item.uses_label = machine_uses_label(item.uses, item.cardio_uses)
         for model in getattr(item, "own_models", ()):
-            model.uses_label = machine_uses_label(model.uses)
+            model.uses_label = machine_uses_label(model.uses, model.cardio_uses)
     return items
 
 
@@ -3231,12 +3353,12 @@ class MyMachinesView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         user = self.request.user
         own_models = with_request_status(
-            MachineModel.objects.filter(owner=user).annotate(uses=Count("exercise_machines")),
+            MachineModel.objects.filter(owner=user).annotate(**MACHINE_USES),
             "model",
         )
         own_brands = (
             with_request_status(MachineBrand.objects.filter(owner=user), "brand")
-            .annotate(uses=Count("exercise_machines"))
+            .annotate(**MACHINE_USES)
             .prefetch_related(Prefetch("models", queryset=own_models, to_attr="own_models"))
         )
         # Свои модели общих производителей — по производителю, в порядке названий.
@@ -3258,13 +3380,13 @@ class MyMachinesView(LoginRequiredMixin, TemplateView):
             shared_models = (
                 MachineModel.objects.global_only()
                 .select_related("contributed_by")
-                .annotate(uses=Count("exercise_machines"))
+                .annotate(**MACHINE_USES)
             )
             context["show_shared"] = True
             context["shared_brands"] = label_machine_uses(
                 MachineBrand.objects.global_only()
                 .select_related("contributed_by")
-                .annotate(uses=Count("exercise_machines"))
+                .annotate(**MACHINE_USES)
                 .prefetch_related(Prefetch("models", queryset=shared_models, to_attr="own_models"))
             )
         return super().get_context_data(**kwargs) | context
@@ -3539,7 +3661,10 @@ class MachineDeleteView(MachineItemMixin, View):
 
     def blocked_message(self, item, uses):
         if uses:
-            return f"«{item.name}» указан у тренажёров упражнений — сначала замените его там."
+            return (
+                f"«{item.name}» указан у тренажёров упражнений или в кардио — "
+                "сначала замените его там."
+            )
         if isinstance(item, MachineBrand) and self.foreign_models(item).exists():
             return f"У «{item.name}» есть модели других пользователей — его нельзя удалить."
         return ""
@@ -3550,14 +3675,21 @@ class MachineDeleteView(MachineItemMixin, View):
             return models_.exclude(owner__isnull=True)
         return models_.exclude(owner=brand.owner)
 
+    def uses_split(self, item):
+        """(тренажёров упражнений, кардио-частей) с этой записью."""
+        lookup = {"brand" if isinstance(item, MachineBrand) else "model": item}
+        return (
+            ExerciseMachine.objects.filter(**lookup).count(),
+            CardioPart.objects.filter(**lookup).count(),
+        )
+
     def uses(self, item):
-        return ExerciseMachine.objects.filter(
-            **{"brand" if isinstance(item, MachineBrand) else "model": item}
-        ).count()
+        return sum(self.uses_split(item))
 
     def get(self, request, kind, pk):
         item = self.get_item()
-        uses = self.uses(item)
+        split = self.uses_split(item)
+        uses = sum(split)
         note = ""
         if isinstance(item, MachineBrand):
             count = MachineModel.objects.filter(brand=item, owner=item.owner).count()
@@ -3569,7 +3701,7 @@ class MachineDeleteView(MachineItemMixin, View):
             {
                 "item": item,
                 "title": "Удалить производителя?" if kind == "brand" else "Удалить модель?",
-                "usage_label": machine_uses_label(uses),
+                "usage_label": machine_uses_label(*split),
                 "blocked_message": self.blocked_message(item, uses),
                 "delete_note": note,
                 "cancel_url": reverse("my_machines"),
