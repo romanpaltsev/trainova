@@ -79,7 +79,19 @@ def dump(user):
                     for row in workout.sets.select_related("exercise").order_by("id")
                 ],
                 "notes": sorted(workout.exercise_notes.values_list("exercise__name", "text")),
-                "cardio": (cardio.distance_km, cardio.avg_heart_rate) if cardio else None,
+                # Тренажёр — названиями: у другого аккаунта своя модель заводится
+                # заново, и сверять id было бы бессмысленно.
+                "cardio": (
+                    (
+                        cardio.distance_km,
+                        cardio.avg_heart_rate,
+                        cardio.machine,
+                        cardio.incline_pct,
+                        cardio.level,
+                    )
+                    if cardio
+                    else None
+                ),
             }
         )
     return snapshot

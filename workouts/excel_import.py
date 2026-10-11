@@ -297,16 +297,34 @@ def _create_sets(catalog, report, workout, group):
 
 
 def _create_cardio(report, workout, group):
-    """Дистанция и пульс кардио-тренировки, если они в файле есть."""
+    """Дистанция, пульс и тренажёр кардио-тренировки, если они в файле есть."""
     if any(row.exercise for row in group):
         report.add_warning(
             f"«{workout.sport.name}» — кардио, поэтому упражнения из файла не записаны."
         )
-    distance = next((row.distance_km for row in group if row.distance_km), None)
-    if distance is None:
+
+    def first(attr):
+        return next((getattr(row, attr) for row in group if getattr(row, attr)), None)
+
+    distance = first("distance_km")
+    brand_name = first("machine_brand")
+    model_name = first("machine_model")
+    incline = next((row.incline_pct for row in group if row.incline_pct is not None), None)
+    level = first("level")
+    if distance is None and not (brand_name or incline is not None or level):
         # Кардио без дистанции — законная запись: «плавал 40 минут, не мерил».
         return
-    pulse = next((row.avg_heart_rate for row in group if row.avg_heart_rate), None)
+    if model_name and not brand_name:
+        report.add_warning(f"Модель «{model_name}» без производителя не записана.")
+        model_name = None
+    # Тренажёр — тем же контрактом, что в форме: совпало имя — это он, иначе
+    # заводится свой (services.machine_*_for_name).
+    brand = services.machine_brand_for_name(workout.user, brand_name) if brand_name else None
+    model = (
+        services.machine_model_for_name(workout.user, brand, model_name)
+        if brand is not None and model_name
+        else None
+    )
     # Часть здесь одна и описывает тренировку целиком: вид спорта и длительность
     # те же, что у неё. Тот же инвариант держит CardioWorkoutForm.save.
     CardioPart.objects.create(
@@ -314,5 +332,9 @@ def _create_cardio(report, workout, group):
         sport=workout.sport,
         duration_min=workout.duration_min,
         distance_km=distance,
-        avg_heart_rate=pulse,
+        avg_heart_rate=first("avg_heart_rate"),
+        brand=brand,
+        model=model,
+        incline_pct=incline,
+        level=level,
     )

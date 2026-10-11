@@ -1729,7 +1729,11 @@ def cardio_parts_prefetch():
     их тем же запросом. Функция, а не константа: объект Prefetch переиспользуют
     несколько разных queryset'ов, и общий экземпляр между ними — лишний риск.
     """
-    return models.Prefetch("cardio_parts", queryset=CardioPart.objects.select_related("sport"))
+    # brand и model — LEFT JOIN тем же запросом: строка части пишет тренажёр
+    # (machine_line), и без них каждая часть дочитывала бы его сама.
+    return models.Prefetch(
+        "cardio_parts", queryset=CardioPart.objects.select_related("sport", "brand", "model")
+    )
 
 
 class ChangelogQuerySet(models.QuerySet):

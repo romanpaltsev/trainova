@@ -24,6 +24,9 @@ from openpyxl.utils import get_column_letter
 
 from workouts import services
 from workouts.models import (
+    CARDIO_INCLINE_MAX,
+    CARDIO_INCLINE_MIN,
+    CARDIO_LEVEL_MAX,
     MAX_DURATION_SEC,
     MEASUREMENT_FIELDS,
     TIME_MEASUREMENTS,
@@ -75,6 +78,12 @@ COLUMNS: tuple[Column, ...] = (
     # порядку. В конце и необязательная: колонки ищутся по заголовку, поэтому
     # файлы, скачанные до неё, загружаются как прежде — без суперсетов.
     Column("circuit", "Суперсет", 11, "0"),
+    # Тренажёр кардио и его настройки (CardioPart, решение 11.10.2026). Тоже в
+    # конце и необязательные: старые файлы без них грузятся как прежде.
+    Column("machine_brand", "Производитель", 18),
+    Column("machine_model", "Модель", 18),
+    Column("incline", "Уклон, %", 10, "0.0"),
+    Column("level", "Уровень", 9, "0"),
 )
 # Без этих трёх строка не значит ничего: дата и вид спорта опознают тренировку,
 # длительность делает её записанной, а не «идущей».
@@ -104,6 +113,10 @@ HELP_LINES = (
     "",
     "«Суперсет» — номер суперсета внутри тренировки: упражнения с одним номером",
     "выполняются по очереди, по подходу каждого. Пустой — упражнение само по себе.",
+    "",
+    "Кардио на тренажёре: «Производитель» и «Модель» — названия, как в «Моих",
+    "тренажёрах» (незнакомые приложение заведёт само), «Уклон, %» — от −10 до 40,",
+    "«Уровень» — уровень нагрузки от 1 до 100. Всё необязательно.",
     "",
     "Упражнение с повторами без веса приложение заводит как «вес × повторы»: вес 0",
     "у него значит «со своим весом». Если это чистые повторы — поменяйте единицу",
@@ -186,6 +199,11 @@ def _workout_rows(workout, sets, notes):
         row = dict(common)
         row["distance"] = cardio.distance_km if cardio else None
         row["pulse"] = cardio.avg_heart_rate if cardio else None
+        if cardio is not None:
+            row["machine_brand"] = cardio.brand.name if cardio.brand_id else ""
+            row["machine_model"] = cardio.model.name if cardio.model_id else ""
+            row["incline"] = cardio.incline_pct
+            row["level"] = cardio.level
         row["workout_note"] = workout.note
         return [row]
 
@@ -345,6 +363,10 @@ class SheetRow:
     workout_note: str = ""
     exercise_note: str = ""
     circuit: int | None = None
+    machine_brand: str = ""
+    machine_model: str = ""
+    incline_pct: Decimal | None = None
+    level: int | None = None
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -446,6 +468,24 @@ def _cell_circuit(value):
     number = _cell_int(value, what="Суперсет")
     if number is not None and not 1 <= number <= 99:
         raise ValueError("Суперсет — номер от 1 до 99.")
+    return number
+
+
+def _cell_incline(value):
+    """Уклон кардио-тренажёра: −10…40 %, один знак после запятой."""
+    number = _cell_decimal(value, what="Уклон")
+    if number is None:
+        return None
+    if not CARDIO_INCLINE_MIN <= number <= CARDIO_INCLINE_MAX:
+        raise ValueError("Уклон — от −10 до 40 %.")
+    return number.quantize(Decimal("0.1"))
+
+
+def _cell_level(value):
+    """Уровень нагрузки кардио-тренажёра: 1…CARDIO_LEVEL_MAX."""
+    number = _cell_int(value, what="Уровень")
+    if number is not None and not 1 <= number <= CARDIO_LEVEL_MAX:
+        raise ValueError(f"Уровень — от 1 до {CARDIO_LEVEL_MAX}.")
     return number
 
 
@@ -614,4 +654,8 @@ def _sheet_row(number, values, index):
     row.workout_note = cell_text(cell("workout_note"))
     row.exercise_note = cell_text(cell("exercise_note"))
     read("circuit", _cell_circuit, "circuit")
+    row.machine_brand = cell_text(cell("machine_brand"))
+    row.machine_model = cell_text(cell("machine_model"))
+    read("incline", _cell_incline, "incline_pct")
+    read("level", _cell_level, "level")
     return row

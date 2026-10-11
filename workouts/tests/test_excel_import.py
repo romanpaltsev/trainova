@@ -21,6 +21,8 @@ from workouts.models import (
 from workouts.tests.factories import (
     ExerciseFactory,
     LocationFactory,
+    MachineBrandFactory,
+    MachineModelFactory,
     SportFactory,
     StrengthSetFactory,
     WorkoutFactory,
@@ -158,6 +160,61 @@ def test_cardio_row_creates_details(user):
     assert report.sets == 0
     assert details.distance_km == Decimal("24.50")
     assert details.avg_heart_rate == 142
+
+
+def test_cardio_machine_columns_are_read(user):
+    """Тренажёр — контрактом формы: общий находится по имени, незнакомая модель —
+    своя; тренажёр без дистанции тоже держит часть."""
+    SportFactory(name="Бег", category=Sport.Category.CARDIO)
+    technogym = MachineBrandFactory(name="Technogym")
+
+    report = run(
+        user,
+        [
+            cardio_row(
+                sport="Бег",
+                distance=None,
+                machine_brand="technogym",
+                machine_model="Run 1000",
+                incline="2,5",
+                level=7,
+            )
+        ],
+    )
+
+    part = CardioPart.objects.get()
+    assert report.error_count == 0
+    assert part.brand == technogym
+    assert (part.model.name, part.model.owner) == ("Run 1000", user)
+    assert (part.incline_pct, part.level, part.distance_km) == (Decimal("2.5"), 7, None)
+
+
+@pytest.mark.parametrize(
+    ("cells", "error"),
+    [
+        ({"incline": 55}, "Уклон — от −10 до 40 %."),
+        ({"incline": "круто"}, "Уклон — это число"),
+        ({"level": 0}, "Уровень — от 1 до 100."),
+    ],
+)
+def test_bad_machine_cells_are_row_errors(user, cells, error):
+    """Как у пульса: ошибка ячейки — в отчёт, тренировка пишется без значения."""
+    SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+
+    report = run(user, [cardio_row(**cells)])
+
+    assert any(error in line for line in report.errors)
+    part = CardioPart.objects.get()
+    assert (part.incline_pct, part.level) == (None, None)
+
+
+def test_model_without_brand_is_dropped_with_warning(user):
+    SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+
+    report = run(user, [cardio_row(machine_model="Excite")])
+
+    assert CardioPart.objects.get().model is None
+    assert any("без производителя" in line for line in report.warnings)
 
 
 def test_cardio_without_distance_is_still_a_workout(user):
@@ -421,6 +478,10 @@ def test_round_trip_keeps_the_diary(user):
         duration_min=ride.duration_min,
         distance_km=Decimal("24.50"),
         avg_heart_rate=142,
+        brand=(technogym := MachineBrandFactory(name="Technogym")),
+        model=MachineModelFactory(brand=technogym, name="Bike Excite", owner=user),
+        incline_pct=Decimal("-1.5"),
+        level=12,
     )
 
     book = excel.build_workbook(user)
