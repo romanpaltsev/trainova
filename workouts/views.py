@@ -11,11 +11,21 @@ from datetime import date, timedelta
 from decimal import Decimal
 from operator import attrgetter
 from typing import NamedTuple
+from urllib.parse import urlsplit
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Max, OuterRef, Prefetch, Q, Subquery
+from django.db.models import (
+    Count,
+    F,
+    Max,
+    OuterRef,
+    Prefetch,
+    Q,
+    Subquery,
+    prefetch_related_objects,
+)
 from django.db.models.deletion import ProtectedError, RestrictedError
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
@@ -668,7 +678,13 @@ def editable_set_or_404(request, pk, *, for_update=False):
 
 
 def correct_context(workout, *, open_set_id=None):
-    """Контекст региона правки записанной тренировки: группы и раскрытый подход."""
+    """Контекст региона правки записанной тренировки: группы и раскрытый подход.
+
+    Кардио-части — prefetch'ем вместе с видами спорта: регион рисует их список,
+    а без него каждая часть дочитывала бы свой вид спорта отдельным запросом.
+    Здесь, а не во вьюхе экрана, — регион отдают и общие эндпоинты состава.
+    """
+    prefetch_related_objects([workout], cardio_parts_prefetch())
     groups = services.exercise_groups(workout)
     for group in groups:
         group["total"] = services.exercise_total(group["sets"])
@@ -1579,8 +1595,17 @@ class WorkoutCardioPartView(LoginRequiredMixin, View):
         # Куда вернуться, решает содержимое тренировки — то же правило, что и у
         # маршрутизации экранов: с подходами дом это живой режим или итог, без
         # них — форма кардио.
+        correct_url = reverse("workout_correct", args=[workout.pk])
         if not workout.sets.exists():
             url = reverse("workout_edit", args=[workout.pk])
+        elif (
+            workout.is_finished
+            and urlsplit(request.headers.get("HX-Current-URL", "")).path == correct_url
+        ):
+            # Окно открыли с экрана правки — туда и возвращаемся, а не на итог:
+            # правка состава ещё не закончена. Адрес сверяется целиком, а не
+            # берётся из заголовка, — открытого редиректа нет.
+            url = correct_url
         elif workout.is_finished:
             url = reverse("workout_summary", args=[workout.pk])
         else:

@@ -119,8 +119,41 @@ def test_correct_screen_queries_do_not_scale(client, user, count, django_assert_
             StrengthSetFactory(workout=workout, exercise=exercise, set_number=number)
 
     client.force_login(user)
-    with django_assert_max_num_queries(8 + SIDEBAR_QUERIES):
+    # Девятый — кардио-части с видами спорта (список кардио на экране правки).
+    with django_assert_max_num_queries(9 + SIDEBAR_QUERIES):
         client.get(correct_url(workout))
+
+
+def test_correct_screen_shows_cardio_parts(client, user, finished):
+    """Кардио смешанной тренировки видно и правится здесь, а не только на итоге."""
+    run = Sport.objects.create(name="Бег", category=Sport.Category.CARDIO)
+    part = CardioPartFactory(workout=finished, sport=run, duration_min=20, distance_km=4)
+    client.force_login(user)
+
+    content = client.get(correct_url(finished)).content.decode()
+
+    assert reverse("workout_cardio_part_edit", args=[finished.pk, part.pk]) in content
+    assert reverse("workout_cardio_part", args=[finished.pk]) in content
+
+
+def test_cardio_saved_from_correct_screen_returns_there(client, user, finished):
+    run = Sport.objects.create(name="Бег", category=Sport.Category.CARDIO)
+    client.force_login(user)
+    data = {"sport": run.pk, "distance_km": "3", "duration_hours": "0", "duration_minutes": "15"}
+    url = reverse("workout_cardio_part", args=[finished.pk])
+
+    from_correct = client.post(
+        url, data, headers=HX | {"HX-Current-URL": "http://testserver" + correct_url(finished)}
+    )
+    from_summary = client.post(
+        url,
+        data,
+        headers=HX
+        | {"HX-Current-URL": "http://testserver" + reverse("workout_summary", args=[finished.pk])},
+    )
+
+    assert from_correct.headers["HX-Redirect"] == correct_url(finished)
+    assert from_summary.headers["HX-Redirect"] == reverse("workout_summary", args=[finished.pk])
 
 
 # ---------- Правка подходов ----------
