@@ -426,6 +426,13 @@ def _create_parts(catalog, report, workout, rows, *, lone):
         duration = row.cardio_duration_min
         if duration is None and lone:
             duration = workout.duration_min
+        style = row.style
+        if style and not sport.has_styles:
+            # Как в форме: стиль бывает только у лыж — у пробежки он ничего не значит.
+            report.add_warning(
+                f"Стиль у «{sport.name}» не записан: он бывает только у лыж и лыжероллеров."
+            )
+            style = ""
         CardioPart.objects.create(
             workout=workout,
             sport=sport,
@@ -438,6 +445,7 @@ def _create_parts(catalog, report, workout, rows, *, lone):
             incline_pct=row.incline_pct,
             level=row.level,
             elevation_gain_m=row.elevation_gain_m,
+            style=style,
         )
         created += 1
     return created

@@ -36,6 +36,7 @@ from workouts.models import (
     MEASUREMENT_FIELDS,
     SPORT_NAME_MAX_LENGTH,
     TIME_MEASUREMENTS,
+    CardioPart,
     ExerciseMachine,
     ExerciseNote,
     StrengthSet,
@@ -106,6 +107,8 @@ COLUMNS: tuple[Column, ...] = (
     # Набор высоты кардио-части — уличный двойник уклона. В конце, как все
     # поздние колонки: файлы без неё грузятся как прежде.
     Column("elevation", "Набор высоты, м", 16, "0"),
+    # Стиль хода лыжной части — подписью, как в приложении: «конёк», «классика».
+    Column("style", "Стиль", 11),
 )
 # Без этих трёх строка не значит ничего: дата и вид спорта опознают тренировку,
 # длительность делает её записанной, а не «идущей».
@@ -150,6 +153,8 @@ HELP_LINES = (
     "",
     "«Набор высоты, м» — сколько метров вверх набрано за кардио, целым числом.",
     "Необязательно; ноль — то же, что пусто.",
+    "",
+    "«Стиль» — только у лыж и лыжероллеров: «конёк» или «классика». Необязательно.",
     "",
     "Упражнение с повторами без веса приложение заводит как «вес × повторы»: вес 0",
     "у него значит «со своим весом». Если это чистые повторы — поменяйте единицу",
@@ -292,6 +297,7 @@ def _cardio_row(common, workout, part, *, lone):
     row["incline"] = part.incline_pct
     row["level"] = part.level
     row["elevation"] = part.elevation_gain_m
+    row["style"] = part.get_style_display() if part.style else ""
     if part.sport_id != workout.sport_id:
         row["cardio"] = part.sport.name
     if not (lone and part.duration_min == workout.duration_min):
@@ -435,6 +441,7 @@ class SheetRow:
     incline_pct: Decimal | None = None
     level: int | None = None
     elevation_gain_m: int | None = None
+    style: str = ""
     errors: list[str] = field(default_factory=list)
     # Строка, которую не к чему отнести: название упражнения или вида спорта не
     # помещается в справочник. Такая не загружается вовсе — с пустым названием
@@ -464,6 +471,7 @@ class SheetRow:
             or self.incline_pct is not None
             or self.level
             or self.elevation_gain_m
+            or self.style
         )
 
 
@@ -602,6 +610,19 @@ def _cell_elevation(value):
     if not 0 < number <= CARDIO_ELEVATION_MAX:
         raise ValueError(f"Набор высоты — от 1 до {CARDIO_ELEVATION_MAX} м.")
     return number
+
+
+# Стиль по подписи: регистр и «ё» не важны — «Конек» из чужой таблицы тоже конёк.
+STYLES_BY_LABEL = {label.replace("ё", "е"): value for value, label in CardioPart.Style.choices}
+
+
+def _cell_style(value):
+    text = cell_text(value).lower().replace("ё", "е")
+    if not text:
+        return ""
+    if text not in STYLES_BY_LABEL:
+        raise ValueError("Стиль — «конёк» или «классика».")
+    return STYLES_BY_LABEL[text]
 
 
 def _cell_cardio_minutes(value):
@@ -791,4 +812,5 @@ def _sheet_row(number, values, index):
     read("incline", _cell_incline, "incline_pct")
     read("level", _cell_level, "level")
     read("elevation", _cell_elevation, "elevation_gain_m")
+    read("style", _cell_style, "style")
     return row

@@ -273,6 +273,7 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
         instance = self.get_instance()
         initial = self.preselected(request, instance)
         filled_by = route_filled_by = None
+        style_filled = False
         if initial and "sport" in initial:
             # Вид спорта пришёл из чузера — блоки «Тренажёр» и маршрута сразу как
             # в прошлый раз в месте по умолчанию (его же форма ставит в чипы места).
@@ -280,17 +281,23 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
             filled_by = services.last_cardio_machine(request.user, initial["sport"], default)
             initial |= cardio_machine_initial(filled_by)
             # У плана дистанция — цель, а не «как в прошлый раз»: маршрут ему
-            # не подставляется.
+            # не подставляется. Стиля у плана нет вовсе.
             if not self.planned:
                 route_filled_by = services.last_cardio_route(
                     request.user, initial["sport"], default
                 )
                 initial |= cardio_route_initial(route_filled_by)
+                initial["style"] = services.last_cardio_style(request.user, initial["sport"])
+                style_filled = bool(initial["style"])
         form = CardioWorkoutForm(
             user=request.user, instance=instance, planned=self.planned, initial=initial
         )
         return self.render_form(
-            form, instance, filled_by=filled_by, route_filled_by=route_filled_by
+            form,
+            instance,
+            filled_by=filled_by,
+            route_filled_by=route_filled_by,
+            style_filled=style_filled,
         )
 
     def preselected(self, request, instance):
@@ -344,11 +351,12 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
             return redirect(reverse("workout_history") + f"#workout-{workout.pk}")
         return self.render_form(form, instance)
 
-    def render_form(self, form, instance, filled_by=None, route_filled_by=None):
+    def render_form(self, form, instance, filled_by=None, route_filled_by=None, style_filled=False):
         return render(
             self.request,
             self.template_name,
             cardio_machine_context(self.request.user, form)
+            | cardio_style_context(form, filled=style_filled)
             | {
                 "filled_by": filled_by,
                 "route_form": form,
@@ -459,6 +467,60 @@ class CardioMachineView(LoginRequiredMixin, View):
         )
 
 
+def cardio_style_context(form, *, filled=False):
+    """Чипы стиля хода для формы с полем style: есть они только у лыж.
+
+    Вид спорта — тот, что сейчас выбран в форме (на ошибке — присланный), и
+    ищется в queryset'е самого поля: чужой id чипов не покажет. У плана поля
+    стиля нет, и блок пуст. filled — стиль подставлен, а не выбран руками.
+    """
+    if "style" not in form.fields:
+        return {"style_choices": [], "selected_style": "", "style_filled": False}
+    errors = form["style"].errors
+    sport_id = form["sport"].value()
+    sport = (
+        form.fields["sport"].queryset.filter(pk=sport_id).first()
+        if str(sport_id or "").isdecimal()
+        else None
+    )
+    selected = form["style"].value() or ""
+    return {
+        # С ошибкой чипы нужны и у вида спорта без стилей: иначе её негде показать.
+        "style_choices": (
+            CardioPart.Style.choices if (sport and sport.has_styles) or errors else []
+        ),
+        "selected_style": selected,
+        "style_filled": filled and bool(selected),
+        "style_errors": errors,
+    }
+
+
+class CardioStyleView(LoginRequiredMixin, View):
+    """Чипы стиля хода — «Конёк | Классика» — для выбранного вида спорта.
+
+    Зовётся сменой вида спорта, как CardioMachineView. У вида спорта без стилей
+    блок приходит пустым — сменили «Лыжи» на «Бег», и чипы уходят. Выбранное
+    руками (style_prefilled снят) остаётся — 204: со «Лыж» на «Лыжероллеры»
+    стиль не сбрасывается. Иначе — стиль последней лыжной части этого вида
+    спорта (services.last_cardio_style).
+    """
+
+    def get(self, request):
+        sport, _location, _known = chosen_sport_and_location(request, request.GET)
+        context = {"style_prefill_on": True, "style_choices": [], "selected_style": ""}
+        if sport is not None and sport.has_styles:
+            chosen = request.GET.get("style", "")
+            if chosen and request.GET.get("style_prefilled") != "1":
+                return HttpResponse(status=204)
+            last = services.last_cardio_style(request.user, sport)
+            context |= {
+                "style_choices": CardioPart.Style.choices,
+                "selected_style": last,
+                "style_filled": bool(last),
+            }
+        return render(request, "workouts/_cardio_style_field.html", context)
+
+
 class CardioRouteView(LoginRequiredMixin, View):
     """Дистанция и набор высоты кардио-формы — как в прошлый раз на этом маршруте.
 
@@ -535,7 +597,12 @@ class WorkoutDeleteView(LoginRequiredMixin, DeleteView):
     planned = False
 
     def get_queryset(self):
-        return Workout.objects.filter(user=self.request.user).select_related("sport")
+        # Части — ради подписи: у лыжной со стилем она «Лыжи · конёк», как в ленте.
+        return (
+            Workout.objects.filter(user=self.request.user)
+            .select_related("sport")
+            .prefetch_related(cardio_parts_prefetch())
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -1614,6 +1681,7 @@ class WorkoutCardioPartView(LoginRequiredMixin, View):
             request,
             "workouts/_cardio_part_modal.html",
             cardio_machine_context(request.user, form)
+            | cardio_style_context(form)
             | {
                 "workout": workout,
                 "form": form,

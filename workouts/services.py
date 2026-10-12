@@ -264,6 +264,24 @@ def last_cardio_route(user, sport, location):
     )
 
 
+def last_cardio_style(user, sport):
+    """Стиль последней записанной части этого вида спорта, где он указан, — или "".
+
+    Без места, в отличие от тренажёра и маршрута: конёк или классика — выбор дня,
+    а не свойство лыжни, и на одной трассе бегают и так и так.
+    """
+    return (
+        CardioPart.objects.filter(
+            workout__user=user, workout__duration_min__isnull=False, sport=sport
+        )
+        .exclude(style="")
+        .order_by("-workout__started_at", "-id")
+        .values_list("style", flat=True)
+        .first()
+        or ""
+    )
+
+
 def last_sets(user, exercise):
     """Подходы упражнения из последней завершённой тренировки пользователя.
 

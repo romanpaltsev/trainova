@@ -21,7 +21,7 @@
             hx-get="{% url 'workout_cardio_part_edit' workout.pk part.pk %}"
             hx-target="#modal" hx-swap="innerHTML">
       <span class="app-sport-dot" style="--dot: var(--app-sport-{{ part.sport.color_key }})"></span>
-      <span class="app-cardio-part-name">{{ part.sport.name }}</span>
+      <span class="app-cardio-part-name">{{ part.title }}</span>
       {% comment %}Разделитель ставится только между значениями: без дистанции строка начиналась бы с «·».{% endcomment %}
       <span class="app-cardio-part-meta num">
         {% if part.distance_km %}{{ part.distance_display }} км{% endif %}

@@ -274,6 +274,26 @@ def elevation_field():
     )
 
 
+def style_field():
+    """Стиль хода: чипы «Конёк | Классика» — только у видов спорта со стилями.
+
+    Пусто — не указан. Сохраняют его формы только у такого вида спорта
+    (cardio_style_of): сменили «Лыжи» на «Бег» — выбранный конёк не должен
+    приехать в пробежку.
+    """
+    return forms.ChoiceField(
+        label="Стиль",
+        required=False,
+        choices=[("", "не указан"), *CardioPart.Style.choices],
+        widget=forms.RadioSelect,
+        error_messages={"invalid_choice": "Такого стиля нет."},
+    )
+
+
+def cardio_style_of(sport, cleaned):
+    return cleaned.get("style", "") if sport is not None and sport.has_styles else ""
+
+
 CARDIO_ROUTE_FIELDS = ("distance_km", "elevation_gain_m")
 
 
@@ -320,6 +340,7 @@ class CardioWorkoutForm(forms.Form):
         widget=forms.RadioSelect,
         error_messages={"required": "Выберите вид спорта."},
     )
+    style = style_field()
     # Место необязательно: NULL в модели значит «не указано», и так записана вся
     # история до появления справочника.
     location = forms.ModelChoiceField(
@@ -407,7 +428,9 @@ class CardioWorkoutForm(forms.Form):
             #
             # Набора высоты у плана нет по той же причине, что и пульса: цель
             # плана — километры и время, а метры вверх — то, что получилось.
-            for name in ("date", "time", "avg_heart_rate", "elevation_gain_m"):
+            #
+            # Стиля у плана тоже нет: план — это цели, километры и время.
+            for name in ("date", "time", "avg_heart_rate", "elevation_gain_m", "style"):
                 del self.fields[name]
             # Обе цели необязательны: планов на неделю наготавливают пачкой, и
             # заставлять заполнять значения было бы издевательством.
@@ -461,6 +484,7 @@ class CardioWorkoutForm(forms.Form):
             "duration_minutes": minutes or None,
             "distance_km": cardio.distance_km if cardio else None,
             "elevation_gain_m": cardio.elevation_gain_m if cardio else None,
+            "style": cardio.style if cardio else "",
             "avg_heart_rate": cardio.avg_heart_rate if cardio else None,
             "note": workout.note,
             **cardio_machine_initial(cardio),
@@ -545,6 +569,7 @@ class CardioWorkoutForm(forms.Form):
             # полей нет, а на записи черновика они придут из формы как обычно.
             part.avg_heart_rate = self.cleaned_data.get("avg_heart_rate")
             part.elevation_gain_m = self.cleaned_data.get("elevation_gain_m")
+            part.style = cardio_style_of(part.sport, self.cleaned_data)
             apply_cardio_machine(self.user, part, self.cleaned_data)
             part.save()
         return workout
@@ -565,6 +590,8 @@ class CardioPartForm(forms.ModelForm):
     machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
     # Своим полем, а не полем модели: ноль здесь значит «не указан» (ElevationField).
     elevation_gain_m = elevation_field()
+    # Тоже своим: пишется только у вида спорта со стилями (cardio_style_of).
+    style = style_field()
 
     class Meta:
         model = CardioPart
@@ -601,6 +628,7 @@ class CardioPartForm(forms.ModelForm):
             self.initial.setdefault("duration_minutes", minutes or None)
             for name, value in cardio_machine_initial(self.instance).items():
                 self.initial.setdefault(name, value)
+            self.initial.setdefault("style", self.instance.style)
 
     def clean_distance_km(self):
         distance = self.cleaned_data.get("distance_km")
@@ -622,6 +650,7 @@ class CardioPartForm(forms.ModelForm):
     def save(self, commit=True):
         part = super().save(commit=False)
         part.workout = self.workout
+        part.style = cardio_style_of(part.sport, self.cleaned_data)
         apply_cardio_machine(self.user, part, self.cleaned_data)
         # Ноль значит «не указывал»: у части это NULL, и тогда скорость с темпом
         # просто не считаются — врать про них хуже, чем промолчать.

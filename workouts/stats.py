@@ -688,6 +688,10 @@ def cardio_records(user):
 
     Темп = 3600 / скорость, поэтому максимум скорости и лучший темп — одна и та же
     тренировка: хватает одной агрегации, а порог решает, в чём показывать.
+
+    Лыжи со стилем — отдельными рекордами: «Лыжи · конёк» и «Лыжи · классика».
+    Конёк заметно быстрее, и общий лучший темп навсегда остался бы за ним.
+    Части без стиля (вся история до стилей) — своей строкой «Лыжи».
     """
     # Считаем по колонкам самой части: вид спорта у неё свой, и длительность
     # своя. Из-за этого рекорд темпа у смешанной тренировки больше не может
@@ -695,7 +699,7 @@ def cardio_records(user):
     rows = (
         CardioPart.objects.filter(workout__user=user, workout__duration_min__isnull=False)
         .filter(distance_km__gt=0, duration_min__gt=0)
-        .values("sport_id")
+        .values("sport_id", "style")
         .annotate(
             max_distance=Max("distance_km"),
             best_speed=Max(
@@ -723,7 +727,7 @@ def cardio_records(user):
         records.append(
             {
                 "sport_id": sport.pk,
-                "name": sport.name,
+                "name": CardioPart(sport=sport, style=row["style"]).title,
                 "color_key": sport.color_key,
                 "max_distance_km": float(row["max_distance"]),
                 "distance_display": decimal_display(row["max_distance"]),
@@ -800,6 +804,11 @@ def attach_muscle_groups(user, workouts):
     Бег»: без них заезд на 34 км в ленте назывался бы «Пресс». Только когда
     части уже забраны prefetch'ем (лента, «Последние»): у одиночного экрана
     тренировки части стоят отдельным блоком, а лишний запрос сдвинул бы бюджет.
+
+    У кардио без подходов подпись — стиль хода единственной части: «Лыжи ·
+    конёк». Иначе лента лыж была бы столбцом одного слова, а конёк и классика —
+    разные тренировки. Без стиля подпись остаётся пустой, и шаблон берёт имя
+    вида спорта, как прежде.
     """
     workouts = list(workouts)
     labels = muscle_groups_by_workout(user, [workout.pk for workout in workouts])
@@ -808,8 +817,20 @@ def attach_muscle_groups(user, workouts):
         cardio = cardio_sport_names(workout)
         if label and cardio:
             label = f"{label} + {cardio}"
+        elif not label:
+            label = cardio_style_title(workout)
         workout.muscle_groups = label
     return workouts
+
+
+def cardio_style_title(workout):
+    """«Лыжи · конёк» у кардио из одной части со стилем — или "" (и без prefetch)."""
+    if "cardio_parts" not in getattr(workout, "_prefetched_objects_cache", {}):
+        return ""
+    parts = workout.cardio_parts.all()
+    if len(parts) == 1 and parts[0].style:
+        return parts[0].title
+    return ""
 
 
 def cardio_sport_names(workout):

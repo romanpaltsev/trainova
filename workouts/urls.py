@@ -148,6 +148,7 @@ urlpatterns = [
     # и подсказки моделей выбранного производителя.
     path("workouts/cardio/machine/", views.CardioMachineView.as_view(), name="cardio_machine"),
     path("workouts/cardio/route/", views.CardioRouteView.as_view(), name="cardio_route"),
+    path("workouts/cardio/style/", views.CardioStyleView.as_view(), name="cardio_style"),
     path(
         "workouts/cardio/machine/models/",
         views.CardioMachineModelsView.as_view(),

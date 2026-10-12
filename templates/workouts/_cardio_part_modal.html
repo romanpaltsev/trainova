@@ -35,6 +35,11 @@
         {% endcomment %}
         {% include "workouts/_sport_chips.html" with sports=sports selected_id=selected_sport_id hide_add=True %}
         {% for error in form.sport.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        {% if part %}
+          {% include "workouts/_cardio_style_field.html" %}
+        {% else %}
+          {% include "workouts/_cardio_style_field.html" with style_prefill_on=True %}
+        {% endif %}
       </div>
 
       {% comment %}

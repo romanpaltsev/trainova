@@ -530,6 +530,9 @@ body {
 
 .app-cardio-part-machine svg { flex: none; }
 
+/* Чипы стиля хода — под чипами вида спорта, которые они уточняют. */
+.app-style-chips { margin-top: var(--app-space-2); }
+
 /* Набор высоты в ленте — приписка к дистанции: мельче и вторичным цветом,
    чтобы читалась как уточнение, а не как вторая метрика. На телефоне — под
    километрами: в строку с ними «15,2 км · 180 м» выталкивало темп на вторую
@@ -3741,15 +3744,23 @@ a.btn {
     box-shadow: none;
   }
 
-  /* Название прижато влево, значение и темп/скорость — вправо */
+  /* Название прижато влево, значение и темп/скорость — вправо. Переносится
+     только название: «Лыжи · классика · дистанция» иначе сжимало значение до
+     «14 / км» в две строки. */
   .app-records-label { margin-right: auto; }
 
   .app-records-value {
+    flex: none;
     font-size: 1.0625rem;
     font-weight: 700;
+    white-space: nowrap;
   }
 
-  .app-records-sub { font-size: 0.8125rem; }
+  .app-records-sub {
+    flex: none;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
 
   .app-latest-row {
     padding: 0.375rem 0;

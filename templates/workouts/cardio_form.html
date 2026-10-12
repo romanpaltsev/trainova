@@ -43,6 +43,17 @@
     {% for error in form.sport.errors %}
       <div class="invalid-feedback d-block">{{ error }}</div>
     {% endfor %}
+    {% comment %}
+      Стиль хода — сразу под видом спорта: он его уточняет («Лыжи · конёк»), и
+      чипы появляются только у лыж. У плана стиля нет: план — это цели.
+    {% endcomment %}
+    {% if not planned %}
+      {% if workout %}
+        {% include "workouts/_cardio_style_field.html" %}
+      {% else %}
+        {% include "workouts/_cardio_style_field.html" with style_prefill_on=True %}
+      {% endif %}
+    {% endif %}
   </div>
 
   {% comment %}

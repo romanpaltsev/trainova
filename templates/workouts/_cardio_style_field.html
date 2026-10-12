@@ -1,0 +1,31 @@
+{% comment %}
+  Стиль хода лыжной части: чипы «Конёк | Классика». Есть только у видов спорта
+  со стилями (Sport.has_styles); у остальных блок пуст, но остаётся целью
+  перезапроса. Один партиал на форму кардио и окно «+ Кардио».
+
+  Смена вида спорта перезапрашивает блок (CardioStyleView): у лыж он приходит
+  со стилем прошлой лыжной части, у бега — пустым. Выбранное руками не
+  затирается — метку style_prefilled Alpine снимает при выборе, и сервер на
+  такой запрос отвечает 204. На правке перезапроса нет (style_prefill_on).
+
+  Ждёт style_choices, selected_style, style_filled; style_errors — у формы с ошибкой.
+{% endcomment %}
+<div id="cardio-style"
+     x-data="{ auto: {{ style_filled|yesno:'true,false' }} }" @change="auto = false"
+     {% if style_prefill_on %}
+       hx-get="{% url 'cardio_style' %}"
+       hx-trigger="change[target.name==='sport'] from:closest form"
+       hx-include="[name='sport'], #cardio-style"
+       hx-target="this" hx-swap="outerHTML"
+     {% endif %}>
+  {% if style_choices %}
+    <input type="hidden" name="style_prefilled" :value="auto ? '1' : ''" value="{{ style_filled|yesno:'1,' }}">
+    <div class="app-chips app-style-chips" role="group" aria-label="Стиль">
+      {% for value, label in style_choices %}
+        <input type="radio" name="style" id="style-{{ value }}" value="{{ value }}" class="app-chip-input"{% if value == selected_style %} checked{% endif %}>
+        <label class="app-chip" for="style-{{ value }}">{{ label|capfirst }}</label>
+      {% endfor %}
+    </div>
+    {% for error in style_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+  {% endif %}
+</div>

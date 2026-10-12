@@ -147,7 +147,14 @@ class CardioPartInline(admin.TabularInline):
     model = CardioPart
     extra = 0
     autocomplete_fields = ("sport",)
-    fields = ("sport", "distance_km", "duration_min", "avg_heart_rate", "elevation_gain_m")
+    fields = (
+        "sport",
+        "style",
+        "distance_km",
+        "duration_min",
+        "avg_heart_rate",
+        "elevation_gain_m",
+    )
 
 
 @admin.register(Workout)

@@ -1,12 +1,18 @@
 {% comment %}
   Чипы выбора вида спорта. При создании личного вида спорта модалка возвращает
   этот же блок out-of-band, поэтому id и hx-swap-oob здесь, а не в родителе.
+
+  Подменённый чип отмечен разметкой, а не нажатием, и события change не даёт —
+  блоки подстановки («Тренажёр», маршрут, стиль) его не услышали бы и остались
+  от прошлого вида спорта. Поэтому в ответе создания новый чип сам сообщает о
+  выборе (x-init), а при обычной загрузке — нет: там перезапрашивать нечего.
 {% endcomment %}
 <div id="sport-chips" class="app-chips"{% if oob %} hx-swap-oob="true"{% endif %}>
   {% for sport in sports %}
     <input type="radio" name="sport" id="sport-{{ sport.pk }}" value="{{ sport.pk }}"
            class="app-chip-input"
-           {% if selected_id|stringformat:"s" == sport.pk|stringformat:"s" %}checked{% endif %}>
+           {% if selected_id|stringformat:"s" == sport.pk|stringformat:"s" %}checked{% if oob %}
+           x-init="$nextTick(() => $el.dispatchEvent(new Event('change', { bubbles: true })))"{% endif %}{% endif %}>
     <label class="app-chip" for="sport-{{ sport.pk }}">
       <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
       {{ sport.name }}

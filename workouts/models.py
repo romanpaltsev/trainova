@@ -28,6 +28,11 @@ GLOBAL_SPORT_COLORS = {
     "бег": "run",
     "лыжи": "ski",
 }
+# Виды спорта со стилями хода — конёк и классика (CardioPart.Style). По имени,
+# как цвета: набор полей Sport зафиксирован, а из данных стили не вывести — у
+# первого лыжника история пуста. Лыжероллеры — летние лыжи, стили у них те же;
+# свой вид спорта с таким именем получает стили тоже.
+STYLED_SPORTS = frozenset({"лыжи", "лыжероллеры"})
 # Настройки кардио-тренажёра (CardioPart): уклон дорожки бывает и отрицательным,
 # уровень нагрузки у велотренажёров и эллипсов — от 1 до пары десятков.
 CARDIO_INCLINE_MIN = Decimal("-10")
@@ -206,6 +211,11 @@ class Sport(CatalogItem):
     @property
     def is_strength(self):
         return self.category == self.Category.STRENGTH
+
+    @property
+    def has_styles(self):
+        """Бывает ли у вида спорта стиль хода — конёк или классика (STYLED_SPORTS)."""
+        return self.name.strip().lower() in STYLED_SPORTS
 
     @property
     def known_color(self):
@@ -1615,6 +1625,20 @@ class CardioPart(models.Model):
         blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(CARDIO_LEVEL_MAX)],
     )
+
+    class Style(models.TextChoices):
+        """Стиль хода лыжной части (решение 12.10.2026).
+
+        Словарь закрытый — классический и свободный ход, как в правилах FIS, —
+        поэтому choices, а не фасет из данных, как у группы мышц.
+        """
+
+        SKATE = "skate", "конёк"
+        CLASSIC = "classic", "классика"
+
+    # Пусто — стиль не указан: вся история до стилей и все виды спорта без них.
+    # Конёк заметно быстрее классики, и без стиля рекорд темпа сравнивал бы разное.
+    style = models.CharField("стиль", max_length=8, choices=Style, blank=True)
     # Набор высоты — то, чем для улицы служит уклон дорожки (решение 12.10.2026):
     # круг «с горкой» и ровный дают разный темп, и без набора медленная пробежка
     # читалась бы как плохая форма. На маршруте это свойство места, как и
@@ -1639,10 +1663,22 @@ class CardioPart(models.Model):
                 condition=Q(model__isnull=True) | Q(brand__isnull=False),
                 name="cardio_part_model_needs_brand",
             ),
+            # Значения Style литералами: из Meta имя вложенного класса не видно.
+            models.CheckConstraint(
+                condition=Q(style__in=["", "skate", "classic"]),
+                name="cardio_part_style_known",
+            ),
         ]
 
     def __str__(self):
         return f"{self.sport} · {self.distance_display} км"
+
+    @property
+    def title(self):
+        """«Лыжи · конёк» — вид спорта со стилем, если он указан, иначе вид спорта."""
+        if self.style:
+            return f"{self.sport.name} · {self.get_style_display()}"
+        return self.sport.name
 
     @property
     def machine(self):

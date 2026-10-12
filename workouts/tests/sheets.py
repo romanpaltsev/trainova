@@ -110,6 +110,7 @@ def dump(user):
                         part.incline_pct,
                         part.level,
                         part.elevation_gain_m,
+                        part.style,
                     )
                     for part in workout.cardio_parts.all()
                 ],
