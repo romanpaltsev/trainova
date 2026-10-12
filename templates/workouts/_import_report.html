@@ -8,6 +8,9 @@
   <ul class="app-import-summary">
     <li>Добавлено тренировок: <span class="num">{{ report.workouts }}</span></li>
     {% if report.sets %}<li>Подходов: <span class="num">{{ report.sets }}</span></li>{% endif %}
+    {% if report.machines %}
+      <li>Указано тренажёров: <span class="num">{{ report.machines }}</span></li>
+    {% endif %}
     {% if report.skipped %}
       <li>Пропущено — уже были в дневнике: <span class="num">{{ report.skipped }}</span></li>
     {% endif %}

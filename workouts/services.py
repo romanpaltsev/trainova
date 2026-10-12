@@ -371,7 +371,8 @@ def group_sets(rows, notes=None):
         group["sets"].sort(key=lambda item: item.set_number)
         group["note"] = notes.get(group["exercise"].pk, "")
         # Тренажёр — из аннотации with_machine (одинаков у всех подходов
-        # упражнения); у выборок без неё, как в выгрузке, — пусто.
+        # упражнения); у выборок без неё — пусто. Выгрузка аннотацию не берёт:
+        # места у её тренировок разные, тренажёры она раскладывает словарём.
         first = group["sets"][0]
         group["machine"] = machine_label(
             getattr(first, "machine_brand", ""), getattr(first, "machine_model", "")

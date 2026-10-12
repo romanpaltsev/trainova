@@ -156,12 +156,15 @@ def contributor_field():
     )
 
 
+SPORT_NAME_MAX_LENGTH = 60
+
+
 class Sport(CatalogItem):
     class Category(models.TextChoices):
         STRENGTH = "strength", "Силовая"
         CARDIO = "cardio", "Кардио"
 
-    name = models.CharField("название", max_length=60)
+    name = models.CharField("название", max_length=SPORT_NAME_MAX_LENGTH)
     category = models.CharField("категория", max_length=10, choices=Category)
     # Слот дополнительной палитры (--app-sport-extra-N) у вида спорта вне
     # четвёрки GLOBAL_SPORT_COLORS. Без него свой «Гребля» красился цветом бега

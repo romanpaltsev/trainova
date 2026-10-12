@@ -12,6 +12,7 @@ from workouts import excel, excel_import
 from workouts.models import (
     CardioPart,
     Exercise,
+    ExerciseMachine,
     ExerciseNote,
     Location,
     Sport,
@@ -20,6 +21,7 @@ from workouts.models import (
 )
 from workouts.tests.factories import (
     ExerciseFactory,
+    ExerciseMachineFactory,
     LocationFactory,
     MachineBrandFactory,
     MachineModelFactory,
@@ -54,6 +56,11 @@ def cardio_row(**extra):
         "pulse": 142,
         "duration": 60,
     } | extra
+
+
+def part_row(**extra):
+    """Кардио-строка внутри силовой: вид спорта тренировки, свой — в «Кардио»."""
+    return {"date": PAST, "sport": "Силовая", "duration": 60, "cardio": "Бег"} | extra
 
 
 def run(user, rows, **kwargs):
@@ -223,6 +230,292 @@ def test_cardio_without_distance_is_still_a_workout(user):
     run(user, [cardio_row(sport="Плавание", distance=None, pulse=None, duration=40)])
 
     assert Workout.objects.get(user=user).duration_min == 40
+    assert not CardioPart.objects.exists()
+
+
+def test_cardio_inside_strength_is_part_of_the_same_workout(user):
+    """Строка с видом спорта в «Кардио» — часть той же тренировки, со своим
+    временем и тренажёром, а не отдельная тренировка."""
+    SportFactory(name="Бег", category=Sport.Category.CARDIO)
+
+    report = run(
+        user,
+        [
+            strength_row(duration=75),
+            part_row(
+                duration=75,
+                cardio="бег",
+                cardio_duration=25,
+                distance=5.2,
+                pulse=150,
+                machine_brand="Technogym",
+                incline=3,
+                level=8,
+            ),
+        ],
+    )
+
+    workout = Workout.objects.get(user=user)
+    part = workout.cardio_parts.get()
+    assert (report.workouts, report.sets, report.error_count) == (1, 1, 0)
+    assert (part.sport.name, part.duration_min) == ("Бег", 25)
+    assert (part.distance_km, part.avg_heart_rate) == (Decimal("5.20"), 150)
+    assert (part.brand.name, part.incline_pct, part.level) == ("Technogym", Decimal("3.0"), 8)
+
+
+def test_part_time_of_mixed_workout_is_not_guessed(user):
+    """Пустое «Время кардио» у части смешанной — «не указано»: общее время
+    включает силовую, и темп по нему соврал бы."""
+    SportFactory(name="Бег", category=Sport.Category.CARDIO)
+
+    run(user, [strength_row(), part_row(distance=3)])
+
+    assert CardioPart.objects.get().duration_min is None
+
+
+def test_parts_keep_row_order(user):
+    """Порядок частей — порядок строк: разминка, потом заминка."""
+    SportFactory(name="Бег", category=Sport.Category.CARDIO)
+    SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+
+    run(
+        user,
+        [
+            part_row(duration=90, cardio_duration=10),
+            strength_row(duration=90),
+            part_row(duration=90, cardio="Велосипед", cardio_duration=15),
+        ],
+    )
+
+    assert list(CardioPart.objects.order_by("id").values_list("sport__name", "duration_min")) == [
+        ("Бег", 10),
+        ("Велосипед", 15),
+    ]
+
+
+def test_strength_workout_of_only_cardio_is_recorded(user):
+    """Силовая, где успели только пробежку, записывается; время единственной
+    части без колонки — время тренировки, как у формы кардио."""
+    SportFactory(name="Силовая")
+    SportFactory(name="Бег", category=Sport.Category.CARDIO)
+
+    report = run(user, [part_row(duration=30, distance=4)])
+
+    workout = Workout.objects.get(user=user)
+    part = workout.cardio_parts.get()
+    assert (report.workouts, workout.sport.name) == (1, "Силовая")
+    assert (part.sport.name, part.duration_min) == ("Бег", 30)
+
+
+def test_cardio_host_keeps_its_sets(user):
+    """Подходы у кардио-хозяина записываются: что в тренировке, решает
+    содержимое, а не категория, — так её и выгружает приложение."""
+    SportFactory(name="Бег", category=Sport.Category.CARDIO)
+
+    report = run(user, [strength_row(sport="Бег"), cardio_row(sport="Бег", cardio_duration=30)])
+
+    workout = Workout.objects.get(user=user)
+    assert (workout.sport.name, report.sets, report.warnings) == ("Бег", 1, [])
+    assert workout.sets.count() == 1
+    assert (workout.cardio_parts.get().sport.name, workout.cardio_parts.get().duration_min) == (
+        "Бег",
+        30,
+    )
+
+
+def test_cardio_in_strength_without_its_sport_is_reported(user):
+    """У силовой свой вид спорта кардио не подставить: пробежка «Силовой»
+    испортила бы её рекорды. Строка уходит в отчёт с подсказкой."""
+    report = run(user, [strength_row(), part_row(cardio=None, distance=5)])
+
+    assert report.workouts == 1
+    assert not CardioPart.objects.exists()
+    assert any("в колонке «Кардио»" in line for line in report.warnings)
+
+
+def test_strength_sport_in_cardio_column_is_reported(user):
+    SportFactory(name="Силовая")
+
+    report = run(user, [strength_row(), part_row(cardio="силовая", distance=5)])
+
+    assert not CardioPart.objects.exists()
+    assert any("силовой вид спорта" in line for line in report.warnings)
+
+
+def test_unknown_cardio_sport_is_created_as_cardio(user):
+    report = run(user, [strength_row(), part_row(cardio="Гребля", cardio_duration=10)])
+
+    sport = Sport.objects.get(name="Гребля")
+    assert (sport.owner, sport.category) == (user, Sport.Category.CARDIO)
+    assert "Гребля" in report.created_sports
+    assert CardioPart.objects.get().sport == sport
+
+
+@pytest.mark.parametrize("value", [-5, 1441, "долго"])
+def test_bad_cardio_time_is_a_row_error(user, value):
+    SportFactory(name="Бег", category=Sport.Category.CARDIO)
+
+    report = run(user, [strength_row(), part_row(cardio_duration=value, distance=5)])
+
+    assert any("Время кардио" in line for line in report.errors)
+    assert CardioPart.objects.get().duration_min is None
+
+
+def test_strength_machine_is_set_for_exercise_and_place(user):
+    """Тренажёр из строк подходов — тренажёр упражнения в этом месте, тем же
+    контрактом, что окно выбора: общий находится по имени, модель заводится своя."""
+    hammer = MachineBrandFactory(name="Hammer Strength")
+
+    report = run(
+        user,
+        [
+            strength_row(
+                exercise="Жим ногами",
+                location="СпортЛайф",
+                machine_brand="hammer strength",
+                machine_model="Leg Press",
+            ),
+            strength_row(exercise="Жим ногами", location="СпортЛайф", weight=100),
+        ],
+    )
+
+    machine = ExerciseMachine.objects.get(user=user)
+    assert (machine.exercise.name, machine.location.name) == ("Жим ногами", "СпортЛайф")
+    assert machine.brand == hammer
+    assert (machine.model.name, machine.model.owner) == ("Leg Press", user)
+    assert report.machines == 1
+
+
+def test_strength_machines_of_other_users_are_untouched(user, other_user):
+    """Тренажёр того же упражнения у другого человека загрузке не мешает и ею не
+    меняется: настройка у каждого своя."""
+    press = ExerciseFactory(name="Жим ногами")
+    theirs = ExerciseMachineFactory(
+        user=other_user,
+        exercise=press,
+        location=LocationFactory(owner=other_user, name="СпортЛайф"),
+    )
+    brand_before = theirs.brand_id
+
+    report = run(
+        user,
+        [strength_row(exercise="Жим ногами", location="СпортЛайф", machine_brand="Matrix")],
+    )
+
+    mine = ExerciseMachine.objects.get(user=user)
+    assert (mine.brand.name, mine.location.owner, report.machines) == ("Matrix", user, 1)
+    theirs.refresh_from_db()
+    assert theirs.brand_id == brand_before
+
+
+def test_strength_machine_already_set_is_kept(user):
+    """Тренажёр — текущая настройка: старый файл не откатывает исправленный."""
+    place = LocationFactory(owner=user, name="СпортЛайф")
+    current = ExerciseMachineFactory(
+        user=user, exercise=ExerciseFactory(name="Жим ногами"), location=place
+    )
+
+    report = run(
+        user,
+        [strength_row(exercise="Жим ногами", location="СпортЛайф", machine_brand="Matrix")],
+    )
+
+    assert report.workouts == 1
+    assert list(ExerciseMachine.objects.filter(user=user)) == [current]
+    assert ExerciseMachine.objects.get(user=user).brand == current.brand
+    assert report.machines == 0
+
+
+def test_latest_workout_sets_the_machine(user):
+    """Из нескольких тренировок с упражнением в одном месте побеждает самая
+    свежая, где бы она ни стояла в файле: зал мог сменить тренажёр."""
+    run(
+        user,
+        [
+            strength_row(date=date(2026, 9, 5), location="Зал", machine_brand="Matrix"),
+            strength_row(date=date(2026, 9, 1), location="Зал", machine_brand="Technogym"),
+        ],
+    )
+
+    assert ExerciseMachine.objects.get(user=user).brand.name == "Matrix"
+
+
+def test_strength_machine_without_place_is_reported(user):
+    """Тренажёр указывается для места — без «Места» его некуда записать."""
+    report = run(user, [strength_row(machine_brand="Hammer Strength")])
+
+    assert report.workouts == 1
+    assert not ExerciseMachine.objects.exists()
+    assert any("место не заполнено" in line for line in report.warnings)
+
+
+def test_skipped_workout_does_not_set_machines(user):
+    """Тренировка, которая уже есть в дневнике, ничего не настраивает."""
+    existing = WorkoutFactory(
+        user=user,
+        sport=SportFactory(name="Силовая"),
+        started_at=timezone.make_aware(datetime.combine(PAST, time(9, 0))),
+    )
+    StrengthSetFactory(workout=existing)
+
+    report = run(user, [strength_row(location="СпортЛайф", machine_brand="Hammer Strength")])
+
+    assert report.skipped == 1
+    assert not ExerciseMachine.objects.exists()
+
+
+def test_exercise_without_written_sets_gets_no_machine(user):
+    """Строки, ушедшие в отчёт ошибками, ничего не настраивают."""
+    report = run(
+        user,
+        [
+            strength_row(location="СпортЛайф"),
+            strength_row(
+                exercise="Жим ногами", location="СпортЛайф", reps=None, machine_brand="Matrix"
+            ),
+        ],
+    )
+
+    assert report.workouts == 1
+    assert not ExerciseMachine.objects.exists()
+
+
+@pytest.mark.parametrize(
+    ("cells", "error"),
+    [
+        ({"sport": "С" * 61}, "Вид спорта длиннее 60 символов."),
+        ({"exercise": "Ж" * 81}, "Упражнение длиннее 80 символов."),
+    ],
+)
+def test_too_long_name_skips_the_row(user, cells, error):
+    """Название, которое не помещается в справочник, — ошибка строки, а не
+    пятисотка. Такую строку не к чему отнести, и она пропускается целиком."""
+    report = run(user, [strength_row(**cells), strength_row(date=date(2026, 9, 5))])
+
+    assert report.workouts == 1
+    assert report.errors == [f"Строка 2: {error} Строка пропущена."]
+
+
+def test_too_long_details_are_dropped_with_errors(user):
+    """Длинные место и тренажёр не роняют загрузку: значение — в отчёт, подход
+    записывается без него."""
+    report = run(
+        user, [strength_row(location="М" * 81, machine_brand="T" * 61, machine_model="X" * 81)]
+    )
+
+    workout = Workout.objects.get(user=user)
+    assert (workout.location, workout.sets.count()) == (None, 1)
+    assert not ExerciseMachine.objects.exists()
+    joined = " ".join(report.errors)
+    assert "Место длиннее 80 символов." in joined
+    assert "Производитель длиннее 60 символов." in joined
+    assert "Модель длиннее 80 символов." in joined
+
+
+def test_too_long_cardio_sport_is_reported(user):
+    report = run(user, [strength_row(), part_row(cardio="Б" * 61, distance=5)])
+
+    assert any("Кардио длиннее 60 символов." in line for line in report.errors)
     assert not CardioPart.objects.exists()
 
 
@@ -465,6 +758,39 @@ def test_round_trip_keeps_the_diary(user):
         workout=workout, exercise=pullups, set_number=1, weight_kg=0, reps=12, duration_sec=0
     )
     ExerciseNote.objects.create(workout=workout, exercise=bench, text="Узкий хват")
+    hammer = MachineBrandFactory(name="Hammer Strength")
+    ExerciseMachineFactory(
+        user=user,
+        exercise=bench,
+        location=place,
+        brand=hammer,
+        model=MachineModelFactory(brand=hammer, name="Bench Press", owner=user),
+    )
+    technogym = MachineBrandFactory(name="Technogym")
+    running = SportFactory(name="Бег", category=Sport.Category.CARDIO)
+    # Разминка на дорожке внутри силовой — часть со своим видом спорта и временем.
+    CardioPart.objects.create(
+        workout=workout,
+        sport=running,
+        duration_min=15,
+        distance_km=Decimal("2.40"),
+        brand=technogym,
+        model=MachineModelFactory(brand=technogym, name="Run 1000"),
+        incline_pct=Decimal("3.0"),
+        level=6,
+    )
+
+    # Кардио-хозяин с подходами: так бывает, и выгрузка пишет его как есть.
+    run_day = WorkoutFactory(
+        user=user,
+        sport=running,
+        started_at=timezone.make_aware(datetime.combine(date(2026, 9, 2), time(7, 0))),
+        duration_min=50,
+    )
+    StrengthSetFactory(workout=run_day, exercise=pullups, set_number=1, weight_kg=0, reps=10)
+    CardioPart.objects.create(
+        workout=run_day, sport=running, duration_min=40, distance_km=Decimal("7.10")
+    )
 
     ride = WorkoutFactory(
         user=user,
@@ -491,6 +817,11 @@ def test_round_trip_keeps_the_diary(user):
 
     report = excel_import.import_workbook(twin, buffer)
 
-    assert report.workouts == 2
+    assert report.workouts == 3
     assert report.error_count == 0
+    assert report.warnings == []
+    assert report.machines == 1
     assert dump(twin) == dump(user)
+    # Снимок не пустой: тренажёр подхода и обе части доехали.
+    assert dump(twin)[2]["machines"] == [("Жим лёжа", "Hammer Strength · Bench Press")]
+    assert [len(item["cardio"]) for item in dump(twin)] == [1, 1, 1]

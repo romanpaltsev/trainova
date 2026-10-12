@@ -90,6 +90,25 @@ def test_upload_creates_workouts_and_shows_report(client, user):
     assert "Что получилось" in response.content.decode()
 
 
+def test_report_counts_machines_from_the_file(client, user):
+    client.force_login(user)
+    row = {
+        "date": date(2026, 9, 4),
+        "sport": "Силовая",
+        "location": "СпортЛайф",
+        "exercise": "Жим ногами",
+        "weight": 100,
+        "reps": 10,
+        "duration": 60,
+        "machine_brand": "Hammer Strength",
+    }
+
+    response = client.post(reverse(PAGE), {"file": upload([row])})
+
+    assert response.context["report"].machines == 1
+    assert "Указано тренажёров" in response.content.decode()
+
+
 def test_upload_without_file_shows_form_error(client, user):
     client.force_login(user)
 

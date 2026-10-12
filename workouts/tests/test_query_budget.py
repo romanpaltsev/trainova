@@ -316,17 +316,18 @@ def test_history_query_budget(client, user, django_assert_max_num_queries, weeks
 
 @pytest.mark.parametrize("weeks", [2, 8])
 def test_export_query_budget(client, user, django_assert_max_num_queries, weeks):
-    """Выгрузка: три запроса на данные, сколько бы истории ни было.
+    """Выгрузка: пять запросов на данные, сколько бы истории ни было.
 
     Ценность теста не в числе, а в том, что оно одинаково при двух неделях и при
-    восьми: подходы и заметки выбираются пачкой, а не по тренировке.
+    восьми: подходы, заметки и тренажёры выбираются пачкой, а не по тренировке.
     """
     fill_history(user, weeks=weeks)
     ExerciseNoteFactory(workout=user.workouts.first(), exercise=ExerciseFactory())
     client.force_login(user)
 
-    # Семь: сессия, пользователь, транзакция запроса — и три на данные.
-    with django_assert_max_num_queries(8):
+    # Девять: сессия, пользователь, savepoint транзакции запроса и его снятие —
+    # и пять на данные: тренировки, их кардио-части, подходы, заметки, тренажёры.
+    with django_assert_max_num_queries(9):
         response = client.get(reverse("workout_export"))
         b"".join(response.streaming_content)
 

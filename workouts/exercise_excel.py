@@ -277,14 +277,6 @@ def _cell_id(value):
     return int(text)
 
 
-def _cell_limited(value, *, limit, what):
-    """Текст ячейки не длиннее поля: обрезать молча нельзя — человек не узнает."""
-    text = excel.cell_text(value)
-    if len(text) > limit:
-        raise ValueError(f"{what} длиннее {limit} символов.")
-    return text
-
-
 def _cell_measurement(value):
     text = excel.cell_text(value)
     if not text:
@@ -321,7 +313,7 @@ def _exercise_row(number, values, index):
     read("id", _cell_id, "exercise_id")
     read(
         "name",
-        lambda value: _cell_limited(value, limit=EXERCISE_NAME_MAX_LENGTH, what="Название"),
+        lambda value: excel.cell_limited(value, limit=EXERCISE_NAME_MAX_LENGTH, what="Название"),
         "name",
     )
     # Отсутствующая колонка и пустая ячейка значат разное, поэтому смотрим в
@@ -329,13 +321,15 @@ def _exercise_row(number, values, index):
     if index.get("muscle_group") is not None:
         read(
             "muscle_group",
-            lambda value: _cell_limited(value, limit=MUSCLE_GROUP_MAX_LENGTH, what="Группа мышц"),
+            lambda value: excel.cell_limited(
+                value, limit=MUSCLE_GROUP_MAX_LENGTH, what="Группа мышц"
+            ),
             "muscle_group",
         )
     if index.get("equipment") is not None:
         read(
             "equipment",
-            lambda value: _cell_limited(value, limit=EQUIPMENT_MAX_LENGTH, what="Снаряд"),
+            lambda value: excel.cell_limited(value, limit=EQUIPMENT_MAX_LENGTH, what="Снаряд"),
             "equipment",
         )
     read("measurement", _cell_measurement, "measurement")
@@ -372,16 +366,18 @@ def _machine_row(number, values, index):
     cell = excel.cell_getter(values, index)
     readers = {
         "exercise_id": _cell_id,
-        "exercise": lambda value: _cell_limited(
+        "exercise": lambda value: excel.cell_limited(
             value, limit=EXERCISE_NAME_MAX_LENGTH, what="Название"
         ),
-        "location": lambda value: _cell_limited(
+        "location": lambda value: excel.cell_limited(
             value, limit=LOCATION_NAME_MAX_LENGTH, what="Место"
         ),
-        "brand": lambda value: _cell_limited(
+        "brand": lambda value: excel.cell_limited(
             value, limit=MACHINE_BRAND_MAX_LENGTH, what="Производитель"
         ),
-        "model": lambda value: _cell_limited(value, limit=MACHINE_MODEL_MAX_LENGTH, what="Модель"),
+        "model": lambda value: excel.cell_limited(
+            value, limit=MACHINE_MODEL_MAX_LENGTH, what="Модель"
+        ),
     }
     for key, parser in readers.items():
         try:

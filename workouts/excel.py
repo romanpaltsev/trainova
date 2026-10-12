@@ -4,9 +4,9 @@
 их отсюда же — иначе выгрузка и загрузка разошлись бы, и файл, скачанный из
 приложения, перестал бы в него загружаться.
 
-Лист плоский: строка — подход. Так проще всего заполнять руками и переносить из
-чужой таблицы, а связь «тренировка → подходы» восстанавливается группировкой по
-дате, времени начала и виду спорта.
+Лист плоский: строка — подход или кардио-часть. Так проще всего заполнять руками
+и переносить из чужой таблицы, а связь «тренировка → подходы» восстанавливается
+группировкой по дате, времени начала и виду спорта.
 """
 
 # Аннотации строками: поле SheetRow называется date и затенило бы одноимённый тип
@@ -27,9 +27,15 @@ from workouts.models import (
     CARDIO_INCLINE_MAX,
     CARDIO_INCLINE_MIN,
     CARDIO_LEVEL_MAX,
+    EXERCISE_NAME_MAX_LENGTH,
+    LOCATION_NAME_MAX_LENGTH,
+    MACHINE_BRAND_MAX_LENGTH,
+    MACHINE_MODEL_MAX_LENGTH,
     MAX_DURATION_SEC,
     MEASUREMENT_FIELDS,
+    SPORT_NAME_MAX_LENGTH,
     TIME_MEASUREMENTS,
+    ExerciseMachine,
     ExerciseNote,
     StrengthSet,
     Workout,
@@ -42,6 +48,8 @@ from workouts.models import (
 CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 SHEET_TITLE = "Тренировки"
 HELP_SHEET_TITLE = "Как заполнять"
+# Та же граница, что у форм (MAX_DURATION_HOURS): тренировка в 30 часов — опечатка.
+MAX_DURATION_MIN = 24 * 60
 
 
 @dataclass(frozen=True)
@@ -78,8 +86,18 @@ COLUMNS: tuple[Column, ...] = (
     # порядку. В конце и необязательная: колонки ищутся по заголовку, поэтому
     # файлы, скачанные до неё, загружаются как прежде — без суперсетов.
     Column("circuit", "Суперсет", 11, "0"),
-    # Тренажёр кардио и его настройки (CardioPart, решение 11.10.2026). Тоже в
-    # конце и необязательные: старые файлы без них грузятся как прежде.
+    # Кардио-часть (CardioPart) — своя строка с пустым «Упражнением» и своими
+    # видом спорта и временем: разминка на дорожке внутри силовой. «Вид спорта»
+    # у неё остаётся видом спорта тренировки — по нему строки собираются в
+    # тренировку, и иначе загрузка разрезала бы занятие на два. У кардио-
+    # тренировки с одной частью обе колонки пусты: вид спорта и время у части
+    # те же, что у тренировки, и строка выглядит как до появления частей.
+    Column("cardio", "Кардио", 14),
+    Column("cardio_duration", "Время кардио, мин", 18, "0"),
+    # Тренажёр: у кардио-строки — тренажёр части и его настройки (решение
+    # 11.10.2026), у подхода — тренажёр упражнения в месте тренировки
+    # (ExerciseMachine). Тоже в конце и необязательные: старые файлы без них
+    # грузятся как прежде.
     Column("machine_brand", "Производитель", 18),
     Column("machine_model", "Модель", 18),
     Column("incline", "Уклон, %", 10, "0.0"),
@@ -92,8 +110,8 @@ REQUIRED_TITLES = ("Дата", "Вид спорта", "Длительность,
 HELP_LINES = (
     "Как заполнять таблицу",
     "",
-    "Одна строка — один подход. Тренировка собирается из строк с одинаковыми датой,",
-    "временем начала и видом спорта.",
+    "Одна строка — один подход или одно кардио. Тренировка собирается из строк",
+    "с одинаковыми датой, временем начала и видом спорта.",
     "",
     "Кардио: оставьте «Упражнение» пустым и заполните «Дистанция, км» и «Пульс».",
     "Силовая: заполните «Упражнение» и то, в чём меряется подход, — вес и повторы,",
@@ -114,9 +132,17 @@ HELP_LINES = (
     "«Суперсет» — номер суперсета внутри тренировки: упражнения с одним номером",
     "выполняются по очереди, по подходу каждого. Пустой — упражнение само по себе.",
     "",
-    "Кардио на тренажёре: «Производитель» и «Модель» — названия, как в «Моих",
-    "тренажёрах» (незнакомые приложение заведёт само), «Уклон, %» — от −10 до 40,",
-    "«Уровень» — уровень нагрузки от 1 до 100. Всё необязательно.",
+    "Кардио внутри силовой тренировки — разминку на дорожке, заминку на велосипеде —",
+    "пишите отдельной строкой той же тренировки с пустым «Упражнением»: в «Кардио» —",
+    "его вид спорта, в «Время кардио, мин» — сколько оно длилось. Кардио-тренировке",
+    "обе колонки не нужны: вид спорта и время у неё уже есть.",
+    "",
+    "«Производитель» и «Модель» — тренажёр, названия как в «Моих тренажёрах»",
+    "(незнакомые приложение заведёт само). У кардио это тренажёр, на котором",
+    "занимались, у подхода — тренажёр упражнения в этом месте: без «Места» он не",
+    "запишется, а тренажёр, уже указанный в приложении, загрузка не меняет.",
+    "«Уклон, %» — от −10 до 40, «Уровень» — уровень нагрузки от 1 до 100, оба только",
+    "у кардио. Всё необязательно.",
     "",
     "Упражнение с повторами без веса приложение заводит как «вес × повторы»: вес 0",
     "у него значит «со своим весом». Если это чистые повторы — поменяйте единицу",
@@ -139,10 +165,11 @@ def _text(cell, value):
 def sheet_rows(user):
     """Строки листа по всей записанной истории пользователя.
 
-    Три запроса и ни одного в цикле: подходы и заметки выбираются пачкой на всю
-    историю и раскладываются по тренировкам в Python. Порядок упражнений внутри
-    тренировки — общий с экраном итога (services.group_sets), поэтому выгрузка
-    не изобретает собственного.
+    Пять запросов и ни одного в цикле: тренировки с кардио-частями, подходы,
+    заметки и тренажёры выбираются пачкой на всю историю и раскладываются по
+    тренировкам в Python. Порядок упражнений внутри тренировки — общий с
+    экраном итога (services.group_sets), поэтому выгрузка не изобретает
+    собственного.
     """
     workouts = list(
         Workout.objects.filter(user=user)
@@ -168,6 +195,16 @@ def sheet_rows(user):
     ).values_list("workout_id", "exercise_id", "text"):
         notes_by_workout.setdefault(workout_id, {})[exercise_id] = text
 
+    # Тренажёры упражнений по местам: словарём, а не аннотацией подходов — место
+    # у каждой тренировки своё, и подзапрос пришлось бы считать на каждый подход.
+    machines = {
+        (machine.exercise_id, machine.location_id): (
+            machine.brand.name,
+            machine.model.name if machine.model_id else "",
+        )
+        for machine in ExerciseMachine.objects.filter(user=user).select_related("brand", "model")
+    }
+
     rows = []
     for workout in workouts:
         rows.extend(
@@ -175,13 +212,18 @@ def sheet_rows(user):
                 workout,
                 sets_by_workout.get(workout.pk, []),
                 notes_by_workout.get(workout.pk, {}),
+                machines,
             )
         )
     return rows
 
 
-def _workout_rows(workout, sets, notes):
-    """Строки одной тренировки: по строке на подход, у кардио — одна."""
+def _workout_rows(workout, sets, notes, machines):
+    """Строки одной тренировки: по строке на подход и на кардио-часть.
+
+    Порядок тот же, что на итоге: упражнения, за ними кардио в порядке ввода.
+    Тренировка без того и другого («плавал 40 минут, не мерил») — одна строка.
+    """
     started = timezone.localtime(workout.started_at)
     common = {
         "date": started.date(),
@@ -192,23 +234,13 @@ def _workout_rows(workout, sets, notes):
         # середину тренировки, она нужна там же, а не в первой строке сверху.
         "duration": workout.duration_min,
     }
-    # Первая часть из prefetch'а: строкой кардио пока описывается только чистое
-    # кардио, у которого часть ровно одна.
-    cardio = next(iter(workout.cardio_parts.all()), None)
-    if not sets:
-        row = dict(common)
-        row["distance"] = cardio.distance_km if cardio else None
-        row["pulse"] = cardio.avg_heart_rate if cardio else None
-        if cardio is not None:
-            row["machine_brand"] = cardio.brand.name if cardio.brand_id else ""
-            row["machine_model"] = cardio.model.name if cardio.model_id else ""
-            row["incline"] = cardio.incline_pct
-            row["level"] = cardio.level
-        row["workout_note"] = workout.note
-        return [row]
-
     rows = []
     for group in services.group_sets(sets, notes):
+        # Тренажёр — тот, что указан у упражнения в месте тренировки сейчас:
+        # ExerciseMachine — настройка, а не снимок, и итог старой тренировки
+        # показывает его же. Пишется в каждую строку, как место: по нему
+        # фильтруют, а повторы короткого названия стеной не выглядят.
+        brand, model = machines.get((group["exercise"].pk, workout.location_id), ("", ""))
         for index, item in enumerate(group["sets"]):
             row = dict(common)
             row["exercise"] = group["exercise"].name
@@ -228,10 +260,35 @@ def _workout_rows(workout, sets, notes):
             if index == 0:
                 row["exercise_note"] = group["note"]
             row["circuit"] = group["circuit_no"]
+            row["machine_brand"] = brand
+            row["machine_model"] = model
             rows.append(row)
-    if rows:
-        rows[0]["workout_note"] = workout.note
+    parts = workout.cardio_parts.all()
+    # Единственная часть тренировки без подходов — это сама тренировка (так её
+    # записывает форма кардио), и строка у неё та же, что до появления частей.
+    lone = not sets and len(parts) == 1
+    rows.extend(_cardio_row(common, workout, part, lone=lone) for part in parts)
+    if not rows:
+        rows.append(dict(common))
+    rows[0]["workout_note"] = workout.note
     return rows
+
+
+def _cardio_row(common, workout, part, *, lone):
+    """Строка кардио-части. Вид спорта и время пишутся, только когда они свои:
+    пустые загрузка читает как «те же, что у тренировки»."""
+    row = dict(common)
+    row["distance"] = part.distance_km
+    row["pulse"] = part.avg_heart_rate
+    row["machine_brand"] = part.brand.name if part.brand_id else ""
+    row["machine_model"] = part.model.name if part.model_id else ""
+    row["incline"] = part.incline_pct
+    row["level"] = part.level
+    if part.sport_id != workout.sport_id:
+        row["cardio"] = part.sport.name
+    if not (lone and part.duration_min == workout.duration_min):
+        row["cardio_duration"] = part.duration_min
+    return row
 
 
 def write_table(sheet, columns, rows):
@@ -363,16 +420,41 @@ class SheetRow:
     workout_note: str = ""
     exercise_note: str = ""
     circuit: int | None = None
+    cardio_sport: str = ""
+    cardio_duration_min: int | None = None
     machine_brand: str = ""
     machine_model: str = ""
     incline_pct: Decimal | None = None
     level: int | None = None
     errors: list[str] = field(default_factory=list)
+    # Строка, которую не к чему отнести: название упражнения или вида спорта не
+    # помещается в справочник. Такая не загружается вовсе — с пустым названием
+    # подход стал бы кардио-строкой, а тренировка осталась бы без вида спорта.
+    broken: bool = False
 
     @property
     def is_cardio(self):
         """Пустое упражнение и есть признак кардио-строки."""
         return not self.exercise
+
+    @property
+    def has_cardio_part(self):
+        """Описывает ли кардио-строка часть: заполнено хоть что-то о ней.
+
+        Пустая — кардио-тренировка без подробностей («плавал 40 минут, не
+        мерил»): части у неё нет, как и у формы кардио без дистанции. Ноль
+        дистанции — тоже «не мерил», а нулевой уклон — настоящий уклон.
+        """
+        return bool(
+            self.cardio_sport
+            or self.cardio_duration_min
+            or self.distance_km
+            or self.avg_heart_rate
+            or self.machine_brand
+            or self.machine_model
+            or self.incline_pct is not None
+            or self.level
+        )
 
 
 def cell_text(value):
@@ -383,6 +465,19 @@ def cell_text(value):
     if isinstance(value, datetime):
         return value.isoformat(sep=" ")
     return str(value).strip()
+
+
+def cell_limited(value, *, limit, what):
+    """Текст ячейки не длиннее поля в базе.
+
+    Общий для обеих книг. Обрезать молча нельзя — человек не узнает, а
+    пропущенное без проверки длинное название уронило бы загрузку ошибкой базы
+    вместо строки в отчёте.
+    """
+    text = cell_text(value)
+    if len(text) > limit:
+        raise ValueError(f"{what} длиннее {limit} символов.")
+    return text
 
 
 def _cell_date(value):
@@ -486,6 +581,16 @@ def _cell_level(value):
     number = _cell_int(value, what="Уровень")
     if number is not None and not 1 <= number <= CARDIO_LEVEL_MAX:
         raise ValueError(f"Уровень — от 1 до {CARDIO_LEVEL_MAX}.")
+    return number
+
+
+def _cell_cardio_minutes(value):
+    """Время кардио-части в минутах. Пусто и ноль — «не указано», как в форме."""
+    number = _cell_int(value, what="Время кардио")
+    if not number:
+        return None
+    if not 0 < number <= MAX_DURATION_MIN:
+        raise ValueError(f"Время кардио — от 1 до {MAX_DURATION_MIN} минут.")
     return number
 
 
@@ -634,17 +739,22 @@ def _sheet_row(number, values, index):
     row = SheetRow(number=number)
     cell = cell_getter(values, index)
 
-    def read(key, parser, target):
+    def read(key, parser, target, *, vital=False):
         try:
             setattr(row, target, parser(cell(key)))
         except ValueError as error:
             row.errors.append(str(error))
+            row.broken = row.broken or vital
+
+    def name(limit, what):
+        return lambda value: cell_limited(value, limit=limit, what=what)
 
     read("date", _cell_date, "date")
     read("start", _cell_time, "start_time")
-    row.sport = cell_text(cell("sport"))
-    row.location = cell_text(cell("location"))
-    row.exercise = cell_text(cell("exercise"))
+    # Вид спорта и упражнение решают, куда пойдёт строка, — поэтому vital.
+    read("sport", name(SPORT_NAME_MAX_LENGTH, "Вид спорта"), "sport", vital=True)
+    read("location", name(LOCATION_NAME_MAX_LENGTH, "Место"), "location")
+    read("exercise", name(EXERCISE_NAME_MAX_LENGTH, "Упражнение"), "exercise", vital=True)
     read("weight", _cell_weight, "weight_kg")
     read("reps", lambda value: _cell_int(value, what="Повторы") or 0, "reps")
     read("hold", _cell_seconds, "duration_sec")
@@ -654,8 +764,10 @@ def _sheet_row(number, values, index):
     row.workout_note = cell_text(cell("workout_note"))
     row.exercise_note = cell_text(cell("exercise_note"))
     read("circuit", _cell_circuit, "circuit")
-    row.machine_brand = cell_text(cell("machine_brand"))
-    row.machine_model = cell_text(cell("machine_model"))
+    read("cardio", name(SPORT_NAME_MAX_LENGTH, "Кардио"), "cardio_sport")
+    read("cardio_duration", _cell_cardio_minutes, "cardio_duration_min")
+    read("machine_brand", name(MACHINE_BRAND_MAX_LENGTH, "Производитель"), "machine_brand")
+    read("machine_model", name(MACHINE_MODEL_MAX_LENGTH, "Модель"), "machine_model")
     read("incline", _cell_incline, "incline_pct")
     read("level", _cell_level, "level")
     return row

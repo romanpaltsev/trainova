@@ -10,7 +10,13 @@ from django.utils import timezone
 from openpyxl import Workbook
 
 from workouts import excel
-from workouts.models import Exercise, ExerciseSettings, Workout, cardio_parts_prefetch
+from workouts.models import (
+    Exercise,
+    ExerciseMachine,
+    ExerciseSettings,
+    Workout,
+    cardio_parts_prefetch,
+)
 
 
 def build_sheet(rows, *, header=None, sheet_title=excel.SHEET_TITLE, columns=excel.COLUMNS):
@@ -46,7 +52,16 @@ def dump(user):
 
     done_at сюда не входит намеренно: метки времени подхода в таблице нет, как
     нет её и у тренировки, записанной задним числом.
+
+    Тренажёр упражнения — тот, что виден на итоге: указанный у упражнения в
+    месте тренировки (ExerciseMachine), по названиям.
     """
+    machines = {
+        (machine.exercise.name, machine.location.name): machine.label
+        for machine in ExerciseMachine.objects.filter(user=user).select_related(
+            "exercise", "location", "brand", "model"
+        )
+    }
     snapshot = []
     workouts = (
         Workout.objects.filter(user=user)
@@ -56,7 +71,8 @@ def dump(user):
         .order_by("started_at", "id")
     )
     for workout in workouts:
-        cardio = next(iter(workout.cardio_parts.all()), None)
+        place = workout.location.name if workout.location else ""
+        names = sorted(set(workout.sets.values_list("exercise__name", flat=True)))
         snapshot.append(
             {
                 "started_at": timezone.localtime(workout.started_at).replace(
@@ -79,19 +95,23 @@ def dump(user):
                     for row in workout.sets.select_related("exercise").order_by("id")
                 ],
                 "notes": sorted(workout.exercise_notes.values_list("exercise__name", "text")),
-                # Тренажёр — названиями: у другого аккаунта своя модель заводится
-                # заново, и сверять id было бы бессмысленно.
-                "cardio": (
+                "machines": [
+                    (name, machines[(name, place)]) for name in names if (name, place) in machines
+                ],
+                # Все части в порядке ввода. Тренажёр — названиями: у другого
+                # аккаунта своя модель заводится заново, и сверять id бессмысленно.
+                "cardio": [
                     (
-                        cardio.distance_km,
-                        cardio.avg_heart_rate,
-                        cardio.machine,
-                        cardio.incline_pct,
-                        cardio.level,
+                        part.sport.name,
+                        part.duration_min,
+                        part.distance_km,
+                        part.avg_heart_rate,
+                        part.machine,
+                        part.incline_pct,
+                        part.level,
                     )
-                    if cardio
-                    else None
-                ),
+                    for part in workout.cardio_parts.all()
+                ],
             }
         )
     return snapshot

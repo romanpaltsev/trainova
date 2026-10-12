@@ -14,8 +14,11 @@ from workouts.models import Exercise, Sport
 from workouts.tests.factories import (
     CardioPartFactory,
     ExerciseFactory,
+    ExerciseMachineFactory,
     ExerciseNoteFactory,
     LocationFactory,
+    MachineBrandFactory,
+    MachineModelFactory,
     RepsSetFactory,
     SportFactory,
     StrengthSetFactory,
@@ -154,6 +157,143 @@ def test_cardio_workout_gives_single_row(user):
     assert float(row["distance"]) == 24.5
     assert row["pulse"] == 142
     assert row["duration"] == 60
+    # Единственная часть и есть тренировка: своих вида спорта и времени у неё
+    # нет, и строка такая же, как до появления частей.
+    assert (row["cardio"], row["cardio_duration"]) == (None, None)
+
+
+def test_cardio_parts_of_mixed_workout_get_own_rows(user):
+    """Разминка и заминка внутри силовой — строки той же тренировки, в порядке
+    ввода: вид спорта тренировки в «Виде спорта», свой — в «Кардио», своё время."""
+    run = SportFactory(name="Бег", category=Sport.Category.CARDIO)
+    bike = SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+    workout = WorkoutFactory(
+        user=user, sport=SportFactory(name="Силовая"), started_at=moment(4), duration_min=75
+    )
+    technogym = MachineBrandFactory(name="Technogym")
+    CardioPartFactory(
+        workout=workout,
+        sport=run,
+        duration_min=25,
+        distance_km=5.2,
+        avg_heart_rate=150,
+        brand=technogym,
+        model=MachineModelFactory(brand=technogym, name="Run 1000"),
+        incline_pct=3,
+        level=8,
+    )
+    StrengthSetFactory(workout=workout, exercise=ExerciseFactory(name="Скручивания"))
+    CardioPartFactory(
+        workout=workout, sport=bike, duration_min=None, distance_km=None, avg_heart_rate=None
+    )
+
+    rows = rows_of(sheet_of(user))
+
+    # Как на итоге: упражнения, за ними кардио.
+    assert [(row["exercise"], row["cardio"]) for row in rows] == [
+        ("Скручивания", None),
+        (None, "Бег"),
+        (None, "Велосипед"),
+    ]
+    warmup, cooldown = rows[1], rows[2]
+    assert (warmup["sport"], warmup["duration"], warmup["cardio_duration"]) == ("Силовая", 75, 25)
+    assert (float(warmup["distance"]), warmup["pulse"], warmup["set_number"]) == (5.2, 150, None)
+    assert (warmup["machine_brand"], warmup["machine_model"]) == ("Technogym", "Run 1000")
+    assert (float(warmup["incline"]), warmup["level"]) == (3.0, 8)
+    # Время не указано — ячейка пустая, а не время всей тренировки.
+    assert (cooldown["cardio_duration"], cooldown["distance"]) == (None, None)
+
+
+def test_strength_workout_of_only_cardio_names_its_sport(user):
+    """Силовая, где успели только пробежку: строка одна, в «Кардио» — её вид
+    спорта, а время совпадает с тренировкой и поэтому не повторяется."""
+    workout = WorkoutFactory(
+        user=user, sport=SportFactory(name="Силовая"), started_at=moment(4), duration_min=30
+    )
+    CardioPartFactory(
+        workout=workout, sport=SportFactory(name="Бег", category=Sport.Category.CARDIO)
+    )
+
+    rows = rows_of(sheet_of(user))
+
+    assert len(rows) == 1
+    assert (rows[0]["sport"], rows[0]["cardio"], rows[0]["cardio_duration"]) == (
+        "Силовая",
+        "Бег",
+        None,
+    )
+
+
+def test_strength_rows_carry_the_machine_of_the_place(user):
+    """У подхода — тренажёр, указанный у упражнения в месте тренировки, тот же,
+    что на итоге. Он в каждой строке упражнения, как место."""
+    place = LocationFactory(owner=user, name="СпортЛайф")
+    press = ExerciseFactory(name="Жим ногами")
+    hammer = MachineBrandFactory(name="Hammer Strength")
+    ExerciseMachineFactory(
+        user=user,
+        exercise=press,
+        location=place,
+        brand=hammer,
+        model=MachineModelFactory(brand=hammer, name="Leg Press"),
+    )
+    workout = WorkoutFactory(user=user, started_at=moment(4), location=place)
+    StrengthSetFactory(workout=workout, exercise=press, set_number=1)
+    StrengthSetFactory(workout=workout, exercise=press, set_number=2)
+    StrengthSetFactory(workout=workout, exercise=ExerciseFactory(name="Сгибания"), set_number=1)
+
+    rows = rows_of(sheet_of(user))
+
+    assert [
+        (row["exercise"], row["machine_brand"], row["machine_model"], row["incline"])
+        for row in rows
+    ] == [
+        ("Жим ногами", "Hammer Strength", "Leg Press", None),
+        ("Жим ногами", "Hammer Strength", "Leg Press", None),
+        ("Сгибания", None, None, None),
+    ]
+
+
+def test_machine_is_taken_from_own_settings_of_that_place(user, other_user):
+    """Тренажёр другого места и чужой тренажёр в строки не попадают."""
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    home = LocationFactory(owner=user, name="Дом")
+    press = ExerciseFactory(name="Жим ногами")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym)
+    # Чужая строка с моим местом бывает только в базе — интерфейс её не создаст.
+    # Она проверяет, что выборка отсекает по пользователю, а не только по месту.
+    ExerciseMachineFactory(user=other_user, exercise=press, location=home)
+    at_home = WorkoutFactory(user=user, started_at=moment(4), location=home)
+    StrengthSetFactory(workout=at_home, exercise=press)
+    nowhere = WorkoutFactory(user=user, started_at=moment(5))
+    StrengthSetFactory(workout=nowhere, exercise=press)
+
+    rows = rows_of(sheet_of(user))
+
+    assert [(row["machine_brand"], row["machine_model"]) for row in rows] == [
+        (None, None),
+        (None, None),
+    ]
+
+
+def test_export_query_count_does_not_grow_with_history(user, django_assert_num_queries):
+    """Пять запросов на любую историю: тренировки, их кардио-части, подходы,
+    заметки и тренажёры — и ни одного на строку."""
+    place = LocationFactory(owner=user)
+    run = SportFactory(name="Бег", category=Sport.Category.CARDIO)
+    model = MachineModelFactory(brand=MachineBrandFactory(name="Technogym"), name="Run 1000")
+    for day in (3, 4, 5):
+        workout = WorkoutFactory(user=user, started_at=moment(day), location=place)
+        exercise = ExerciseFactory()
+        StrengthSetFactory(workout=workout, exercise=exercise)
+        ExerciseNoteFactory(workout=workout, exercise=exercise)
+        ExerciseMachineFactory(user=user, exercise=exercise, location=place)
+        CardioPartFactory(workout=workout, sport=run, brand=model.brand, model=model)
+
+    with django_assert_num_queries(5):
+        rows = excel.sheet_rows(user)
+
+    assert len(rows) == 6
 
 
 def test_notes_are_written_once(user):
