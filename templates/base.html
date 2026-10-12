@@ -74,6 +74,10 @@
         {% include "includes/machine.html" with size=22 only %}
         <span class="app-sidebar-label">Мои тренажёры</span>
       </a>
+      <a class="app-side-link{% if url_name == 'my_gear' or url_name|slice:':5' == 'gear_' %} is-active{% endif %}" href="{% url 'my_gear' %}" title="Моё снаряжение">
+        {% include "includes/gear.html" with size=22 only %}
+        <span class="app-sidebar-label">Моё снаряжение</span>
+      </a>
       <a class="app-side-link{% if url_name == 'my_sports' %} is-active{% endif %}" href="{% url 'my_sports' %}" title="Мои виды спорта">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

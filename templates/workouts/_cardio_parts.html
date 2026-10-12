@@ -40,6 +40,10 @@
       {% if part.elevation_display %}
         <span class="app-cardio-part-machine">{% include "includes/elevation.html" %}набор высоты {{ part.elevation_display }}</span>
       {% endif %}
+      {% comment %}Снаряжение — той же строкой: «на чём» на улице, как тренажёр в зале.{% endcomment %}
+      {% if part.gear_id %}
+        <span class="app-cardio-part-machine">{% include "includes/gear.html" %}{{ part.gear.name }}</span>
+      {% endif %}
       {% include "includes/pencil.html" %}
     </button>
   {% endfor %}

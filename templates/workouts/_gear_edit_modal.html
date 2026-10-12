@@ -1,0 +1,39 @@
+{% comment %}
+  Правка снаряжения: название и пробег до дневника. Ответ на успешный POST —
+  блок строк out-of-band, поэтому в #modal попадает пустой остаток и окно
+  закрывается само (приём _location_rename_modal.html).
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true" aria-labelledby="gear-edit-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="gear-edit-title">Снаряжение</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <p class="text-secondary-app">Новое название встанет во все тренировки с этой вещью.</p>
+
+    <form hx-post="{% url 'gear_edit' gear.pk %}" hx-target="#modal" hx-swap="innerHTML">
+      {% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+        {{ form.name }}
+        {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.initial_km.id_for_label }}">
+          {{ form.initial_km.label }} <span class="text-muted-app">· необязательно</span>
+        </label>
+        {{ form.initial_km }}
+        {% for error in form.initial_km.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        <p class="app-queue-hint mt-2 mb-0">Сколько вещь прошла до дневника — к пробегу из тренировок прибавится.</p>
+      </div>
+      <div class="d-flex gap-2 mt-3">
+        <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
+        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+      </div>
+    </form>
+  </div>
+</div>

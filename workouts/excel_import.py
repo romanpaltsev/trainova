@@ -23,6 +23,7 @@ from workouts.models import (
     Exercise,
     ExerciseMachine,
     ExerciseNote,
+    Gear,
     Location,
     Sport,
     StrengthSet,
@@ -49,10 +50,16 @@ class ImportReport(excel.ReportLog):
     created_sports: list[str] = field(default_factory=list)
     created_exercises: list[str] = field(default_factory=list)
     created_locations: list[str] = field(default_factory=list)
+    created_gear: list[str] = field(default_factory=list)
 
     @property
     def created_anything(self):
-        return bool(self.created_sports or self.created_exercises or self.created_locations)
+        return bool(
+            self.created_sports
+            or self.created_exercises
+            or self.created_locations
+            or self.created_gear
+        )
 
 
 class Catalog:
@@ -75,6 +82,7 @@ class Catalog:
         self.locations = {
             place.name.lower(): place for place in Location.objects.filter(owner=user)
         }
+        self.gear = {item.name.lower(): item for item in Gear.objects.filter(owner=user)}
 
     def sport(self, name, *, category):
         key = collapse_spaces(name).lower()
@@ -98,6 +106,13 @@ class Catalog:
             self.locations[key] = services.location_for_name(self.user, name)
             self.report.created_locations.append(self.locations[key].name)
         return self.locations[key]
+
+    def gear_item(self, name):
+        key = collapse_spaces(name).lower()
+        if key not in self.gear:
+            self.gear[key] = services.gear_for_name(self.user, collapse_spaces(name))
+            self.report.created_gear.append(self.gear[key].name)
+        return self.gear[key]
 
 
 @dataclass
@@ -447,6 +462,7 @@ def _create_parts(catalog, report, workout, rows, *, lone):
             elevation_gain_m=row.elevation_gain_m,
             avg_power_w=row.avg_power_w,
             style=style,
+            gear=catalog.gear_item(row.gear) if row.gear else None,
         )
         created += 1
     return created

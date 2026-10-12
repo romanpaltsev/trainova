@@ -20,6 +20,7 @@ from workouts.models import (
     DeletedWorkout,
     Exercise,
     ExerciseNote,
+    Gear,
     Location,
     MachineBrand,
     MachineModel,
@@ -67,6 +68,7 @@ def _snapshot(workout, sets, parts, notes):
     sports.update({part.sport_id: part.sport for part in parts})
     locations = {workout.location_id: workout.location} if workout.location_id else {}
     brands = {part.brand_id: part.brand for part in parts if part.brand_id}
+    gear = {part.gear_id: part.gear for part in parts if part.gear_id}
     machine_models = {part.model_id: part.model for part in parts if part.model_id}
     return {
         "v": 1,
@@ -96,6 +98,8 @@ def _snapshot(workout, sets, parts, notes):
                 str(pk): {"name": item.name, "brand_id": item.brand_id}
                 for pk, item in machine_models.items()
             },
+            # Снаряжение — своё, по имени: удалённая вещь заведётся заново.
+            "gear": {str(pk): {"name": item.name} for pk, item in gear.items()},
         },
     }
 
@@ -117,7 +121,9 @@ def move_to_trash(workout, *, title, subtitle):
         if locked is None:
             return None
         sets = list(locked.sets.select_related("exercise").order_by("id"))
-        parts = list(locked.cardio_parts.select_related("sport", "brand", "model").order_by("id"))
+        parts = list(
+            locked.cardio_parts.select_related("sport", "brand", "model", "gear").order_by("id")
+        )
         notes = list(locked.exercise_notes.select_related("exercise").order_by("id"))
         entry = DeletedWorkout.objects.create(
             user_id=locked.user_id,
@@ -214,6 +220,26 @@ def _relink_machines(user, parts, refs):
             part.model_id = None
 
 
+def _relink_gear(user, parts, refs):
+    """Снаряжение частей: своё по id, а пропавшее — по имени (services.gear_for_name).
+
+    Вещь на пенсии остаётся как есть: восстановление возвращает тренировку, а не
+    решает за человека, что кроссовки снова в строю.
+    """
+    gear_ids = {part.gear_id for part in parts} - {None}
+    if not gear_ids:
+        return
+    gear = _resolve(
+        gear_ids,
+        Gear.objects.filter(owner=user).in_bulk(gear_ids),
+        refs.get("gear", {}),
+        lambda ref: services.gear_for_name(user, ref["name"]),
+    )
+    for part in parts:
+        if part.gear_id is not None:
+            part.gear_id = gear[part.gear_id]
+
+
 def _relink(user, workout, sets, parts, notes, refs):
     """Переставить ссылки восстановленных строк на записи, которые есть сейчас."""
     exercises, sports, locations = _resolve_catalogs(user, workout, sets, parts, notes, refs)
@@ -236,6 +262,7 @@ def _relink(user, workout, sets, parts, notes, refs):
     for part in parts:
         part.sport_id = sports[part.sport_id]
     _relink_machines(user, parts, refs)
+    _relink_gear(user, parts, refs)
     kept_notes, seen = [], set()
     for note in sorted(notes, key=lambda item: item.pk):
         note.exercise_id = exercises[note.exercise_id]

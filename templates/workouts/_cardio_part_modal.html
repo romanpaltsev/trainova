@@ -84,6 +84,11 @@
       {% endcomment %}
       <input type="hidden" name="location" value="{{ workout.location_id|default:'' }}">
       {% if part %}
+        {% include "workouts/_gear_chips.html" %}
+      {% else %}
+        {% include "workouts/_gear_chips.html" with gear_prefill_on=True %}
+      {% endif %}
+      {% if part %}
         {% include "workouts/_cardio_machine_fields.html" %}
       {% else %}
         {% include "workouts/_cardio_machine_fields.html" with prefill_on=True %}

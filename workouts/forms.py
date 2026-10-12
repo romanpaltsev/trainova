@@ -16,6 +16,7 @@ from workouts.models import (
     CARDIO_LEVEL_MAX,
     CARDIO_POWER_MAX,
     CATALOG_REQUEST_TEXT_MAX_LENGTH,
+    GEAR_NAME_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
     MACHINE_BRAND_MAX_LENGTH,
     MACHINE_MODEL_MAX_LENGTH,
@@ -23,6 +24,7 @@ from workouts.models import (
     BodyMetric,
     CardioPart,
     Exercise,
+    Gear,
     Location,
     MachineBrand,
     MachineModel,
@@ -313,6 +315,83 @@ def power_field():
     )
 
 
+def gear_fields():
+    """Снаряжение части: чип своей вещи или новое название.
+
+    Пара, как у места (location / location_own): ввод названия и есть создание
+    (services.gear_for_name), и запись появляется только при сохранении части —
+    форма, упавшая на другой ошибке, не засоряет «Моё снаряжение».
+    """
+    return (
+        forms.ModelChoiceField(
+            label="Снаряжение",
+            queryset=Gear.objects.none(),
+            required=False,
+            widget=forms.RadioSelect,
+            error_messages={"invalid_choice": "Такого снаряжения у вас нет."},
+        ),
+        forms.CharField(label="Новое снаряжение", required=False, max_length=GEAR_NAME_MAX_LENGTH),
+    )
+
+
+def chosen_gear(form):
+    """Снаряжение из формы: новое название перебивает чип, как у места."""
+    name = collapse_spaces(form.cleaned_data.get("gear_own") or "")
+    if name:
+        return services.gear_for_name(form.user, name)
+    return form.cleaned_data.get("gear")
+
+
+class GearForm(forms.Form):
+    """Окно правки снаряжения: название и пробег до дневника."""
+
+    name = forms.CharField(
+        label="Название",
+        max_length=GEAR_NAME_MAX_LENGTH,
+        error_messages={"required": "Введите название."},
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "off"}),
+    )
+    initial_km = forms.DecimalField(
+        label="Пробег до дневника, км",
+        required=False,
+        min_value=0,
+        max_digits=7,
+        decimal_places=1,
+        localize=True,
+        error_messages={
+            "invalid": "Пробег — число, например 350 или 12,5.",
+            "min_value": "Пробег не бывает отрицательным.",
+            "max_digits": "Столько не пробегают.",
+            "max_decimal_places": "Пробег — с одним знаком после запятой.",
+        },
+        widget=forms.TextInput(attrs={"class": "form-control", "inputmode": "decimal"}),
+    )
+
+    def __init__(self, *args, user, instance, **kwargs):
+        self.user = user
+        self.instance = instance
+        super().__init__(*args, **kwargs)
+
+    def clean_name(self):
+        name = collapse_spaces(self.cleaned_data["name"])
+        if not name:
+            raise forms.ValidationError("Введите название.")
+        taken = (
+            Gear.objects.filter(owner=self.user, name__iexact=name)
+            .exclude(pk=self.instance.pk)
+            .exists()
+        )
+        if taken:
+            raise forms.ValidationError("Снаряжение с таким названием у вас уже есть.")
+        return name
+
+    def save(self):
+        self.instance.name = self.cleaned_data["name"]
+        self.instance.initial_km = self.cleaned_data["initial_km"] or 0
+        self.instance.save(update_fields=["name", "initial_km"])
+        return self.instance
+
+
 CARDIO_ROUTE_FIELDS = ("distance_km", "elevation_gain_m")
 
 
@@ -424,6 +503,7 @@ class CardioWorkoutForm(forms.Form):
         widget=forms.Textarea(attrs={"class": "form-control", "rows": 3}),
     )
     machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
+    gear, gear_own = gear_fields()
 
     def __init__(self, *args, user, instance=None, planned=False, **kwargs):
         self.user = user
@@ -449,7 +529,8 @@ class CardioWorkoutForm(forms.Form):
             # Набора высоты и мощности у плана нет по той же причине, что и
             # пульса: цель плана — километры и время, остальное — то, что вышло.
             #
-            # Стиля у плана тоже нет: план — это цели, километры и время.
+            # Стиля и снаряжения у плана тоже нет: план — это цели, километры и
+            # время.
             for name in (
                 "date",
                 "time",
@@ -457,6 +538,8 @@ class CardioWorkoutForm(forms.Form):
                 "avg_power_w",
                 "elevation_gain_m",
                 "style",
+                "gear",
+                "gear_own",
             ):
                 del self.fields[name]
             # Обе цели необязательны: планов на неделю наготавливают пачкой, и
@@ -473,6 +556,9 @@ class CardioWorkoutForm(forms.Form):
         # Глобальных мест не бывает, поэтому только свои — и чужое по id даст
         # ошибку валидации, а не тихую запись.
         self.fields["location"].queryset = Location.objects.filter(owner=user)
+        if "gear" in self.fields:
+            # Своё — и на пенсии тоже: правка части с такой вещью должна сохраняться.
+            self.fields["gear"].queryset = Gear.objects.filter(owner=user)
         if instance is not None:
             self.initial = {**self._initial_from_instance(instance), **self.initial}
         else:
@@ -514,6 +600,7 @@ class CardioWorkoutForm(forms.Form):
             "style": cardio.style if cardio else "",
             "avg_heart_rate": cardio.avg_heart_rate if cardio else None,
             "avg_power_w": cardio.avg_power_w if cardio else None,
+            "gear": cardio.gear_id if cardio else None,
             "note": workout.note,
             **cardio_machine_initial(cardio),
         }
@@ -599,6 +686,8 @@ class CardioWorkoutForm(forms.Form):
             part.elevation_gain_m = self.cleaned_data.get("elevation_gain_m")
             part.avg_power_w = self.cleaned_data.get("avg_power_w")
             part.style = cardio_style_of(part.sport, self.cleaned_data)
+            if not self.planned:
+                part.gear = chosen_gear(self)
             apply_cardio_machine(self.user, part, self.cleaned_data)
             part.save()
         return workout
@@ -622,6 +711,7 @@ class CardioPartForm(forms.ModelForm):
     avg_power_w = power_field()
     # Тоже своим: пишется только у вида спорта со стилями (cardio_style_of).
     style = style_field()
+    gear, gear_own = gear_fields()
 
     class Meta:
         model = CardioPart
@@ -652,6 +742,7 @@ class CardioPartForm(forms.ModelForm):
         )
         self.fields["sport"].empty_label = None
         self.fields["distance_km"].required = False
+        self.fields["gear"].queryset = Gear.objects.filter(owner=user)
         if self.instance.pk:
             hours, minutes = divmod(self.instance.duration_min or 0, 60)
             self.initial.setdefault("duration_hours", hours or None)
@@ -659,6 +750,7 @@ class CardioPartForm(forms.ModelForm):
             for name, value in cardio_machine_initial(self.instance).items():
                 self.initial.setdefault(name, value)
             self.initial.setdefault("style", self.instance.style)
+            self.initial.setdefault("gear", self.instance.gear_id)
 
     def clean_distance_km(self):
         distance = self.cleaned_data.get("distance_km")
@@ -681,6 +773,7 @@ class CardioPartForm(forms.ModelForm):
         part = super().save(commit=False)
         part.workout = self.workout
         part.style = cardio_style_of(part.sport, self.cleaned_data)
+        part.gear = chosen_gear(self)
         apply_cardio_machine(self.user, part, self.cleaned_data)
         # Ноль значит «не указывал»: у части это NULL, и тогда скорость с темпом
         # просто не считаются — врать про них хуже, чем промолчать.

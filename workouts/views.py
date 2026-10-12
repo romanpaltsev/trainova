@@ -18,15 +18,19 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import IntegrityError, transaction
 from django.db.models import (
     Count,
+    DecimalField,
     F,
     Max,
     OuterRef,
     Prefetch,
     Q,
     Subquery,
+    Sum,
+    Value,
     prefetch_related_objects,
 )
 from django.db.models.deletion import ProtectedError, RestrictedError
+from django.db.models.functions import Coalesce
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -59,6 +63,7 @@ from workouts.forms import (
     ExerciseCreateForm,
     ExerciseQuickForm,
     FinishDurationForm,
+    GearForm,
     MachineCreateForm,
     MachineNameForm,
     SportForm,
@@ -73,6 +78,7 @@ from workouts.models import (
     DEFAULT_WEIGHT_STEP,
     EQUIPMENT_MAX_LENGTH,
     EXERCISE_NAME_MAX_LENGTH,
+    GEAR_NAME_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
     MACHINE_BRAND_MAX_LENGTH,
     MACHINE_MODEL_MAX_LENGTH,
@@ -97,6 +103,7 @@ from workouts.models import (
     ExerciseMachine,
     ExerciseNote,
     ExerciseSettings,
+    Gear,
     Location,
     MachineBrand,
     MachineModel,
@@ -289,6 +296,11 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
                 initial |= cardio_route_initial(route_filled_by)
                 initial["style"] = services.last_cardio_style(request.user, initial["sport"])
                 style_filled = bool(initial["style"])
+                gear = services.last_cardio_gear(
+                    request.user, initial["sport"], default, initial["style"]
+                )
+                if gear is not None:
+                    initial["gear"] = gear.pk
         form = CardioWorkoutForm(
             user=request.user, instance=instance, planned=self.planned, initial=initial
         )
@@ -357,6 +369,7 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
             self.template_name,
             cardio_machine_context(self.request.user, form)
             | cardio_style_context(form, filled=style_filled)
+            | cardio_gear_context(self.request.user, form)
             | {
                 "filled_by": filled_by,
                 "route_form": form,
@@ -493,6 +506,77 @@ def cardio_style_context(form, *, filled=False):
         "style_filled": filled and bool(selected),
         "style_errors": errors,
     }
+
+
+def gear_chips(user, sport, style, selected_id):
+    """Чипы снаряжения и отмеченное: всё не на пенсии плюс выбранное у правимой части.
+
+    Вещь на пенсии из выбора уходит, но у части, где она записана, остаётся
+    видна и отмечена — иначе правка части молча снимала бы её.
+    """
+    items = services.gear_choices(user, sport, style)
+    selected = str(selected_id or "")
+    if selected.isdecimal() and all(str(item.pk) != selected for item in items):
+        kept = Gear.objects.filter(owner=user, pk=int(selected)).first()
+        if kept is not None:
+            items.append(kept)
+    return items
+
+
+def cardio_gear_context(user, form, *, filled_by=None):
+    """Блок «Снаряжение» формы с полями gear / gear_own: чипы и отмеченное.
+
+    Порядок чипов — по виду спорта и стилю, выбранным в форме: к бегу наверху
+    кроссовки. У плана полей нет, и блока тоже.
+    """
+    if "gear" not in form.fields:
+        return {"gear_enabled": False}
+    sport_id = form["sport"].value()
+    sport = int(sport_id) if str(sport_id or "").isdecimal() else None
+    style = form["style"].value() or "" if "style" in form.fields else ""
+    selected = form["gear"].value()
+    return {
+        "gear_enabled": True,
+        "gear_items": gear_chips(user, sport, style, selected),
+        "selected_gear": str(selected or ""),
+        "gear_own": form["gear_own"].value() or "",
+        "gear_max_length": GEAR_NAME_MAX_LENGTH,
+        # Присланная форма с ошибкой — выбор человека, и перезапрос его не трогает.
+        "gear_touched": form.is_bound,
+        "gear_errors": [*form["gear"].errors, *form["gear_own"].errors],
+    }
+
+
+class CardioGearView(LoginRequiredMixin, View):
+    """Чипы «Снаряжения», заполненные как в прошлый раз.
+
+    Зовётся сменой вида спорта, места или стиля. Метка — «тронуто», а не
+    «подставлено», как у «Тренажёра»: «Без снаряжения» бывает выбором, и пустое
+    поле его от «ещё не выбирали» не отличает. Тронул — 204, и выбор остаётся.
+    Иначе — снаряжение последней части этого вида спорта и стиля, сначала из
+    этого места (services.last_cardio_gear), и чипы в порядке использования.
+    """
+
+    def get(self, request):
+        if request.GET.get("gear_touched") == "1":
+            return HttpResponse(status=204)
+        sport, location, known = chosen_sport_and_location(request, request.GET)
+        style = request.GET.get("style", "") if sport is not None and sport.has_styles else ""
+        gear = services.last_cardio_gear(
+            request.user, sport, location if known else None, style, anywhere=not known
+        )
+        return render(
+            request,
+            "workouts/_gear_chips.html",
+            {
+                "gear_enabled": True,
+                "gear_prefill_on": True,
+                "gear_items": gear_chips(request.user, sport, style, gear.pk if gear else None),
+                "selected_gear": str(gear.pk) if gear else "",
+                "gear_filled_by": gear,
+                "gear_max_length": GEAR_NAME_MAX_LENGTH,
+            },
+        )
 
 
 class CardioStyleView(LoginRequiredMixin, View):
@@ -1682,6 +1766,7 @@ class WorkoutCardioPartView(LoginRequiredMixin, View):
             "workouts/_cardio_part_modal.html",
             cardio_machine_context(request.user, form)
             | cardio_style_context(form)
+            | cardio_gear_context(request.user, form)
             | {
                 "workout": workout,
                 "form": form,
@@ -3391,7 +3476,8 @@ class CatalogDeleteView(LoginRequiredMixin, View):
         try:
             with transaction.atomic():
                 item.delete()
-        except ProtectedError:
+        except (ProtectedError, RestrictedError):
+            # RESTRICT — у снаряжения: держит так же, а исключение своё.
             messages.error(request, self.in_use_message.format(name=item.name))
             return redirect(self.success_url_name)
         messages.success(request, self.deleted_message)
@@ -3444,6 +3530,146 @@ class LocationDeleteView(CatalogDeleteView):
 
     def referencing_workouts(self, item):
         return Workout.objects.filter(location=item)
+
+
+class GearDeleteView(CatalogDeleteView):
+    model = Gear
+    title = "Удалить снаряжение?"
+    in_use_message = (
+        "«{name}» есть в записанных тренировках — его нельзя удалить. "
+        "Отправьте на пенсию: пробег сохранится."
+    )
+    planned_use_message = "«{name}» есть в незавершённой тренировке — сначала уберите его оттуда."
+    deleted_message = "Снаряжение удалено."
+    success_url_name = "my_gear"
+
+    def referencing_workouts(self, item):
+        # distinct: частей с этой вещью в тренировке может быть несколько.
+        return Workout.objects.filter(cardio_parts__gear=item).distinct()
+
+
+def my_gear(user):
+    """Снаряжение со своим пробегом и числом тренировок — одним запросом.
+
+    Пробег — километры до дневника плюс дистанции записанных частей. Фильтр
+    по своим записанным тренировкам — внутри агрегата, и это точка изоляции:
+    вещь своя, но считать её пробег по чужим частям нельзя ни при каком раскладе.
+    Черновики не в счёт — их ещё не пробежали.
+    """
+    recorded = Q(
+        cardio_parts__workout__user=user, cardio_parts__workout__duration_min__isnull=False
+    )
+    rows = list(
+        Gear.objects.filter(owner=user)
+        .annotate(
+            logged_km=Coalesce(
+                Sum("cardio_parts__distance_km", filter=recorded),
+                Value(Decimal(0)),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            ),
+            workouts_count=Count("cardio_parts__workout", filter=recorded, distinct=True),
+        )
+        .order_by("name")
+    )
+    for row in rows:
+        total = (row.initial_km + row.logged_km).quantize(Decimal("0.1"))
+        row.mileage_display = f"{decimal_display(total)}\u00a0км"
+        count = row.workouts_count
+        # Ноль не подписываем — пустой пробег говорит сам за себя.
+        row.usage_label = (
+            f"в {count} {ru_plural(count, 'тренировке', 'тренировках', 'тренировках')}"
+            if count
+            else ""
+        )
+    return rows
+
+
+def gear_context(user, *, error="", name=""):
+    """Контекст «Моего снаряжения»: в ходу и на пенсии отдельно, ошибка добавления."""
+    rows = my_gear(user)
+    return {
+        "active_gear": [row for row in rows if not row.is_retired],
+        "retired_gear": [row for row in rows if row.is_retired],
+        "gear_max_length": GEAR_NAME_MAX_LENGTH,
+        "error": error,
+        "name": name,
+        "nav_active": "profile",
+    }
+
+
+class MyGearView(LoginRequiredMixin, View):
+    """Моё снаряжение: пробег, «на пенсию», правка и добавление.
+
+    Добавление — обычный POST с редиректом, как у «Моих мест»: экран холодный и
+    без JS обязан работать целиком.
+    """
+
+    def get(self, request):
+        return render(request, "workouts/my_gear.html", gear_context(request.user))
+
+    def post(self, request):
+        name = collapse_spaces(request.POST.get("name", ""))[:GEAR_NAME_MAX_LENGTH]
+        if not name:
+            return render(
+                request,
+                "workouts/my_gear.html",
+                gear_context(request.user, error="Введите название."),
+            )
+        existing = Gear.objects.filter(owner=request.user, name__iexact=name).first()
+        gear = services.gear_for_name(request.user, name)
+        if existing is not None:
+            messages.info(request, f"«{gear.name}» уже есть.")
+        else:
+            messages.success(request, "Снаряжение добавлено.")
+        return redirect("my_gear")
+
+
+def own_gear_or_404(request, pk):
+    # Чужое снаряжение по прямому URL — 404.
+    return get_object_or_404(Gear.objects.filter(owner=request.user), pk=pk)
+
+
+class GearEditView(LoginRequiredMixin, View):
+    """Окно правки снаряжения: название и пробег до дневника.
+
+    Ответ на успех — строки out-of-band, и окно закрывается само (приём
+    LocationRenameView).
+    """
+
+    def get(self, request, pk):
+        gear = own_gear_or_404(request, pk)
+        form = GearForm(
+            user=request.user,
+            instance=gear,
+            initial={"name": gear.name, "initial_km": gear.initial_km or None},
+        )
+        return self.render_modal(gear, form)
+
+    def post(self, request, pk):
+        gear = own_gear_or_404(request, pk)
+        form = GearForm(request.POST, user=request.user, instance=gear)
+        if not form.is_valid():
+            return self.render_modal(gear, form)
+        form.save()
+        return render(
+            request, "workouts/_gear_rows.html", gear_context(request.user) | {"oob": True}
+        )
+
+    def render_modal(self, gear, form):
+        return render(self.request, "workouts/_gear_edit_modal.html", {"gear": gear, "form": form})
+
+
+class GearRetireView(LoginRequiredMixin, View):
+    """«На пенсию» и обратно. Кнопка шлёт желаемое состояние, а не «переключи»:
+    две вкладки, нажавшие одно и то же, не мигают вещью туда-обратно."""
+
+    def post(self, request, pk):
+        gear = own_gear_or_404(request, pk)
+        retire = request.POST.get("retired") == "1"
+        if retire != gear.is_retired:
+            gear.retired_on = timezone.localdate() if retire else None
+            gear.save(update_fields=["retired_on"])
+        return render(request, "workouts/_gear_rows.html", gear_context(request.user))
 
 
 MACHINE_KINDS = {"brand": MachineBrand, "model": MachineModel}

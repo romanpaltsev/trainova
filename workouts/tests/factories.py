@@ -14,6 +14,7 @@ from workouts.models import (
     ExerciseMachine,
     ExerciseNote,
     ExerciseSettings,
+    Gear,
     Location,
     MachineBrand,
     MachineModel,
@@ -65,6 +66,16 @@ class LocationFactory(factory.django.DjangoModelFactory):
 
     owner = factory.SubFactory(UserFactory)
     name = factory.Sequence(lambda n: f"Место {n}")
+
+
+class GearFactory(factory.django.DjangoModelFactory):
+    """Своё снаряжение: кроссовки, велосипед, лыжи."""
+
+    class Meta:
+        model = Gear
+
+    owner = factory.SubFactory(UserFactory)
+    name = factory.Sequence(lambda n: f"Кроссовки {n}")
 
 
 class MachineBrandFactory(factory.django.DjangoModelFactory):

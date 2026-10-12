@@ -1,0 +1,24 @@
+{% comment %}
+  Строки «Моего снаряжения»: в ходу и, ниже, на пенсии. Свапает сам себя:
+  «на пенсию» переносит вещь между разделами, и перерисовать блок целиком
+  проще, чем двигать строку. Правка приходит из окна и отдаёт этот блок
+  out-of-band — окно закрывается само (приём _location_rows.html).
+{% endcomment %}
+<div id="gear-rows"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <div class="app-rows app-rows-board">
+    {% for item in active_gear %}
+      {% include "workouts/_gear_row.html" %}
+    {% empty %}
+      {% comment %}Без CTA: поле «Новое снаряжение» стоит прямо под этим блоком.{% endcomment %}
+      {% include "includes/empty_state.html" with title="Снаряжения пока нет" text="Добавьте кроссовки, велосипед или лыжи — пробег будет копиться сам из дистанций кардио. Вещь можно вписать и прямо в форме кардио." extra_class="app-empty-slim" %}
+    {% endfor %}
+  </div>
+  {% if retired_gear %}
+    <h2 class="app-group-title mt-4">На пенсии</h2>
+    <div class="app-rows app-rows-board">
+      {% for item in retired_gear %}
+        {% include "workouts/_gear_row.html" %}
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

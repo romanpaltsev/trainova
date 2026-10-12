@@ -81,6 +81,10 @@ urlpatterns = [
     ),
     path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
     path("profile/locations/", views.MyLocationsView.as_view(), name="my_locations"),
+    path("profile/gear/", views.MyGearView.as_view(), name="my_gear"),
+    path("profile/gear/<int:pk>/edit/", views.GearEditView.as_view(), name="gear_edit"),
+    path("profile/gear/<int:pk>/retire/", views.GearRetireView.as_view(), name="gear_retire"),
+    path("profile/gear/<int:pk>/delete/", views.GearDeleteView.as_view(), name="gear_delete"),
     # Мои замеры: имена маршрутов начинаются с body_ — по префиксу подсвечивается
     # пункт боковой панели.
     path("profile/trash/", views.WorkoutTrashView.as_view(), name="workout_trash"),
@@ -149,6 +153,7 @@ urlpatterns = [
     path("workouts/cardio/machine/", views.CardioMachineView.as_view(), name="cardio_machine"),
     path("workouts/cardio/route/", views.CardioRouteView.as_view(), name="cardio_route"),
     path("workouts/cardio/style/", views.CardioStyleView.as_view(), name="cardio_style"),
+    path("workouts/cardio/gear/", views.CardioGearView.as_view(), name="cardio_gear"),
     path(
         "workouts/cardio/machine/models/",
         views.CardioMachineModelsView.as_view(),

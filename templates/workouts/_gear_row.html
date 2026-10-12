@@ -1,0 +1,46 @@
+{% comment %}
+  Строка снаряжения. Название — кнопка окна правки (название и пробег до
+  дневника), карандаш — встроенной подсказкой, как у «Моих мест». Кнопка
+  пенсии шлёт желаемое состояние, а не «переключи» (GearRetireView).
+{% endcomment %}
+<div class="app-row{% if item.is_retired %} is-retired{% endif %}">
+  <span class="app-row-icon">{% include "includes/gear.html" with size=20 only %}</span>
+  <button type="button" class="app-row-text app-location-edit"
+          hx-get="{% url 'gear_edit' item.pk %}"
+          hx-target="#modal" hx-swap="innerHTML"
+          aria-label="Изменить {{ item.name }}">
+    <span class="app-row-name">{{ item.name }}{% include "includes/pencil.html" %}</span>
+    <span class="app-row-meta">
+      {% comment %}Куски — без переноса внутри: на 375px строка рвалась на «в / 1 тренировке».{% endcomment %}
+      <span class="num">{{ item.mileage_display }}</span>{% if item.usage_label %} · <span class="text-nowrap">{{ item.usage_label }}</span>{% endif %}{% if item.is_retired %} · <span class="text-nowrap">на пенсии с {{ item.retired_on|date:"j b" }}</span>{% endif %}
+    </span>
+  </button>
+  {% if item.is_retired %}
+    <button type="button" class="app-icon-btn"
+            hx-post="{% url 'gear_retire' item.pk %}" hx-vals='{"retired": "0"}'
+            hx-target="#gear-rows" hx-swap="outerHTML"
+            aria-label="Вернуть {{ item.name }} в строй" title="Вернуть в строй">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>
+      </svg>
+    </button>
+  {% else %}
+    <button type="button" class="app-icon-btn"
+            hx-post="{% url 'gear_retire' item.pk %}" hx-vals='{"retired": "1"}'
+            hx-target="#gear-rows" hx-swap="outerHTML"
+            aria-label="Отправить {{ item.name }} на пенсию" title="На пенсию">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 7h18v13H3z"/><path d="M8 7V4h8v3M9 12h6"/>
+      </svg>
+    </button>
+  {% endif %}
+  <a class="app-icon-btn app-row-delete" href="{% url 'gear_delete' item.pk %}"
+     aria-label="Удалить {{ item.name }}">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>
+    </svg>
+  </a>
+</div>

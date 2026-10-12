@@ -30,6 +30,7 @@ from workouts.models import (
     CARDIO_LEVEL_MAX,
     CARDIO_POWER_MAX,
     EXERCISE_NAME_MAX_LENGTH,
+    GEAR_NAME_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
     MACHINE_BRAND_MAX_LENGTH,
     MACHINE_MODEL_MAX_LENGTH,
@@ -111,6 +112,8 @@ COLUMNS: tuple[Column, ...] = (
     # Стиль хода лыжной части — подписью, как в приложении: «конёк», «классика».
     Column("style", "Стиль", 11),
     Column("power", "Мощность, Вт", 14, "0"),
+    # Своё снаряжение кардио-части — названием, как в «Моём снаряжении».
+    Column("gear", "Снаряжение", 22),
 )
 # Без этих трёх строка не значит ничего: дата и вид спорта опознают тренировку,
 # длительность делает её записанной, а не «идущей».
@@ -158,6 +161,8 @@ HELP_LINES = (
     "",
     "«Стиль» — только у лыж и лыжероллеров: «конёк» или «классика». Необязательно.",
     f"«Мощность, Вт» — средняя мощность кардио, до {CARDIO_POWER_MAX}. Необязательно.",
+    "«Снаряжение» — кроссовки, велосипед или лыжи, названием как в «Моём снаряжении»",
+    "(незнакомое приложение заведёт само). Необязательно.",
     "",
     "Упражнение с повторами без веса приложение заводит как «вес × повторы»: вес 0",
     "у него значит «со своим весом». Если это чистые повторы — поменяйте единицу",
@@ -302,6 +307,7 @@ def _cardio_row(common, workout, part, *, lone):
     row["elevation"] = part.elevation_gain_m
     row["style"] = part.get_style_display() if part.style else ""
     row["power"] = part.avg_power_w
+    row["gear"] = part.gear.name if part.gear_id else ""
     if part.sport_id != workout.sport_id:
         row["cardio"] = part.sport.name
     if not (lone and part.duration_min == workout.duration_min):
@@ -447,6 +453,7 @@ class SheetRow:
     elevation_gain_m: int | None = None
     style: str = ""
     avg_power_w: int | None = None
+    gear: str = ""
     errors: list[str] = field(default_factory=list)
     # Строка, которую не к чему отнести: название упражнения или вида спорта не
     # помещается в справочник. Такая не загружается вовсе — с пустым названием
@@ -478,6 +485,7 @@ class SheetRow:
             or self.elevation_gain_m
             or self.style
             or self.avg_power_w
+            or self.gear
         )
 
 
@@ -830,4 +838,5 @@ def _sheet_row(number, values, index):
     read("elevation", _cell_elevation, "elevation_gain_m")
     read("style", _cell_style, "style")
     read("power", _cell_power, "avg_power_w")
+    read("gear", name(GEAR_NAME_MAX_LENGTH, "Снаряжение"), "gear")
     return row

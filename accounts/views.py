@@ -23,6 +23,7 @@ from workouts.models import (
     BodyMeasurement,
     DeletedWorkout,
     Exercise,
+    Gear,
     Location,
     Sport,
     clamp_rest_seconds,
@@ -31,7 +32,7 @@ from workouts.models import (
 
 
 def owned_counts(user):
-    """Число своих упражнений, видов спорта, замеров и корзины — одним запросом.
+    """Число своих упражнений, видов спорта, замеров, снаряжения и корзины — одним запросом.
 
     Подзапросами к строке пользователя, а не тремя .count(): бюджет профиля
     упирался в потолок, и третий счётчик (замеры) пробил бы его. Каждый
@@ -56,6 +57,8 @@ def owned_counts(user):
             measurements_count=count(BodyMeasurement, "user"),
             # Корзина за 30 дней — тем же запросом: бюджет профиля упёрт в 8.
             trash_count=count(DeletedWorkout, "user", deleted_at__gte=trash.cutoff()),
+            # Снаряжение в ходу — то, что предлагается в чипах кардио.
+            gear_count=count(Gear, "owner", retired_on__isnull=True),
         )
         .get()
     )

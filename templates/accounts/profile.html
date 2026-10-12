@@ -188,6 +188,17 @@
         {% include "includes/chevron.html" %}
       </a>
 
+      {% comment %}Снаряжение — рядом с тренажёрами и по той же причине строкой: «на чём» на улице.{% endcomment %}
+      <a class="app-row" href="{% url 'my_gear' %}">
+        <span class="app-row-icon">{% include "includes/gear.html" with size=20 only %}</span>
+        <span class="app-row-text">
+          <span class="app-row-name">Моё снаряжение</span>
+          <span class="app-row-meta">кроссовки, велосипед, лыжи</span>
+        </span>
+        {% if gear_count %}<span class="app-row-count num">{{ gear_count }}</span>{% endif %}
+        {% include "includes/chevron.html" %}
+      </a>
+
       {% if not user.is_admin %}
         {% comment %}Администратор заявок не шлёт — он делает своё общим сам.{% endcomment %}
         <a class="app-row" href="{% url 'my_requests' %}">

@@ -55,6 +55,7 @@ def test_guest_page_has_no_sidebar(client):
         ("exercise_list", "Упражнения"),
         ("profile", "Профиль"),
         ("my_locations", "Мои места"),
+        ("my_gear", "Моё снаряжение"),
         ("my_sports", "Мои виды спорта"),
         ("body_measurements", "Мои замеры"),
         ("data_transfer", "Экспорт и импорт"),

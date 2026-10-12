@@ -8,7 +8,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Exists, F, Max, Q
+from django.db.models import Case, Count, Exists, F, IntegerField, Max, Q, Value, When
 from django.utils import timezone
 
 from workouts.models import (
@@ -17,6 +17,7 @@ from workouts.models import (
     CardioPart,
     Exercise,
     ExerciseNote,
+    Gear,
     Location,
     MachineBrand,
     MachineModel,
@@ -90,6 +91,26 @@ def location_for_name(user, name):
         # названиями, и дефолт уже занят. Тогда место просто не дефолтное.
         with transaction.atomic():
             return Location.objects.create(owner=user, name=name, is_default=False)
+
+
+def gear_for_name(user, name):
+    """Своё снаряжение с таким названием: существующее или новое.
+
+    Контракт location_for_name: ввод названия и есть создание, совпадение имени
+    (без учёта регистра) значит «это оно», а не ошибку дубля, написание
+    возвращается вместе с найденной записью. Вещь на пенсии возвращается как
+    есть — молча возвращать её в строй было бы решением за человека.
+    """
+    existing = Gear.objects.filter(owner=user, name__iexact=name).first()
+    if existing is not None:
+        return existing
+    try:
+        # Savepoint: гонка двух вкладок упирается в уникальный индекс, и
+        # правильный ответ — взять созданную запись, а не отдать 500.
+        with transaction.atomic():
+            return Gear.objects.create(owner=user, name=name)
+    except IntegrityError:
+        return Gear.objects.get(owner=user, name__iexact=name)
 
 
 def exercise_for_name(user, name, *, measurement=None, muscle_group="", equipment=""):
@@ -262,6 +283,74 @@ def last_cardio_route(user, sport, location):
         .order_by("-workout__started_at", "-id")
         .first()
     )
+
+
+def gear_used_with(user, sport, style=""):
+    """Условие «эта часть — моя записанная этого вида спорта (и стиля)» для агрегатов."""
+    used = Q(
+        cardio_parts__workout__user=user,
+        cardio_parts__workout__duration_min__isnull=False,
+        cardio_parts__sport=sport,
+    )
+    if style:
+        used &= Q(cardio_parts__style=style)
+    return used
+
+
+def gear_choices(user, sport, style=""):
+    """Чипы снаряжения: всё не на пенсии, одним запросом.
+
+    Сначала то, что было с этим видом спорта (и стилем), свежее первым, дальше
+    по имени: к бегу наверху кроссовки, к коньку — коньковые лыжи. Без вида
+    спорта — просто по имени.
+    """
+    rows = Gear.objects.filter(owner=user, retired_on__isnull=True)
+    if sport is None:
+        return list(rows.order_by("name"))
+    return list(
+        rows.annotate(
+            last_used=Max(
+                "cardio_parts__workout__started_at", filter=gear_used_with(user, sport, style)
+            )
+        ).order_by(F("last_used").desc(nulls_last=True), "name")
+    )
+
+
+def last_cardio_gear(user, sport, location, style="", *, anywhere=False):
+    """Снаряжение для подстановки — из последней записанной части этого вида спорта.
+
+    Сначала в этом месте, потом где угодно (одним запросом, сортировкой по
+    «здесь»): к лесному кругу — трейловые кроссовки, к парку — шоссейные. У лыж
+    со стилем — того же стиля: к коньку коньковые лыжи. Вещь на пенсии не
+    подставляется — её убрали из выбора. anywhere — место только что вписано и
+    ещё не существует: «здесь» не бывает, остаётся «где угодно».
+    """
+    if sport is None:
+        return None
+    parts = CardioPart.objects.filter(
+        workout__user=user,
+        workout__duration_min__isnull=False,
+        sport=sport,
+        gear__owner=user,
+        gear__retired_on__isnull=True,
+    )
+    if style:
+        parts = parts.filter(style=style)
+    if anywhere:
+        here = Q(pk__in=[])
+    elif location is not None:
+        here = Q(workout__location=location)
+    else:
+        here = Q(workout__location__isnull=True)
+    part = (
+        parts.annotate(
+            here=Case(When(here, then=Value(1)), default=Value(0), output_field=IntegerField())
+        )
+        .select_related("gear")
+        .order_by("-here", "-workout__started_at", "-id")
+        .first()
+    )
+    return part.gear if part else None
 
 
 def last_cardio_style(user, sport):

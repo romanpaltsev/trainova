@@ -1538,6 +1538,67 @@ class CatalogRequest(models.Model):
         return self.status == self.Status.PENDING
 
 
+# Название снаряжения — как у упражнения: «Кроссовки Asics Novablast 4 синие».
+GEAR_NAME_MAX_LENGTH = 80
+
+
+class Gear(models.Model):
+    """Своё снаряжение: кроссовки, велосипед, лыжи — с пробегом (решение 12.10.2026).
+
+    Уличный двойник «Тренажёра»: тренажёр — железо зала, общий гибридный
+    справочник производителей и моделей; снаряжение — своя вещь со своей
+    жизнью: пробегом, пенсией, двумя парами одной модели. Поэтому отдельная
+    личная модель по образцу Location, а не запись справочника тренажёров.
+
+    Вида спорта у снаряжения нет — контент, а не категория: одни кроссовки
+    бегают и по парку, и по дорожке, а обязательный выбор мешал бы заводить
+    вещь вводом названия. Что к какому виду спорта, выводится из истории
+    (services.gear_choices, services.last_cardio_gear).
+    """
+
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="владелец",
+        on_delete=models.CASCADE,
+        related_name="gear",
+    )
+    name = models.CharField("название", max_length=GEAR_NAME_MAX_LENGTH)
+    # Пробег до дневника: кроссовки, купленные полгода назад, не начинают с нуля.
+    initial_km = models.DecimalField(
+        "пробег до дневника, км",
+        max_digits=7,
+        decimal_places=1,
+        default=0,
+        validators=[MinValueValidator(0)],
+    )
+    # «На пенсии» — дата, а не флаг: страница пишет, с какого дня. Вещь на
+    # пенсии уходит из чипов, а её пробег и тренировки остаются.
+    retired_on = models.DateField("на пенсии с", null=True, blank=True)
+
+    class Meta:
+        verbose_name = "снаряжение"
+        verbose_name_plural = "снаряжение"
+        ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                Lower("name"),
+                "owner",
+                name="unique_gear_name_per_owner",
+                violation_error_message="Снаряжение с таким названием у вас уже есть.",
+            ),
+            models.CheckConstraint(
+                condition=Q(initial_km__gte=0), name="gear_initial_km_not_negative"
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def is_retired(self):
+        return self.retired_on is not None
+
+
 class CardioPart(models.Model):
     """Кардио-часть тренировки: бег, велосипед, лыжи — со своим временем.
 
@@ -1663,6 +1724,18 @@ class CardioPart(models.Model):
         null=True,
         blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(CARDIO_POWER_MAX)],
+    )
+    # Своё снаряжение — кроссовки, велосипед, лыжи (решение 12.10.2026). RESTRICT,
+    # а не PROTECT: удаление аккаунта сносит каскадом и снаряжение, и части, и
+    # PROTECT внутри одного каскада упал бы (пункт 2 CLAUDE.md); SET_NULL молча
+    # стёр бы пробег. Убрать вещь из выбора — «на пенсию», а не удаление.
+    gear = models.ForeignKey(
+        Gear,
+        verbose_name="снаряжение",
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="cardio_parts",
     )
 
     class Meta:
@@ -1824,10 +1897,11 @@ def cardio_parts_prefetch():
     их тем же запросом. Функция, а не константа: объект Prefetch переиспользуют
     несколько разных queryset'ов, и общий экземпляр между ними — лишний риск.
     """
-    # brand и model — LEFT JOIN тем же запросом: строка части пишет тренажёр
-    # (machine_line), и без них каждая часть дочитывала бы его сама.
+    # brand, model и gear — LEFT JOIN тем же запросом: строка части пишет
+    # тренажёр и снаряжение, и без них каждая часть дочитывала бы их сама.
     return models.Prefetch(
-        "cardio_parts", queryset=CardioPart.objects.select_related("sport", "brand", "model")
+        "cardio_parts",
+        queryset=CardioPart.objects.select_related("sport", "brand", "model", "gear"),
     )
 
 

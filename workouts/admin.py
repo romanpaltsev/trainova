@@ -11,6 +11,7 @@ from workouts.models import (
     ExerciseMachine,
     ExerciseNote,
     ExerciseSettings,
+    Gear,
     Location,
     MachineBrand,
     MachineModel,
@@ -63,6 +64,17 @@ class BodyMeasurementAdmin(admin.ModelAdmin):
 class ExerciseAdmin(CatalogAdmin):
     list_display = ("name", "muscle_group", "equipment", "measurement", "owner_display")
     list_filter = ("measurement", "muscle_group", "equipment", "owner")
+
+
+@admin.register(Gear)
+class GearAdmin(admin.ModelAdmin):
+    """Снаряжение пользователей — личное, как места. search_fields — ради
+    autocomplete_fields = ("gear",) в инлайне кардио-части."""
+
+    list_display = ("name", "owner", "initial_km", "retired_on")
+    list_filter = ("owner",)
+    search_fields = ("name", "owner__email")
+    autocomplete_fields = ("owner",)
 
 
 @admin.register(Location)
@@ -146,7 +158,7 @@ class CardioPartInline(admin.TabularInline):
 
     model = CardioPart
     extra = 0
-    autocomplete_fields = ("sport",)
+    autocomplete_fields = ("sport", "gear")
     fields = (
         "sport",
         "style",
@@ -155,6 +167,7 @@ class CardioPartInline(admin.TabularInline):
         "avg_heart_rate",
         "avg_power_w",
         "elevation_gain_m",
+        "gear",
     )
 
 

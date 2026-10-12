@@ -31,6 +31,9 @@
       {% if report.created_locations %}
         <li>места — {{ report.created_locations|join:", " }}</li>
       {% endif %}
+      {% if report.created_gear %}
+        <li>снаряжение — {{ report.created_gear|join:", " }}</li>
+      {% endif %}
     </ul>
   {% endif %}
 

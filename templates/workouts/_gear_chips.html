@@ -1,0 +1,51 @@
+{% comment %}
+  «Снаряжение» кардио-части: чипы своих вещей плюс поле для новой — как у места
+  (_location_chips.html): новое название перебивает чип, и ввод его есть
+  создание (services.gear_for_name, только при сохранении части).
+
+  Смена вида спорта, места или стиля перезапрашивает блок (CardioGearView): он
+  приходит с отмеченным снаряжением прошлой части этого вида спорта и стиля —
+  сначала из этого места, — а чипы стоят в порядке использования с ним. Метка
+  здесь «тронуто», а не «подставлено», как у «Тренажёра»: «Без снаряжения»
+  бывает выбором, и пустое поле его от «ещё не выбирали» не отличает. Тронул —
+  сервер отвечает 204, а пришедший посреди выбора ответ блок не принимает. На
+  правке перезапроса нет (gear_prefill_on).
+
+  Ждёт gear_items, selected_gear, gear_own, gear_max_length, gear_touched.
+{% endcomment %}
+<div id="cardio-gear" class="mb-3"
+     x-data="{ touched: {{ gear_touched|yesno:'true,false' }}, own: '{{ gear_own|escapejs }}' }"
+     @change="touched = true" @input="touched = true"
+     {% if gear_prefill_on %}
+       hx-get="{% url 'cardio_gear' %}"
+       hx-trigger="change[target.name==='sport'||target.name==='location'||target.name==='location_own'||target.name==='style'] from:closest form"
+       hx-include="[name='sport'], [name='location'], [name='location_own'], [name='style'], #cardio-gear"
+       hx-target="this" hx-swap="outerHTML"
+       @htmx:before-swap="if (touched) $event.detail.shouldSwap = false"
+     {% endif %}>
+  <input type="hidden" name="gear_touched" :value="touched ? '1' : ''" value="{{ gear_touched|yesno:'1,' }}">
+  <span class="form-label d-block">
+    Снаряжение <span class="text-muted-app">· необязательно</span>
+  </span>
+  {% if gear_items %}
+    <div class="app-chips" role="group" aria-label="Снаряжение">
+      <input type="radio" name="gear" id="gear-none" value="" class="app-chip-input"{% if not selected_gear %} checked{% endif %} @change="own = ''">
+      <label class="app-chip" for="gear-none">Без снаряжения</label>
+      {% for item in gear_items %}
+        <input type="radio" name="gear" id="gear-{{ item.pk }}" value="{{ item.pk }}" class="app-chip-input"{% if selected_gear == item.pk|stringformat:"s" %} checked{% endif %} @change="own = ''">
+        <label class="app-chip" for="gear-{{ item.pk }}">{{ item.name }}</label>
+      {% endfor %}
+      <input type="text" class="form-control app-group-input" name="gear_own"
+             maxlength="{{ gear_max_length }}" placeholder="новое"
+             aria-label="Новое снаряжение" x-model="own">
+    </div>
+  {% else %}
+    {% comment %}
+      Снаряжения ещё нет: чип «Без снаряжения» сбрасывать нечего, остаётся поле.
+    {% endcomment %}
+    <input type="text" class="form-control" name="gear_own"
+           maxlength="{{ gear_max_length }}" value="{{ gear_own }}"
+           placeholder="напр. Кроссовки Novablast" aria-label="Снаряжение">
+  {% endif %}
+  {% for error in gear_errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+</div>

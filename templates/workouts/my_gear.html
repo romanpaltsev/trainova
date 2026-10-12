@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Моё снаряжение · Дневник тренировок{% endblock %}
+
+{% block content %}
+<div class="app-screen-head">
+  <a class="app-icon-btn" href="{% url 'profile' %}" aria-label="Назад">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 18l-6-6 6-6"/>
+    </svg>
+  </a>
+  <h1 class="app-page-title mb-0">Моё снаряжение</h1>
+</div>
+
+{% include "workouts/_gear_rows.html" %}
+
+{% comment %}
+  Добавление — обычный POST с редиректом, как у «Моих мест»: экран холодный и
+  обязан работать без JS. Вещь заводится и прямо в форме кардио вводом названия;
+  пробег до дневника — в окне правки, по нажатию на название.
+{% endcomment %}
+<form method="post" class="mt-3 app-location-add">
+  {% csrf_token %}
+  <label class="form-label" for="gear-name">Новое снаряжение</label>
+  <div class="d-flex gap-2">
+    <input type="text" name="name" id="gear-name" class="form-control"
+           maxlength="{{ gear_max_length }}" value="{{ name }}" autocomplete="off"
+           placeholder="напр. Кроссовки Novablast">
+    <button type="submit" class="btn btn-accent">Добавить</button>
+  </div>
+  {% if error %}<div class="invalid-feedback d-block">{{ error }}</div>{% endif %}
+  <p class="app-queue-hint mt-2 mb-0">
+    Кроссовки, велосипед, лыжи — пробег копится сам из дистанций кардио. Пробег
+    до дневника можно указать, нажав на название.
+  </p>
+</form>
+{% endblock %}
