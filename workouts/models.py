@@ -41,6 +41,9 @@ CARDIO_LEVEL_MAX = 100
 # Набор высоты за занятие — уличный двойник уклона. Граница с запасом: у самых
 # длинных горных ультрамарафонов около 10 000 м.
 CARDIO_ELEVATION_MAX = 15000
+# Средняя мощность за занятие, Вт: у трековых спринтеров за минуту — около
+# 1500, за час и у любителя с табло тренажёра — сотни.
+CARDIO_POWER_MAX = 2000
 
 # Цвета остальных видов спорта — токены --app-sport-extra-1..N (Sport.palette).
 SPORT_PALETTE_SIZE = 4
@@ -1650,6 +1653,17 @@ class CardioPart(models.Model):
         blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(CARDIO_ELEVATION_MAX)],
     )
+    # Средняя мощность с табло велотренажёра, гребного, лыжного или эллипса — и с
+    # измерителя на велосипеде (решение 12.10.2026). На тренажёре это честнее
+    # условной «дистанции». Результат, как пульс, а не настройка, как уровень:
+    # поэтому форма её не подставляет, и в признак «на тренажёре»
+    # (services.ON_MACHINE) она не входит — заезд с измерителем остаётся маршрутом.
+    avg_power_w = models.PositiveSmallIntegerField(
+        "средняя мощность, Вт",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(CARDIO_POWER_MAX)],
+    )
 
     class Meta:
         verbose_name = "кардио-часть"
@@ -1707,7 +1721,14 @@ class CardioPart(models.Model):
         """«120 м» или "" — набор высоты в строке части и в ленте."""
         if not self.elevation_gain_m:
             return ""
-        return f"{self.elevation_gain_m} м"
+        return f"{self.elevation_gain_m}\u00a0м"
+
+    @property
+    def power_display(self):
+        """«180 Вт» или "" — средняя мощность."""
+        if not self.avg_power_w:
+            return ""
+        return f"{self.avg_power_w}\u00a0Вт"
 
     @property
     def distance(self):
@@ -1779,6 +1800,20 @@ class CardioPart(models.Model):
             return f"{self.speed_kmh} км/ч".replace(".", ",")
         pace = self.pace_display
         return f"{pace} /км" if pace else "—"
+
+    @property
+    def intensity_label(self):
+        """Подпись колонки «насколько интенсивно» в ленте: темп или скорость, а
+        без них — мощность. Велотренажёр без дистанции иначе показывал бы прочерк."""
+        if self.pace_seconds_per_km is None and self.avg_power_w:
+            return "мощность"
+        return self.metric_label
+
+    @property
+    def intensity_display(self):
+        if self.pace_seconds_per_km is None and self.avg_power_w:
+            return self.power_display
+        return self.metric_display
 
 
 def cardio_parts_prefetch():

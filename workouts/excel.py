@@ -28,6 +28,7 @@ from workouts.models import (
     CARDIO_INCLINE_MAX,
     CARDIO_INCLINE_MIN,
     CARDIO_LEVEL_MAX,
+    CARDIO_POWER_MAX,
     EXERCISE_NAME_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
     MACHINE_BRAND_MAX_LENGTH,
@@ -109,6 +110,7 @@ COLUMNS: tuple[Column, ...] = (
     Column("elevation", "Набор высоты, м", 16, "0"),
     # Стиль хода лыжной части — подписью, как в приложении: «конёк», «классика».
     Column("style", "Стиль", 11),
+    Column("power", "Мощность, Вт", 14, "0"),
 )
 # Без этих трёх строка не значит ничего: дата и вид спорта опознают тренировку,
 # длительность делает её записанной, а не «идущей».
@@ -155,6 +157,7 @@ HELP_LINES = (
     "Необязательно; ноль — то же, что пусто.",
     "",
     "«Стиль» — только у лыж и лыжероллеров: «конёк» или «классика». Необязательно.",
+    f"«Мощность, Вт» — средняя мощность кардио, до {CARDIO_POWER_MAX}. Необязательно.",
     "",
     "Упражнение с повторами без веса приложение заводит как «вес × повторы»: вес 0",
     "у него значит «со своим весом». Если это чистые повторы — поменяйте единицу",
@@ -298,6 +301,7 @@ def _cardio_row(common, workout, part, *, lone):
     row["level"] = part.level
     row["elevation"] = part.elevation_gain_m
     row["style"] = part.get_style_display() if part.style else ""
+    row["power"] = part.avg_power_w
     if part.sport_id != workout.sport_id:
         row["cardio"] = part.sport.name
     if not (lone and part.duration_min == workout.duration_min):
@@ -442,6 +446,7 @@ class SheetRow:
     level: int | None = None
     elevation_gain_m: int | None = None
     style: str = ""
+    avg_power_w: int | None = None
     errors: list[str] = field(default_factory=list)
     # Строка, которую не к чему отнести: название упражнения или вида спорта не
     # помещается в справочник. Такая не загружается вовсе — с пустым названием
@@ -472,6 +477,7 @@ class SheetRow:
             or self.level
             or self.elevation_gain_m
             or self.style
+            or self.avg_power_w
         )
 
 
@@ -609,6 +615,16 @@ def _cell_elevation(value):
         return None
     if not 0 < number <= CARDIO_ELEVATION_MAX:
         raise ValueError(f"Набор высоты — от 1 до {CARDIO_ELEVATION_MAX} м.")
+    return number
+
+
+def _cell_power(value):
+    """Средняя мощность кардио-части, Вт. Пусто и ноль — «не указана», как в форме."""
+    number = _cell_int(value, what="Мощность")
+    if not number:
+        return None
+    if not 0 < number <= CARDIO_POWER_MAX:
+        raise ValueError(f"Мощность — от 1 до {CARDIO_POWER_MAX} Вт.")
     return number
 
 
@@ -813,4 +829,5 @@ def _sheet_row(number, values, index):
     read("level", _cell_level, "level")
     read("elevation", _cell_elevation, "elevation_gain_m")
     read("style", _cell_style, "style")
+    read("power", _cell_power, "avg_power_w")
     return row

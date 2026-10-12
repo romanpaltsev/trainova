@@ -14,6 +14,7 @@ from workouts.models import (
     CARDIO_INCLINE_MAX,
     CARDIO_INCLINE_MIN,
     CARDIO_LEVEL_MAX,
+    CARDIO_POWER_MAX,
     CATALOG_REQUEST_TEXT_MAX_LENGTH,
     LOCATION_NAME_MAX_LENGTH,
     MACHINE_BRAND_MAX_LENGTH,
@@ -246,11 +247,11 @@ def distance_widget():
     )
 
 
-class ElevationField(forms.IntegerField):
-    """Набор высоты: ноль — «не указан», как у времени части.
+class ZeroIsEmptyField(forms.IntegerField):
+    """Целое, где ноль — «не указано», как у времени части.
 
-    Ровный круг законен, но «0 м» в строке части — шум, а в базе ноль и NULL
-    значили бы одно и то же двумя способами.
+    Набор высоты и мощность: ровный круг законен, но «0 м» и «0 Вт» в строке
+    части — шум, а в базе ноль и NULL значили бы одно и то же двумя способами.
     """
 
     def clean(self, value):
@@ -258,7 +259,7 @@ class ElevationField(forms.IntegerField):
 
 
 def elevation_field():
-    return ElevationField(
+    return ZeroIsEmptyField(
         label="Набор высоты, м",
         required=False,
         min_value=0,
@@ -292,6 +293,24 @@ def style_field():
 
 def cardio_style_of(sport, cleaned):
     return cleaned.get("style", "") if sport is not None and sport.has_styles else ""
+
+
+def power_field():
+    """Средняя мощность за занятие — с табло тренажёра или с измерителя."""
+    return ZeroIsEmptyField(
+        label="Мощность, Вт",
+        required=False,
+        min_value=0,
+        max_value=CARDIO_POWER_MAX,
+        error_messages={
+            "invalid": "Мощность — целое число ватт.",
+            "min_value": "Мощность не бывает отрицательной.",
+            "max_value": f"Мощность — до {CARDIO_POWER_MAX} Вт.",
+        },
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "напр. 180"}
+        ),
+    )
 
 
 CARDIO_ROUTE_FIELDS = ("distance_km", "elevation_gain_m")
@@ -378,6 +397,7 @@ class CardioWorkoutForm(forms.Form):
         widget=distance_widget(),
     )
     elevation_gain_m = elevation_field()
+    avg_power_w = power_field()
     avg_heart_rate = forms.IntegerField(
         label="Средний пульс",
         help_text="необязательно",
@@ -426,11 +446,18 @@ class CardioWorkoutForm(forms.Form):
             # времени — тем же приёмом, каким distance_km служит и цели, и факту.
             # Плата за это честная: clean() и save() теперь смотрят на self.planned.
             #
-            # Набора высоты у плана нет по той же причине, что и пульса: цель
-            # плана — километры и время, а метры вверх — то, что получилось.
+            # Набора высоты и мощности у плана нет по той же причине, что и
+            # пульса: цель плана — километры и время, остальное — то, что вышло.
             #
             # Стиля у плана тоже нет: план — это цели, километры и время.
-            for name in ("date", "time", "avg_heart_rate", "elevation_gain_m", "style"):
+            for name in (
+                "date",
+                "time",
+                "avg_heart_rate",
+                "avg_power_w",
+                "elevation_gain_m",
+                "style",
+            ):
                 del self.fields[name]
             # Обе цели необязательны: планов на неделю наготавливают пачкой, и
             # заставлять заполнять значения было бы издевательством.
@@ -486,6 +513,7 @@ class CardioWorkoutForm(forms.Form):
             "elevation_gain_m": cardio.elevation_gain_m if cardio else None,
             "style": cardio.style if cardio else "",
             "avg_heart_rate": cardio.avg_heart_rate if cardio else None,
+            "avg_power_w": cardio.avg_power_w if cardio else None,
             "note": workout.note,
             **cardio_machine_initial(cardio),
         }
@@ -569,6 +597,7 @@ class CardioWorkoutForm(forms.Form):
             # полей нет, а на записи черновика они придут из формы как обычно.
             part.avg_heart_rate = self.cleaned_data.get("avg_heart_rate")
             part.elevation_gain_m = self.cleaned_data.get("elevation_gain_m")
+            part.avg_power_w = self.cleaned_data.get("avg_power_w")
             part.style = cardio_style_of(part.sport, self.cleaned_data)
             apply_cardio_machine(self.user, part, self.cleaned_data)
             part.save()
@@ -588,14 +617,15 @@ class CardioPartForm(forms.ModelForm):
 
     duration_hours, duration_minutes = duration_fields()
     machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
-    # Своим полем, а не полем модели: ноль здесь значит «не указан» (ElevationField).
+    # Своими полями, а не полями модели: ноль здесь значит «не указан» (ZeroIsEmptyField).
     elevation_gain_m = elevation_field()
+    avg_power_w = power_field()
     # Тоже своим: пишется только у вида спорта со стилями (cardio_style_of).
     style = style_field()
 
     class Meta:
         model = CardioPart
-        fields = ("sport", "distance_km", "elevation_gain_m", "avg_heart_rate")
+        fields = ("sport", "distance_km", "elevation_gain_m", "avg_heart_rate", "avg_power_w")
         error_messages = {
             "sport": {
                 "required": "Выберите вид спорта.",

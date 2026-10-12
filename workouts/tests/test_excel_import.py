@@ -844,6 +844,7 @@ def test_round_trip_keeps_the_diary(user):
         model=MachineModelFactory(brand=technogym, name="Bike Excite", owner=user),
         incline_pct=Decimal("-1.5"),
         level=12,
+        avg_power_w=185,
     )
 
     book = excel.build_workbook(user)

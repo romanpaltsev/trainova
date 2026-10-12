@@ -111,6 +111,7 @@ def dump(user):
                         part.level,
                         part.elevation_gain_m,
                         part.style,
+                        part.avg_power_w,
                     )
                     for part in workout.cardio_parts.all()
                 ],

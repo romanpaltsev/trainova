@@ -119,10 +119,10 @@
   {% else %}
   {% comment %}
     При записи сверху маршрут — дистанция и набор высоты: их подставляет место,
-    и подставленное должно быть видно, а не прятаться в раскрывашке. Пульс —
-    строкой ниже: это уже результат занятия, его не подставляет ничто. Подстановка
-    — только у новой тренировки, как у «Тренажёра»: на правке и при записи
-    черновика она подменила бы записанное или загаданное.
+    и подставленное должно быть видно, а не прятаться в раскрывашке. Пульс и
+    мощность — строкой ниже: это уже результат занятия, его не подставляет
+    ничто. Подстановка — только у новой тренировки, как у «Тренажёра»: на
+    правке и при записи черновика она подменила бы записанное или загаданное.
   {% endcomment %}
   {% if workout %}
     {% include "workouts/_cardio_route_fields.html" %}
@@ -136,6 +136,13 @@
       </label>
       {{ form.avg_heart_rate }}
       {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+    <div>
+      <label class="form-label" for="{{ form.avg_power_w.id_for_label }}">
+        {{ form.avg_power_w.label }} <span class="text-muted-app">· необязательно</span>
+      </label>
+      {{ form.avg_power_w }}
+      {% for error in form.avg_power_w.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
     </div>
   </div>
   {% endif %}

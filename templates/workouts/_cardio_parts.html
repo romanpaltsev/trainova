@@ -27,6 +27,7 @@
         {% if part.distance_km %}{{ part.distance_display }} км{% endif %}
         {% if part.duration_display %}{% if part.distance_km %} · {% endif %}{{ part.duration_display }}{% endif %}
         {% if part.metric_display and part.distance_km %} · {{ part.metric_display }}{% endif %}
+        {% if part.power_display %}{% if part.distance_km or part.duration_display %} · {% endif %}{{ part.power_display }}{% endif %}
       </span>
       {% comment %}
         Тренажёр и настройки — своей строкой под названием: в одну строку с

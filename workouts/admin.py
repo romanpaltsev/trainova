@@ -153,6 +153,7 @@ class CardioPartInline(admin.TabularInline):
         "distance_km",
         "duration_min",
         "avg_heart_rate",
+        "avg_power_w",
         "elevation_gain_m",
     )
 

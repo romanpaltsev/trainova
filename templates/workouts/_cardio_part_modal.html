@@ -69,6 +69,13 @@
           {{ form.avg_heart_rate }}
           {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
         </div>
+        <div>
+          <label class="form-label" for="{{ form.avg_power_w.id_for_label }}">
+            Мощность, Вт <span class="text-muted-app">· необязательно</span>
+          </label>
+          {{ form.avg_power_w }}
+          {% for error in form.avg_power_w.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
       </div>
 
       {% comment %}

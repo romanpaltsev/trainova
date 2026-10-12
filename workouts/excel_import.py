@@ -445,6 +445,7 @@ def _create_parts(catalog, report, workout, rows, *, lone):
             incline_pct=row.incline_pct,
             level=row.level,
             elevation_gain_m=row.elevation_gain_m,
+            avg_power_w=row.avg_power_w,
             style=style,
         )
         created += 1

@@ -362,8 +362,8 @@ def test_part_row_and_history_show_elevation(client, user, run, park, strength_w
     summary = client.get(reverse("workout_summary", args=[strength_workout.pk])).content.decode()
     history = client.get(reverse("workout_history")).content.decode()
 
-    assert "набор высоты 85 м" in summary
-    assert "набор высоты</span>240 м" in history
+    assert "набор высоты 85\u00a0м" in summary
+    assert "набор высоты</span>240\u00a0м" in history
     assert f'id="workout-{ride.workout.pk}"' in history
     assert "↑" not in history
 

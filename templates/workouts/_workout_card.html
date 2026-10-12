@@ -67,15 +67,20 @@
       {% with cardio=workout.cardio_parts.all.0 %}
         {% comment %}
           Набор высоты — внутри ячейки дистанции, а не своей: колонки позиционные,
-          и на 1200 лишняя ячейка сдвинула бы темп и место у всех строк.
+          и на 1200 лишняя ячейка сдвинула бы темп и место у всех строк. Без
+          дистанции — прочерк без «км»: у велотренажёра километров нет вовсе.
         {% endcomment %}
         <div>
           <dt>дистанция</dt>
-          <dd class="num">{{ cardio.distance_display }} км{% if cardio.elevation_display %}<span class="app-elevation">{% include "includes/elevation.html" with size=14 %}<span class="visually-hidden">набор высоты</span>{{ cardio.elevation_display }}</span>{% endif %}</dd>
+          <dd class="num">{% if cardio.distance_km %}{{ cardio.distance_display }} км{% else %}—{% endif %}{% if cardio.elevation_display %}<span class="app-elevation">{% include "includes/elevation.html" with size=14 %}<span class="visually-hidden">набор высоты</span>{{ cardio.elevation_display }}</span>{% endif %}</dd>
         </div>
+        {% comment %}
+          Интенсивность — темп или скорость, а без дистанции мощность: у
+          велотренажёра без километров здесь иначе стоял бы прочерк.
+        {% endcomment %}
         <div>
-          <dt>{{ cardio.metric_label }}</dt>
-          <dd class="num">{{ cardio.metric_display }}</dd>
+          <dt>{{ cardio.intensity_label }}</dt>
+          <dd class="num">{{ cardio.intensity_display }}</dd>
         </div>
       {% endwith %}
     {% endif %}
