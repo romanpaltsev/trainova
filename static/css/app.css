@@ -530,6 +530,21 @@ body {
 
 .app-cardio-part-machine svg { flex: none; }
 
+/* Набор высоты в ленте — приписка к дистанции: мельче и вторичным цветом,
+   чтобы читалась как уточнение, а не как вторая метрика. На телефоне — под
+   километрами: в строку с ними «15,2 км · 180 м» выталкивало темп на вторую
+   строку. В строку — только в плотной ленте с 1200, где у колонки свой трек. */
+.app-elevation {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-1);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--app-text-secondary);
+}
+
+.app-elevation svg { flex: none; }
+
 /* Блок «Тренажёр» кардио-формы: заголовок-переключатель, как у «Тренажёров»
    на странице упражнения. */
 .app-cardio-machine > summary { list-style: none; }
@@ -4224,6 +4239,11 @@ a.btn {
     .app-metrics dt {
       font-size: 0.75rem;
       color: var(--app-text-muted);
+    }
+
+    .app-metrics .app-elevation {
+      display: inline-flex;
+      margin-left: var(--app-space-2);
     }
 
     /* Место с заметкой и действия — с явными номерами колонок: ни места, ни

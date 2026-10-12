@@ -24,6 +24,7 @@ from openpyxl.utils import get_column_letter
 
 from workouts import services
 from workouts.models import (
+    CARDIO_ELEVATION_MAX,
     CARDIO_INCLINE_MAX,
     CARDIO_INCLINE_MIN,
     CARDIO_LEVEL_MAX,
@@ -102,6 +103,9 @@ COLUMNS: tuple[Column, ...] = (
     Column("machine_model", "Модель", 18),
     Column("incline", "Уклон, %", 10, "0.0"),
     Column("level", "Уровень", 9, "0"),
+    # Набор высоты кардио-части — уличный двойник уклона. В конце, как все
+    # поздние колонки: файлы без неё грузятся как прежде.
+    Column("elevation", "Набор высоты, м", 16, "0"),
 )
 # Без этих трёх строка не значит ничего: дата и вид спорта опознают тренировку,
 # длительность делает её записанной, а не «идущей».
@@ -143,6 +147,9 @@ HELP_LINES = (
     "запишется, а тренажёр, уже указанный в приложении, загрузка не меняет.",
     "«Уклон, %» — от −10 до 40, «Уровень» — уровень нагрузки от 1 до 100, оба только",
     "у кардио. Всё необязательно.",
+    "",
+    "«Набор высоты, м» — сколько метров вверх набрано за кардио, целым числом.",
+    "Необязательно; ноль — то же, что пусто.",
     "",
     "Упражнение с повторами без веса приложение заводит как «вес × повторы»: вес 0",
     "у него значит «со своим весом». Если это чистые повторы — поменяйте единицу",
@@ -284,6 +291,7 @@ def _cardio_row(common, workout, part, *, lone):
     row["machine_model"] = part.model.name if part.model_id else ""
     row["incline"] = part.incline_pct
     row["level"] = part.level
+    row["elevation"] = part.elevation_gain_m
     if part.sport_id != workout.sport_id:
         row["cardio"] = part.sport.name
     if not (lone and part.duration_min == workout.duration_min):
@@ -426,6 +434,7 @@ class SheetRow:
     machine_model: str = ""
     incline_pct: Decimal | None = None
     level: int | None = None
+    elevation_gain_m: int | None = None
     errors: list[str] = field(default_factory=list)
     # Строка, которую не к чему отнести: название упражнения или вида спорта не
     # помещается в справочник. Такая не загружается вовсе — с пустым названием
@@ -454,6 +463,7 @@ class SheetRow:
             or self.machine_model
             or self.incline_pct is not None
             or self.level
+            or self.elevation_gain_m
         )
 
 
@@ -581,6 +591,16 @@ def _cell_level(value):
     number = _cell_int(value, what="Уровень")
     if number is not None and not 1 <= number <= CARDIO_LEVEL_MAX:
         raise ValueError(f"Уровень — от 1 до {CARDIO_LEVEL_MAX}.")
+    return number
+
+
+def _cell_elevation(value):
+    """Набор высоты кардио-части: целые метры. Пусто и ноль — «не указан», как в форме."""
+    number = _cell_int(value, what="Набор высоты")
+    if not number:
+        return None
+    if not 0 < number <= CARDIO_ELEVATION_MAX:
+        raise ValueError(f"Набор высоты — от 1 до {CARDIO_ELEVATION_MAX} м.")
     return number
 
 
@@ -770,4 +790,5 @@ def _sheet_row(number, values, index):
     read("machine_model", name(MACHINE_MODEL_MAX_LENGTH, "Модель"), "machine_model")
     read("incline", _cell_incline, "incline_pct")
     read("level", _cell_level, "level")
+    read("elevation", _cell_elevation, "elevation_gain_m")
     return row

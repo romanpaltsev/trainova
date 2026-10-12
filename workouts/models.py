@@ -33,6 +33,9 @@ GLOBAL_SPORT_COLORS = {
 CARDIO_INCLINE_MIN = Decimal("-10")
 CARDIO_INCLINE_MAX = Decimal("40")
 CARDIO_LEVEL_MAX = 100
+# Набор высоты за занятие — уличный двойник уклона. Граница с запасом: у самых
+# длинных горных ультрамарафонов около 10 000 м.
+CARDIO_ELEVATION_MAX = 15000
 
 # Цвета остальных видов спорта — токены --app-sport-extra-1..N (Sport.palette).
 SPORT_PALETTE_SIZE = 4
@@ -1612,6 +1615,17 @@ class CardioPart(models.Model):
         blank=True,
         validators=[MinValueValidator(1), MaxValueValidator(CARDIO_LEVEL_MAX)],
     )
+    # Набор высоты — то, чем для улицы служит уклон дорожки (решение 12.10.2026):
+    # круг «с горкой» и ровный дают разный темп, и без набора медленная пробежка
+    # читалась бы как плохая форма. На маршруте это свойство места, как и
+    # дистанция, поэтому форма подставляет их вместе (services.last_cardio_route).
+    # NULL — не указан; ноль формы превращают в NULL: «0 м» в строке — шум.
+    elevation_gain_m = models.PositiveSmallIntegerField(
+        "набор высоты, м",
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(CARDIO_ELEVATION_MAX)],
+    )
 
     class Meta:
         verbose_name = "кардио-часть"
@@ -1651,6 +1665,13 @@ class CardioPart(models.Model):
     def machine_line(self):
         """Тренажёр и настройки вместе: «Technogym · Run · уклон 5 %»."""
         return " · ".join(piece for piece in (self.machine, self.settings_display) if piece)
+
+    @property
+    def elevation_display(self):
+        """«120 м» или "" — набор высоты в строке части и в ленте."""
+        if not self.elevation_gain_m:
+            return ""
+        return f"{self.elevation_gain_m} м"
 
     @property
     def distance(self):

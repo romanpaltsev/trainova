@@ -1,5 +1,5 @@
 {% comment %}
-  Кардио-часть тренировки: вид спорта, дистанция, время, пульс. Одна модалка на
+  Кардио-часть тренировки: вид спорта, маршрут, время, пульс. Одна модалка на
   добавление и на правку — поля и проверки совпадают, а вторая копия разошлась
   бы с первой на первой же правке.
 
@@ -37,22 +37,15 @@
         {% for error in form.sport.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
       </div>
 
-      <div class="app-field-grid">
-        <div>
-          <label class="form-label" for="{{ form.distance_km.id_for_label }}">
-            Дистанция, км <span class="text-muted-app">· необязательно</span>
-          </label>
-          {{ form.distance_km }}
-          {% for error in form.distance_km.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-        </div>
-        <div>
-          <label class="form-label" for="{{ form.avg_heart_rate.id_for_label }}">
-            Пульс <span class="text-muted-app">· необязательно</span>
-          </label>
-          {{ form.avg_heart_rate }}
-          {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
-        </div>
-      </div>
+      {% comment %}
+        Маршрут — дистанция и набор высоты — подставляется по месту тренировки,
+        как «Тренажёр» ниже; у правки части подстановки нет.
+      {% endcomment %}
+      {% if part %}
+        {% include "workouts/_cardio_route_fields.html" with distance_optional=True %}
+      {% else %}
+        {% include "workouts/_cardio_route_fields.html" with distance_optional=True route_prefill_on=True %}
+      {% endif %}
 
       {% comment %}
         Время части — не длительность тренировки: по нему считаются скорость и
@@ -61,6 +54,16 @@
       {% endcomment %}
       <div class="mb-3">
         {% include "workouts/_duration_fields.html" with label="Время кардио" optional=True %}
+      </div>
+
+      <div class="app-field-grid">
+        <div>
+          <label class="form-label" for="{{ form.avg_heart_rate.id_for_label }}">
+            Пульс <span class="text-muted-app">· необязательно</span>
+          </label>
+          {{ form.avg_heart_rate }}
+          {% for error in form.avg_heart_rate.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+        </div>
       </div>
 
       {% comment %}

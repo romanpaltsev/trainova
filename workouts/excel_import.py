@@ -437,6 +437,7 @@ def _create_parts(catalog, report, workout, rows, *, lone):
             model=model,
             incline_pct=row.incline_pct,
             level=row.level,
+            elevation_gain_m=row.elevation_gain_m,
         )
         created += 1
     return created

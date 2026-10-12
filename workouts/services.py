@@ -8,7 +8,7 @@ from datetime import datetime, time
 from decimal import Decimal
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, F, Max, Q
+from django.db.models import Count, Exists, F, Max, Q
 from django.utils import timezone
 
 from workouts.models import (
@@ -205,23 +205,60 @@ def machine_model_for_name(user, brand, name, *, shared=False):
         return existing()
 
 
+# Часть «на тренажёре»: указан он сам или его настройки. По этому признаку
+# подстановка решает, зал перед ней или маршрут.
+ON_MACHINE = Q(brand__isnull=False) | Q(incline_pct__isnull=False) | Q(level__isnull=False)
+
+
+def recorded_cardio_parts(user, sport, location):
+    """Записанные части этого вида спорта в этом месте — основа подстановки.
+
+    Место строго то же (None — тоже место: «не указано»): в другом зале другая
+    дорожка, у другого маршрута другие километры. Черновики не в счёт — у них
+    всё только загадано.
+    """
+    return CardioPart.objects.filter(
+        workout__user=user,
+        workout__duration_min__isnull=False,
+        sport=sport,
+        workout__location=location,
+    )
+
+
 def last_cardio_machine(user, sport, location):
     """Последняя часть этого вида спорта в этом месте, где тренажёр или настройки указаны.
 
     Источник подстановки в форму кардио: «та же дорожка, уклон как в прошлый
-    раз». Место строго то же (None — тоже место: «не указано»): в другом зале
-    другая дорожка, и подставить её было бы враньём. Черновики не в счёт — у
-    них тренажёр мог быть только загадан.
+    раз».
     """
     return (
-        CardioPart.objects.filter(
-            workout__user=user,
-            workout__duration_min__isnull=False,
-            sport=sport,
-            workout__location=location,
-        )
-        .filter(Q(brand__isnull=False) | Q(incline_pct__isnull=False) | Q(level__isnull=False))
-        .select_related("brand", "model")
+        recorded_cardio_parts(user, sport, location)
+        .filter(ON_MACHINE)
+        .select_related("brand", "model", "workout")
+        .order_by("-workout__started_at", "-id")
+        .first()
+    )
+
+
+def last_cardio_route(user, sport, location):
+    """Последняя часть этого вида спорта на этом маршруте — с дистанцией или набором.
+
+    Источник подстановки «как в прошлый раз здесь»: у маршрута километры и
+    набор высоты — свойство места, остаётся вписать время. Маршрут — место, где
+    этим видом спорта ни разу не занимались на тренажёре: на дорожке дистанция —
+    результат, а не свойство зала, и подставлять её было бы враньём. Поэтому
+    «Тренажёр» и маршрут не подставляются вместе никогда, а блок «Тренажёр»
+    ведёт себя ровно как до появления маршрутов. Без места маршрута нет.
+    """
+    if sport is None or location is None:
+        return None
+    here = recorded_cardio_parts(user, sport, location)
+    return (
+        here.filter(Q(distance_km__isnull=False) | Q(elevation_gain_m__isnull=False))
+        # Подзапрос не зависит от строки, и Postgres считает его один раз.
+        .filter(~Exists(here.filter(ON_MACHINE)))
+        # Подсказка блока называет место и дату — тем же запросом.
+        .select_related("workout__location")
         .order_by("-workout__started_at", "-id")
         .first()
     )

@@ -1,5 +1,7 @@
 """Формы записи тренировок и личных справочников."""
 
+from decimal import Decimal
+
 from django import forms
 from django.core.validators import MaxLengthValidator
 from django.utils import formats, timezone
@@ -8,6 +10,7 @@ from workouts import excel, excel_import, services
 from workouts.models import (
     BODY_METRIC_NAME_MAX_LENGTH,
     BODY_METRIC_UNIT_MAX_LENGTH,
+    CARDIO_ELEVATION_MAX,
     CARDIO_INCLINE_MAX,
     CARDIO_INCLINE_MIN,
     CARDIO_LEVEL_MAX,
@@ -236,6 +239,73 @@ class CardioMachineForm(forms.Form):
     machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
 
 
+def distance_widget():
+    """Поле дистанции одно на три формы: блок маршрута перерисовывается своей."""
+    return forms.NumberInput(
+        attrs={"class": "form-control", "inputmode": "decimal", "step": "0.01"}
+    )
+
+
+class ElevationField(forms.IntegerField):
+    """Набор высоты: ноль — «не указан», как у времени части.
+
+    Ровный круг законен, но «0 м» в строке части — шум, а в базе ноль и NULL
+    значили бы одно и то же двумя способами.
+    """
+
+    def clean(self, value):
+        return super().clean(value) or None
+
+
+def elevation_field():
+    return ElevationField(
+        label="Набор высоты, м",
+        required=False,
+        min_value=0,
+        max_value=CARDIO_ELEVATION_MAX,
+        error_messages={
+            "invalid": "Набор высоты — целое число метров.",
+            "min_value": "Набор высоты не бывает отрицательным.",
+            "max_value": f"Набор высоты — до {CARDIO_ELEVATION_MAX} м.",
+        },
+        widget=forms.NumberInput(
+            attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "напр. 120"}
+        ),
+    )
+
+
+CARDIO_ROUTE_FIELDS = ("distance_km", "elevation_gain_m")
+
+
+class CardioRouteForm(forms.Form):
+    """Только поля маршрута — для перерисовки блока (CardioRouteView).
+
+    Виджеты те же, что у форм кардио: блок приходит на место своих же полей, и
+    отличаться от них ему нельзя.
+    """
+
+    distance_km = forms.DecimalField(required=False, widget=distance_widget())
+    elevation_gain_m = elevation_field()
+
+
+def cardio_route_initial(part):
+    """Дистанция и набор высоты из прошлой части — подстановка маршрута.
+
+    Дистанция — как её набрал бы человек: «7.4», а не «7.40» из колонки с двумя
+    знаками после запятой.
+    """
+    if part is None:
+        return {}
+    distance = part.distance_km
+    if distance is not None:
+        distance = (
+            distance.quantize(Decimal(1))
+            if distance == distance.to_integral()
+            else distance.normalize()
+        )
+    return {"distance_km": distance, "elevation_gain_m": part.elevation_gain_m}
+
+
 class CardioWorkoutForm(forms.Form):
     """Кардио-тренировка целиком: и Workout, и CardioPart.
 
@@ -284,10 +354,9 @@ class CardioWorkoutForm(forms.Form):
             "invalid": "Дистанция — это число, например 7,2.",
             "min_value": "Дистанция должна быть больше нуля.",
         },
-        widget=forms.NumberInput(
-            attrs={"class": "form-control", "inputmode": "decimal", "step": "0.01"}
-        ),
+        widget=distance_widget(),
     )
+    elevation_gain_m = elevation_field()
     avg_heart_rate = forms.IntegerField(
         label="Средний пульс",
         help_text="необязательно",
@@ -335,7 +404,10 @@ class CardioWorkoutForm(forms.Form):
             # А вот поля длительности остаются: у плана они значат цель по
             # времени — тем же приёмом, каким distance_km служит и цели, и факту.
             # Плата за это честная: clean() и save() теперь смотрят на self.planned.
-            for name in ("date", "time", "avg_heart_rate"):
+            #
+            # Набора высоты у плана нет по той же причине, что и пульса: цель
+            # плана — километры и время, а метры вверх — то, что получилось.
+            for name in ("date", "time", "avg_heart_rate", "elevation_gain_m"):
                 del self.fields[name]
             # Обе цели необязательны: планов на неделю наготавливают пачкой, и
             # заставлять заполнять значения было бы издевательством.
@@ -388,6 +460,7 @@ class CardioWorkoutForm(forms.Form):
             "duration_hours": hours or None,
             "duration_minutes": minutes or None,
             "distance_km": cardio.distance_km if cardio else None,
+            "elevation_gain_m": cardio.elevation_gain_m if cardio else None,
             "avg_heart_rate": cardio.avg_heart_rate if cardio else None,
             "note": workout.note,
             **cardio_machine_initial(cardio),
@@ -468,9 +541,10 @@ class CardioWorkoutForm(forms.Form):
             part.sport = workout.sport
             part.duration_min = workout.duration_min
             part.distance_km = distance
-            # Пульс есть только у состоявшейся тренировки: у плана поля нет,
-            # а на записи черновика оно придёт из формы как обычно.
+            # Пульс и набор высоты есть только у состоявшейся тренировки: у плана
+            # полей нет, а на записи черновика они придут из формы как обычно.
             part.avg_heart_rate = self.cleaned_data.get("avg_heart_rate")
+            part.elevation_gain_m = self.cleaned_data.get("elevation_gain_m")
             apply_cardio_machine(self.user, part, self.cleaned_data)
             part.save()
         return workout
@@ -489,10 +563,12 @@ class CardioPartForm(forms.ModelForm):
 
     duration_hours, duration_minutes = duration_fields()
     machine_brand, machine_model, incline_pct, level = cardio_machine_fields()
+    # Своим полем, а не полем модели: ноль здесь значит «не указан» (ElevationField).
+    elevation_gain_m = elevation_field()
 
     class Meta:
         model = CardioPart
-        fields = ("sport", "distance_km", "avg_heart_rate")
+        fields = ("sport", "distance_km", "elevation_gain_m", "avg_heart_rate")
         error_messages = {
             "sport": {
                 "required": "Выберите вид спорта.",
@@ -503,9 +579,7 @@ class CardioPartForm(forms.ModelForm):
         }
         widgets = {
             "sport": forms.RadioSelect,
-            "distance_km": forms.NumberInput(
-                attrs={"class": "form-control", "inputmode": "decimal", "step": "0.01"}
-            ),
+            "distance_km": distance_widget(),
             "avg_heart_rate": forms.NumberInput(
                 attrs={"class": "form-control", "inputmode": "numeric", "placeholder": "напр. 142"}
             ),

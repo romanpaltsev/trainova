@@ -35,6 +35,10 @@
       {% if part.machine_line %}
         <span class="app-cardio-part-machine">{% include "includes/machine.html" %}{{ part.machine_line }}</span>
       {% endif %}
+      {% comment %}Набор высоты — той же строкой под названием, что тренажёр: это его уличный двойник.{% endcomment %}
+      {% if part.elevation_display %}
+        <span class="app-cardio-part-machine">{% include "includes/elevation.html" %}набор высоты {{ part.elevation_display }}</span>
+      {% endif %}
       {% include "includes/pencil.html" %}
     </button>
   {% endfor %}

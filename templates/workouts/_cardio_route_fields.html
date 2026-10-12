@@ -1,0 +1,50 @@
+{% comment %}
+  Маршрут кардио-части: дистанция и набор высоты. Один партиал на форму кардио
+  и окно «+ Кардио»; поля из CardioRouteForm, имена у всех одни.
+
+  Смена вида спорта или места перезапрашивает блок (CardioRouteView) — он
+  приходит заполненным, как в прошлый раз на этом маршруте: километры и метры
+  вверх — свойство места, остаётся вписать время. Набранное руками не
+  затирается: метку route_prefilled Alpine снимает при первом вводе, и сервер
+  на такой запрос отвечает 204. Ответ, который пришёл, когда человек уже начал
+  печатать, блок не принимает (htmx:before-swap). На правке перезапроса нет
+  (route_prefill_on). Близнец _cardio_machine_fields.html — и по устройству, и
+  по триггеру.
+
+  Ждёт route_form и route_filled_by; distance_optional — дистанция
+  необязательна (окно «+ Кардио»). Скрытым полем он едет и в перезапрос, иначе
+  перерисованный блок потерял бы подпись «необязательно».
+{% endcomment %}
+<div id="cardio-route"
+     x-data="{ auto: {{ route_filled_by|yesno:'true,false' }} }" @input="auto = false"
+     {% if route_prefill_on %}
+       hx-get="{% url 'cardio_route' %}"
+       hx-trigger="change[target.name==='sport'||target.name==='location'||target.name==='location_own'] from:closest form"
+       hx-include="[name='sport'], [name='location'], [name='location_own'], #cardio-route"
+       hx-target="this" hx-swap="outerHTML"
+       @htmx:before-swap="if (!auto && [...$el.querySelectorAll('.form-control')].some(i => i.value)) $event.detail.shouldSwap = false"
+     {% endif %}>
+  <input type="hidden" name="route_prefilled" :value="auto ? '1' : ''" value="{{ route_filled_by|yesno:'1,' }}">
+  {% if distance_optional %}<input type="hidden" name="distance_optional" value="1">{% endif %}
+  <div class="app-field-grid">
+    <div>
+      <label class="form-label" for="{{ route_form.distance_km.id_for_label }}">
+        Дистанция, км{% if distance_optional %} <span class="text-muted-app">· необязательно</span>{% endif %}
+      </label>
+      {{ route_form.distance_km }}
+      {% for error in route_form.distance_km.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+    <div>
+      <label class="form-label" for="{{ route_form.elevation_gain_m.id_for_label }}">
+        Набор высоты, м <span class="text-muted-app">· необязательно</span>
+      </label>
+      {{ route_form.elevation_gain_m }}
+      {% for error in route_form.elevation_gain_m.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+    </div>
+  </div>
+  {% if route_filled_by %}
+    <p class="app-queue-hint app-route-hint" x-show="auto">
+      Как в прошлый раз в «{{ route_filled_by.workout.location.name }}» — {{ route_filled_by.workout.started_at|date:"j b" }}.
+    </p>
+  {% endif %}
+</div>

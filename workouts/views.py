@@ -47,11 +47,13 @@ from workouts import (
 )
 from workouts.forms import (
     CARDIO_MACHINE_FIELDS,
+    CARDIO_ROUTE_FIELDS,
     MAX_DURATION_HOURS,
     BodyMeasurementForm,
     BodyMetricForm,
     CardioMachineForm,
     CardioPartForm,
+    CardioRouteForm,
     CardioWorkoutForm,
     CatalogRequestForm,
     ExerciseCreateForm,
@@ -63,6 +65,7 @@ from workouts.forms import (
     StrengthTimeForm,
     XlsxUploadForm,
     cardio_machine_initial,
+    cardio_route_initial,
 )
 from workouts.models import (
     BODY_METRIC_NAME_MAX_LENGTH,
@@ -269,18 +272,26 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
     def get(self, request, **kwargs):
         instance = self.get_instance()
         initial = self.preselected(request, instance)
-        filled_by = None
+        filled_by = route_filled_by = None
         if initial and "sport" in initial:
-            # Вид спорта пришёл из чузера — блок «Тренажёр» сразу как в прошлый
-            # раз в месте по умолчанию (его же форма ставит в чипы места).
-            filled_by = services.last_cardio_machine(
-                request.user, initial["sport"], Location.objects.default_for(request.user)
-            )
+            # Вид спорта пришёл из чузера — блоки «Тренажёр» и маршрута сразу как
+            # в прошлый раз в месте по умолчанию (его же форма ставит в чипы места).
+            default = Location.objects.default_for(request.user)
+            filled_by = services.last_cardio_machine(request.user, initial["sport"], default)
             initial |= cardio_machine_initial(filled_by)
+            # У плана дистанция — цель, а не «как в прошлый раз»: маршрут ему
+            # не подставляется.
+            if not self.planned:
+                route_filled_by = services.last_cardio_route(
+                    request.user, initial["sport"], default
+                )
+                initial |= cardio_route_initial(route_filled_by)
         form = CardioWorkoutForm(
             user=request.user, instance=instance, planned=self.planned, initial=initial
         )
-        return self.render_form(form, instance, filled_by=filled_by)
+        return self.render_form(
+            form, instance, filled_by=filled_by, route_filled_by=route_filled_by
+        )
 
     def preselected(self, request, instance):
         """Вид спорта и день из чузера «+» (?sport=, ?planned_for=): подсказка, а не адрес.
@@ -333,13 +344,15 @@ class CardioWorkoutFormView(LoginRequiredMixin, View):
             return redirect(reverse("workout_history") + f"#workout-{workout.pk}")
         return self.render_form(form, instance)
 
-    def render_form(self, form, instance, filled_by=None):
+    def render_form(self, form, instance, filled_by=None, route_filled_by=None):
         return render(
             self.request,
             self.template_name,
             cardio_machine_context(self.request.user, form)
             | {
                 "filled_by": filled_by,
+                "route_form": form,
+                "route_filled_by": route_filled_by,
                 "form": form,
                 "workout": instance,
                 # Чипы мест берём из queryset'а самой формы: тогда «что видно» и
@@ -392,11 +405,13 @@ def cardio_model_names(user, brand_name):
 
 
 def chosen_sport_and_location(request, data):
-    """Вид спорта и место из запроса блока «Тренажёр» — только свои и общие.
+    """Вид спорта и место из запроса блоков подстановки — только свои и общие.
 
     Мусор и чужие id молча дают None: это подсказка, а не запись, и 404 здесь
-    был бы грубостью. Новое место, набранное текстом, ещё не существует — у
-    него прошлого нет.
+    был бы грубостью. Третье значение — есть ли у места прошлое: набранное
+    текстом название перебивает отмеченный чип, как в форме (chosen_location).
+    Совпало со своим местом — это оно; нет — места ещё не существует, и
+    подставлять нечего (None здесь значил бы «не указано» — тоже место).
     """
     sport_id = data.get("sport", "")
     sport = None
@@ -406,11 +421,15 @@ def chosen_sport_and_location(request, data):
             .filter(category=Sport.Category.CARDIO, pk=int(sport_id))
             .first()
         )
+    own = collapse_spaces(data.get("location_own", ""))
+    if own:
+        location = Location.objects.filter(owner=request.user, name__iexact=own).first()
+        return sport, location, location is not None
     location_id = data.get("location", "")
     location = None
     if location_id.isdecimal():
         location = Location.objects.filter(owner=request.user, pk=int(location_id)).first()
-    return sport, location
+    return sport, location, True
 
 
 class CardioMachineView(LoginRequiredMixin, View):
@@ -426,11 +445,10 @@ class CardioMachineView(LoginRequiredMixin, View):
         typed = any(request.GET.get(name, "").strip() for name in CARDIO_MACHINE_FIELDS)
         if typed and request.GET.get("machine_prefilled") != "1":
             return HttpResponse(status=204)
-        sport, location = chosen_sport_and_location(request, request.GET)
-        if location is None and request.GET.get("location_own", "").strip():
-            last = None
-        else:
-            last = services.last_cardio_machine(request.user, sport, location) if sport else None
+        sport, location, known = chosen_sport_and_location(request, request.GET)
+        last = (
+            services.last_cardio_machine(request.user, sport, location) if sport and known else None
+        )
         form = CardioMachineForm(initial=cardio_machine_initial(last))
         return render(
             request,
@@ -438,6 +456,41 @@ class CardioMachineView(LoginRequiredMixin, View):
             # prefill_on: блок приходит на место себя же и должен сохранить
             # перезапрос — иначе вторая смена вида спорта уже ничего бы не дала.
             cardio_machine_context(request.user, form) | {"filled_by": last, "prefill_on": True},
+        )
+
+
+class CardioRouteView(LoginRequiredMixin, View):
+    """Дистанция и набор высоты кардио-формы — как в прошлый раз на этом маршруте.
+
+    Близнец CardioMachineView: зовётся той же сменой вида спорта или места и
+    тем же правилом не трогает набранное руками (route_prefilled снимает
+    Alpine при первом вводе, и тогда ответ — 204). Отдельный блок, а не кусок
+    «Тренажёра»: у маршрута и тренажёра разные источники (services.last_cardio_route
+    не берёт места, где был тренажёр), и общий ответ связал бы их метки.
+
+    Подставлять нечего, а в блоке пусто или набрано своё — тоже 204: блок не
+    перерисовывается зря, и курсор в поле дистанции, куда человек перешёл из
+    «Нового места», не теряется посреди ввода.
+    """
+
+    def get(self, request):
+        prefilled = request.GET.get("route_prefilled") == "1"
+        typed = any(request.GET.get(name, "").strip() for name in CARDIO_ROUTE_FIELDS)
+        if typed and not prefilled:
+            return HttpResponse(status=204)
+        sport, location, known = chosen_sport_and_location(request, request.GET)
+        last = services.last_cardio_route(request.user, sport, location) if known else None
+        if last is None and not prefilled:
+            return HttpResponse(status=204)
+        return render(
+            request,
+            "workouts/_cardio_route_fields.html",
+            {
+                "route_form": CardioRouteForm(initial=cardio_route_initial(last)),
+                "route_filled_by": last,
+                "route_prefill_on": True,
+                "distance_optional": request.GET.get("distance_optional") == "1",
+            },
         )
 
 
@@ -1564,6 +1617,7 @@ class WorkoutCardioPartView(LoginRequiredMixin, View):
             | {
                 "workout": workout,
                 "form": form,
+                "route_form": form,
                 "part": part,
                 "sports": form.fields["sport"].queryset,
                 "selected_sport_id": form["sport"].value(),

@@ -8,10 +8,12 @@ function cardioForm() {
     metricLabel: "",
 
     init() {
+      // Слушаем саму форму, а не каждое поле: блок маршрута htmx подменяет
+      // целиком, и у новых полей слушателей из init уже не было бы. Подставленное
+      // значение события input не даёт — пересчёт ещё и после каждой подмены.
       const recalc = () => this.recalc();
-      this.$el.querySelectorAll("input").forEach((input) => {
-        input.addEventListener("input", recalc);
-      });
+      this.$el.addEventListener("input", recalc);
+      this.$el.addEventListener("htmx:afterSettle", recalc);
       recalc();
     },
 

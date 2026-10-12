@@ -65,9 +65,13 @@
         Смешанная сюда не попадает — у неё подходы, и метрики выше.
       {% endcomment %}
       {% with cardio=workout.cardio_parts.all.0 %}
+        {% comment %}
+          Набор высоты — внутри ячейки дистанции, а не своей: колонки позиционные,
+          и на 1200 лишняя ячейка сдвинула бы темп и место у всех строк.
+        {% endcomment %}
         <div>
           <dt>дистанция</dt>
-          <dd class="num">{{ cardio.distance_display }} км</dd>
+          <dd class="num">{{ cardio.distance_display }} км{% if cardio.elevation_display %}<span class="app-elevation">{% include "includes/elevation.html" with size=14 %}<span class="visually-hidden">набор высоты</span>{{ cardio.elevation_display }}</span>{% endif %}</dd>
         </div>
         <div>
           <dt>{{ cardio.metric_label }}</dt>

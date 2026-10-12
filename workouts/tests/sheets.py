@@ -109,6 +109,7 @@ def dump(user):
                         part.machine,
                         part.incline_pct,
                         part.level,
+                        part.elevation_gain_m,
                     )
                     for part in workout.cardio_parts.all()
                 ],

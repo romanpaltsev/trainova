@@ -215,6 +215,38 @@ def test_bad_machine_cells_are_row_errors(user, cells, error):
     assert (part.incline_pct, part.level) == (None, None)
 
 
+def test_elevation_column_is_read(user):
+    """Набор высоты — целые метры; ноль — «не указан», как в форме."""
+    SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+
+    report = run(
+        user,
+        [
+            cardio_row(elevation=640),
+            cardio_row(date=PAST - timedelta(days=1), elevation=0),
+        ],
+    )
+
+    assert report.error_count == 0
+    assert sorted(CardioPart.objects.values_list("elevation_gain_m", flat=True), key=str) == [
+        640,
+        None,
+    ]
+
+
+@pytest.mark.parametrize(
+    ("value", "error"),
+    [(15001, "Набор высоты — от 1 до 15000 м."), ("горы", "Набор высоты — это целое число.")],
+)
+def test_bad_elevation_is_a_row_error(user, value, error):
+    SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
+
+    report = run(user, [cardio_row(elevation=value)])
+
+    assert any(error in line for line in report.errors)
+    assert CardioPart.objects.get().elevation_gain_m is None
+
+
 def test_model_without_brand_is_dropped_with_warning(user):
     SportFactory(name="Велосипед", category=Sport.Category.CARDIO)
 
@@ -789,7 +821,11 @@ def test_round_trip_keeps_the_diary(user):
     )
     StrengthSetFactory(workout=run_day, exercise=pullups, set_number=1, weight_kg=0, reps=10)
     CardioPart.objects.create(
-        workout=run_day, sport=running, duration_min=40, distance_km=Decimal("7.10")
+        workout=run_day,
+        sport=running,
+        duration_min=40,
+        distance_km=Decimal("7.10"),
+        elevation_gain_m=85,
     )
 
     ride = WorkoutFactory(
