@@ -123,6 +123,109 @@ function stepperInput() {
   };
 }
 
+// ---------- Открытый подход сворачивается сам ----------
+//
+// Подход, открытый тапом по строке (экран правки, план живого режима и
+// черновика), закрывается, когда человек уходит из карточки упражнения, — как
+// будто нажали «Готово»: на экране правки он складывается обратно в строку, в
+// живом режиме панель возвращается к текущему подходу. Закрывает клик по этой
+// самой «Готово» (data-set-close), а не свой запрос: адрес, цель и очередь
+// hx-sync у неё те же, и недоехавший тап степпера сохранится раньше, чем
+// панель свернётся.
+
+function leaveOpenSet(target, byKeyboard) {
+  const close = document.querySelector("[data-set-close]");
+  if (!close) return;
+  const card = close.closest(".app-live-exercise");
+  // Окно поверх экрана (заметка, тренажёр) — продолжение работы, а не уход.
+  if (card.contains(target) || target.closest("#modal")) return;
+  // Одно закрытие на уход: у поля ввода и фокус, и тап приходят оба.
+  close.removeAttribute("data-set-close");
+  if (byKeyboard) keepFocus(card, close, target);
+  // Набранное руками число сохраняется по blur. Тап мимо снимает фокус только
+  // после pointerup, а iOS с фона не снимает вовсе — тогда регион перерисовался
+  // бы раньше и унёс поле вместе с числом. Снятый здесь фокус ставит сохранение
+  // в очередь карточки первым, «Готово» встаёт за ним.
+  if (card.contains(document.activeElement)) document.activeElement.blur();
+  close.click();
+}
+
+// Тап — pointerup того же пальца без pointercancel между ними, а не click: iOS
+// не шлёт click слушателю на document, если нажали на фон или текст. Прокрутка
+// уходом не считается — её pointerdown заканчивается pointercancel.
+let tapStart = null;
+
+document.addEventListener(
+  "pointerdown",
+  function (event) {
+    const primary = event.isPrimary && event.button === 0;
+    tapStart = primary ? { id: event.pointerId, target: event.target } : null;
+  },
+  true
+);
+
+document.addEventListener(
+  "pointercancel",
+  function () {
+    tapStart = null;
+  },
+  true
+);
+
+document.addEventListener(
+  "pointerup",
+  function (event) {
+    if (!tapStart || tapStart.id !== event.pointerId) return;
+    const target = tapStart.target;
+    tapStart = null;
+    // Кнопка, которая сама перерисовывает регион (соседний подход, строка
+    // очереди), свернёт панель своим ответом. Второй запрос гнался бы с ним и
+    // мог закрыть только что открытый подход.
+    if (target.closest('[hx-target="#exercises"]')) return;
+    leaveOpenSet(target, false);
+  },
+  true
+);
+
+// Tab: фокус с клавиатуры ушёл из карточки. Фокус от пальца и мыши не в счёт —
+// его разбирает тап: иначе нажатие на соседний подход сворачивало бы панель
+// раньше, чем тот откроется.
+document.addEventListener("focusin", function (event) {
+  if (event.target.matches(":focus-visible")) leaveOpenSet(event.target, true);
+});
+
+// Регион перерисовывается целиком, и фокус, ушедший Tab'ом в соседнюю
+// карточку, пропал бы вместе со старой разметкой — следующий Tab начинался бы
+// с шапки. Меняется только сворачиваемая карточка, поэтому место фокуса до неё
+// считается от начала региона, а после — от конца.
+const FOCUSABLE = "a[href], button, input, select, textarea, [tabindex]";
+let focusSlot = null;
+
+function regionFocusables() {
+  const region = document.getElementById("exercises");
+  return region ? Array.from(region.querySelectorAll(FOCUSABLE)) : [];
+}
+
+function keepFocus(card, close, target) {
+  const all = regionFocusables();
+  const index = all.indexOf(target);
+  if (index < 0) return;
+  const after = card.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING;
+  focusSlot = { close, fromStart: index, fromEnd: after ? all.length - index : 0 };
+}
+
+// Только ответ этой самой «Готово»: если она не доехала, чужая перерисовка
+// региона не должна уводить фокус.
+document.addEventListener("htmx:afterSettle", function (event) {
+  const config = event.detail.requestConfig;
+  if (!focusSlot || !config || config.elt !== focusSlot.close) return;
+  const slot = focusSlot;
+  focusSlot = null;
+  const all = regionFocusables();
+  const found = slot.fromEnd ? all[all.length - slot.fromEnd] : all[slot.fromStart];
+  if (found) found.focus();
+});
+
 // Звук и вибрация окончания отдыха. iOS разрешает звук только после жеста
 // пользователя, поэтому контекст разблокируется первым тапом по странице;
 // без жеста сигнал тихо не срабатывает — ожидаемая деградация.

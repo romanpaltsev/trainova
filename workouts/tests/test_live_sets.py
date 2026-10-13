@@ -1,5 +1,6 @@
 """Действия с подходами живого режима: степперы, отметка, отмена, удаление, отдых."""
 
+import re
 from decimal import Decimal
 
 import pytest
@@ -354,6 +355,27 @@ def test_first_set_of_draft_has_done_button(client, user):
     assert reverse("set_value", args=[first.pk]) in content
     assert "Готово" in content
     assert reverse("set_done", args=[first.pk]) not in content
+
+
+@pytest.mark.parametrize("started", [True, False], ids=["live", "draft"])
+def test_tapped_set_closes_itself_but_current_does_not(client, user, started):
+    """Подход, открытый тапом, сворачивается сам, когда уходят из карточки
+    (data-set-close, live.js): панель возвращается к текущему. У текущего метки
+    нет — даже у его «Готово» в черновике: возвращать панель некуда, и тап мимо
+    слал бы пустой запрос."""
+    workout = WorkoutFactory(user=user, duration_min=None)
+    if not started:
+        Workout.objects.filter(pk=workout.pk).update(started_at=None)
+    _first, _second, third = plan(workout, ExerciseFactory(), [60, 60, 60])
+    client.force_login(user)
+
+    tapped = region(client, workout, set=third.pk)
+    current = region(client, workout)
+
+    live_url = reverse("workout_live", args=[workout.pk])
+    assert tapped.count("data-set-close") == 1
+    assert re.search(rf'data-set-close\s+hx-get="{live_url}"', tapped)
+    assert "data-set-close" not in current
 
 
 def test_stale_done_or_foreign_set_param_opens_current_set(client, user, other_user):

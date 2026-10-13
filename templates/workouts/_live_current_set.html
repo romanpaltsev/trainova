@@ -18,6 +18,11 @@
   возвращаются — это действия всей тренировки, они наверху экрана
   (_draft_start.html). Признак берём у модели (workout.is_planned), а не из
   контекста — партиал рендерится и из live.html, и из live_region_response.
+
+  У подхода, открытого тапом, «Готово» срабатывает и сама, когда уходят из
+  карточки упражнения, — тапом мимо неё или Tab'ом (data-set-close, live.js):
+  панель возвращается к текущему подходу. У текущего подхода черновика метки
+  нет — панели некуда возвращаться, а запрос на каждый тап мимо был бы пустым.
   Ждёт set, group и workout.
 {% endcomment %}
 <div class="app-live-current">
@@ -34,7 +39,7 @@
 
   {% if workout.is_planned or set.pk != group.current_set.pk %}
     <div class="app-live-links">
-      <button type="button" class="app-live-link is-accent"
+      <button type="button" class="app-live-link is-accent"{% if set.pk != group.current_set.pk %} data-set-close{% endif %}
               hx-get="{% url 'workout_live' workout.pk %}"
               hx-target="#exercises" hx-swap="outerHTML"
               hx-sync="closest .app-live-exercise:queue all">

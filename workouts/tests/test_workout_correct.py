@@ -6,6 +6,7 @@
 тренировки остаются неприкосновенными — это стерегут отдельные тесты.
 """
 
+import re
 from decimal import Decimal
 
 import pytest
@@ -108,6 +109,20 @@ def test_tap_on_set_opens_its_steppers(client, user, finished):
     assert reverse("set_delete", args=[row.pk]) in content
     assert "Подход выполнен" not in content
     assert "<!doctype" not in content.lower()  # регион, а не страница
+
+
+def test_open_set_closes_itself_when_leaving_card(client, user, finished):
+    """«Готово» открытого подхода помечена data-set-close: live.js нажимает её
+    сам, когда уходят из карточки упражнения, — регион без ?set, подход в строку."""
+    row = finished.sets.order_by("set_number").first()
+    client.force_login(user)
+
+    content = client.get(correct_url(finished, set=row.pk), headers=HX).content.decode()
+    closed = client.get(correct_url(finished), headers=HX).content.decode()
+
+    assert content.count("data-set-close") == 1
+    assert re.search(rf'data-set-close\s+hx-get="{correct_url(finished)}"', content)
+    assert "data-set-close" not in closed
 
 
 @pytest.mark.parametrize("count", [1, 6])

@@ -4,6 +4,8 @@
   выполнен» — он уже выполнен, правка исправляет факт. «Готово» сворачивает
   панель и перерисовывает регион с новыми значениями; оба действия стоят в той
   же очереди hx-sync, что и тапы степперов, поэтому недоехавший тап не потеряется.
+  Нажимать её не обязательно: data-set-close — «Готово» срабатывает сама, когда
+  уходят из карточки упражнения, тапом мимо неё или Tab'ом (live.js).
   Последний подход тренировки не убирается (sets_count): убрать всё — это
   «Удалить тренировку».
 {% endcomment %}
@@ -18,7 +20,7 @@
   {% include "workouts/_set_steppers.html" %}
 
   <div class="app-live-links">
-    <button type="button" class="app-live-link is-accent"
+    <button type="button" class="app-live-link is-accent" data-set-close
             hx-get="{% url 'workout_correct' workout.pk %}"
             hx-target="#exercises" hx-swap="outerHTML"
             hx-sync="closest .app-live-exercise:queue all">
