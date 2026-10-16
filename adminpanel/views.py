@@ -28,6 +28,7 @@ from accounts.models import User
 from feedback import notify
 from feedback.forms import FeedbackAdminForm, FeedbackMessageForm
 from feedback.models import Feedback, FeedbackMessage
+from uploads import sweep
 from workouts import contributions, request_notify, trash
 from workouts.forms import CatalogRejectForm
 from workouts.models import (
@@ -129,7 +130,7 @@ def postgres_version():
 
 
 class AdminSystemView(AdminPageMixin, TemplateView):
-    """Состояние системы: версии, база, миграции, объём данных, ночная чистка."""
+    """Состояние системы: версии, база, миграции, объём данных, фото, ночная чистка."""
 
     template_name = "adminpanel/system.html"
 
@@ -144,6 +145,7 @@ class AdminSystemView(AdminPageMixin, TemplateView):
             ("В корзине", DeletedWorkout.objects.count()),
             ("Обращения", Feedback.objects.count()),
         ]
+        media_files, media_size = sweep.usage()
         return super().get_context_data(**kwargs) | {
             "versions": [
                 ("Приложение", settings.APP_VERSION or "—"),
@@ -154,9 +156,12 @@ class AdminSystemView(AdminPageMixin, TemplateView):
             "database_size": database_size(),
             "pending_migrations": pending_migrations(),
             "counts": counts,
+            "media_files": media_files,
+            "media_size": media_size,
             # Те же выборки, что удаляет purge_deleted: здесь — только посчитать.
             "expired_trash": trash.expired().count(),
             "expired_accounts": deletion.expired().count(),
+            "orphan_files": len(sweep.orphans()),
         }
 
 

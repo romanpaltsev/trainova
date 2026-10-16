@@ -46,6 +46,14 @@
           <span class="app-row-count num">{{ value }}</span>
         </div>
       {% endfor %}
+      {% comment %}Фото живут не в базе, а в каталоге MEDIA_DIR — рядом, раз это тоже данные.{% endcomment %}
+      <div class="app-row">
+        <span class="app-row-text">
+          <span class="app-row-name">Файлы фото</span>
+          <span class="app-row-meta">{{ media_size|filesizeformat }} на диске</span>
+        </span>
+        <span class="app-row-count num">{{ media_files }}</span>
+      </div>
     </div>
   </section>
 
@@ -69,6 +77,13 @@
           <span class="app-row-meta">отсрочка удаления вышла</span>
         </span>
         <span class="app-row-count num">{{ expired_accounts }}</span>
+      </div>
+      <div class="app-row">
+        <span class="app-row-text">
+          <span class="app-row-name">Файлы фото</span>
+          <span class="app-row-meta">без записи в базе, старше суток</span>
+        </span>
+        <span class="app-row-count num">{{ orphan_files }}</span>
       </div>
     </div>
   </section>

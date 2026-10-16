@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "workouts",
     "adminpanel",
     "feedback",
+    "uploads",
 ]
 
 MIDDLEWARE = [
@@ -218,6 +219,15 @@ if env("DJANGO_STATIC_MANIFEST"):
     # настройка там ни на что не влияет: браузер кэширует CSS/JS по своей
     # эвристике от Last-Modified, и правки видны после жёсткой перезагрузки.
     WHITENOISE_MAX_AGE = 31536000
+
+
+# Загруженные изображения (uploads)
+
+# Их отдаёт не nginx и не whitenoise, а вьюха фичи с проверкой доступа
+# (uploads/serve.py), поэтому MEDIA_URL не задан: публичного адреса у файлов нет.
+# В проде каталог — том с хоста (MEDIA_DIR в docker-compose.prod.yml): его
+# выгружает в облако scripts/backup.sh.
+MEDIA_ROOT = BASE_DIR / "media"
 
 
 # Безопасность за обратным прокси

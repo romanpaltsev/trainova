@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Восстановление базы из дампа. Перезаписывает текущие данные — спрашивает подтверждение.
+# Восстановление базы из дампа и фото из облака. Перезаписывает текущие данные —
+# спрашивает подтверждение.
 #
 # Использование:
 #   scripts/restore.sh /var/backups/trainova/dnevnik-2026-08-27-0417.dump
@@ -24,6 +25,8 @@ fail() { echo "ОШИБКА: $*" >&2; exit 1; }
 source "$PROJECT_DIR/scripts/env.sh"
 POSTGRES_DB="$(env_require POSTGRES_DB)"
 POSTGRES_USER="$(env_require POSTGRES_USER)"
+REMOTE="$(env_get BACKUP_RCLONE_REMOTE)"
+MEDIA_DIR="$(env_get MEDIA_DIR /var/lib/trainova/media)"
 
 count() {
   $COMPOSE exec -T db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$1" 2>/dev/null || echo "?"
@@ -58,6 +61,27 @@ $COMPOSE run --rm --entrypoint python web manage.py migrate --check >/dev/null \
 
 log "поднимаю приложение"
 $COMPOSE up -d web >/dev/null
+
+# Фото: дамп ссылается на файлы по именам, а сами файлы лежат в облаке — backup.sh
+# только добавляет их туда и ничего не стирает. copy докладывает недостающие и не
+# удаляет лишние: их уберёт ночная уборка (purge_deleted). Уже после подъёма web и
+# без fail: база восстановлена, и осечка с фото не должна оставлять сайт лежать.
+# Нужен root: каталог фото создал докер, а конфиг rclone лежит у root.
+MEDIA_COMMAND="sudo rclone copy ${REMOTE}/media ${MEDIA_DIR}"
+if [[ -z "$REMOTE" ]]; then
+  log "фото: BACKUP_RCLONE_REMOTE не задан — каталог ${MEDIA_DIR} остаётся как есть"
+elif [[ "$EUID" -ne 0 ]]; then
+  log "фото: верните их из облака от root — ${MEDIA_COMMAND}"
+elif ! command -v rclone >/dev/null; then
+  log "предупреждение: rclone не установлен — фото не вернулись; поставьте и выполните ${MEDIA_COMMAND}"
+elif ! rclone lsf --max-depth 1 "${REMOTE}/media" >/dev/null 2>&1; then
+  log "фото: в ${REMOTE}/media ничего нет"
+else
+  log "возвращаю фото из ${REMOTE}/media в ${MEDIA_DIR}"
+  mkdir -p "$MEDIA_DIR"
+  rclone copy "${REMOTE}/media" "$MEDIA_DIR" \
+    || log "предупреждение: фото не вернулись — повторите ${MEDIA_COMMAND}"
+fi
 
 echo
 echo "Восстановлено. Теперь в базе:"

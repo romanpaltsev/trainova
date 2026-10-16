@@ -13,6 +13,17 @@ def fast_password_hasher(settings):
     settings.PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 
+@pytest.fixture(autouse=True)
+def media_root(settings, tmp_path):
+    """Загруженные файлы — во временный каталог теста.
+
+    Иначе тесты писали бы фото в media/ разработки, а уборка в purge_deleted
+    стёрла бы там всё, чего нет в тестовой базе.
+    """
+    settings.MEDIA_ROOT = tmp_path / "media"
+    return settings.MEDIA_ROOT
+
+
 @pytest.fixture
 def user(db):
     """Пользователь с подтверждённым email — готов к входу."""

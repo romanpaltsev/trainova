@@ -15,13 +15,14 @@ deploy.md §5 (`seed`, `createsuperuser`) при переезде не выпо�
 
 ## Что физически переносится
 
-Ровно три вещи. Всё остальное приезжает из git и пересоздаётся само.
+Ровно четыре вещи. Всё остальное приезжает из git и пересоздаётся само.
 
 | Что | Почему нельзя пересоздать |
 |---|---|
 | Дамп базы `pg_dump -Fc` | все данные приложения |
 | `.env.prod` | не в git; `DJANGO_SECRET_KEY` держит сессии, `POSTGRES_*` должны совпасть с дампом |
 | `/root/.config/rclone/rclone.conf` | не в git; пароли обфусцированы, а при crypt-remote без него не расшифровать старые дампы |
+| Каталог фото `MEDIA_DIR` (`/var/lib/trainova/media`) | загруженные фото; копия в облаке отстаёт до суток — фото, добавленные после ночного бэкапа, есть только здесь |
 
 **Сертификат выпускается на новом сервере заново** (§6), а не копируется. Копирование
 `/etc/letsencrypt` тоже возможно и убирает окно без HTTPS, но требует таскать между машинами
@@ -39,8 +40,7 @@ deploy.md §5 (`seed`, `createsuperuser`) при переезде не выпо�
 
 Если окно без HTTPS неприемлемо — в конце §6 описан выпуск заранее через DNS-01.
 
-**Переносить не нужно:** загруженных файлов в проекте нет вовсе (ни одного `FileField`),
-`staticfiles` собирается `collectstatic` при каждой сборке образа, кэш живёт в
+**Переносить не нужно:** `staticfiles` собирается `collectstatic` при каждой сборке образа, кэш живёт в
 памяти процесса (`LocMemCache`), а том postgres переносится дампом, а не копированием
 каталога — версии и инициализация тома между машинами не обязаны совпадать.
 
@@ -561,6 +561,29 @@ shred -u /tmp/final.dump
 shred -u /tmp/final.dump                                     # своя машина
 ssh trainova-old 'shred -u /tmp/final.dump /tmp/final.sha256'
 ```
+
+Фото переносятся каталогом и тоже после заморозки: облачная копия отстаёт до суток. Каталог
+создал докер, он принадлежит root, поэтому архив собирается через `sudo`. Если в `.env.prod`
+задан свой `MEDIA_DIR`, подставьте его вместо `/var/lib/trainova`.
+
+```bash
+# старый сервер, та же сессия
+sudo tar -C /var/lib/trainova -czf /tmp/media.tgz media && sudo chown "$USER" /tmp/media.tgz
+sudo find /var/lib/trainova/media -type f | wc -l        # запомните число
+
+# своя машина — тоже без ssh -t
+ssh trainova-old 'cat /tmp/media.tgz' > /tmp/media.tgz
+scp /tmp/media.tgz trainova-new:/tmp/media.tgz && rm /tmp/media.tgz
+ssh trainova-old 'rm /tmp/media.tgz'
+
+# новый сервер
+sudo install -d -m 755 /var/lib/trainova
+sudo tar -C /var/lib/trainova -xzf /tmp/media.tgz && rm /tmp/media.tgz
+sudo find /var/lib/trainova/media -type f | wc -l        # то же число, что на старом
+```
+
+`restore.sh` ниже, запущенный не от root, напомнит вернуть фото из облака, — на переезде
+это не нужно: каталог уже на месте и свежее облачной копии.
 
 Восстановление:
 

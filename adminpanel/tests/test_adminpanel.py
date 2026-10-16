@@ -5,6 +5,7 @@
 страницы честно считают то, что показывают.
 """
 
+import os
 from datetime import timedelta
 
 import pytest
@@ -139,3 +140,24 @@ def test_system_page_counts_what_nightly_purge_will_delete(client, admin_user, o
     assert context["expired_accounts"] == 1
     assert context["pending_migrations"] == []
     assert dict(context["counts"])["В корзине"] == 2
+
+
+def test_system_page_shows_photo_files_and_what_the_sweep_will_remove(
+    client, admin_user, media_root
+):
+    """Фото живут не в базе: размер каталога и сироты, которых сотрёт ночная
+    уборка, — те же функции, что у purge_deleted."""
+    (media_root / "machines").mkdir(parents=True)
+    (media_root / "machines" / "a.jpg").write_bytes(b"12345")
+    orphan = media_root / "machines" / "b.jpg"
+    orphan.write_bytes(b"123")
+    old = (timezone.now() - timedelta(days=2)).timestamp()
+    os.utime(orphan, (old, old))
+    client.force_login(admin_user)
+
+    context = client.get(reverse("admin_system")).context
+
+    assert context["media_files"] == 2
+    assert context["media_size"] == 8
+    # a.jpg свежий: его загрузка могла ещё не закончиться.
+    assert context["orphan_files"] == 1
