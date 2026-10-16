@@ -297,11 +297,55 @@ class Exercise(CatalogItem):
         ]
 
 
+# Стартовый набор групп мышц (решение 16.10.2026): «Руки» и «Ноги» не говорили,
+# бицепс это был или трицепс, поэтому их раздробили. Чипами ввода набор
+# предлагается всегда, даже пока в данных таких групп нет, — так все пишут
+# «Трицепс» одинаково. Порядок анатомический, сверху вниз: им стоят чипы и
+# секции справочника. Своя группа по-прежнему вводится руками.
+MUSCLE_GROUPS = (
+    "Грудь",
+    "Спина",
+    "Плечи",
+    "Бицепс",
+    "Трицепс",
+    "Предплечья",
+    "Пресс",
+    "Квадрицепс",
+    "Бицепс бедра",
+    "Ягодицы",
+    "Икры",
+)
+_MUSCLE_GROUP_RANK = {name.casefold(): rank for rank, name in enumerate(MUSCLE_GROUPS)}
+
+
+def muscle_group_order(name):
+    """Ключ сортировки групп: сначала стартовый набор в своём порядке, потом
+    остальные по алфавиту. casefold, а не порядок кодов: группа в своём
+    написании иначе уехала бы в хвост за все записи с заглавной; последний
+    ключ — само написание, чтобы при «Грудь» и «грудь» порядок не зависел от
+    хеша множества (normalize_facet берёт первое)."""
+    folded = name.casefold()
+    return (_MUSCLE_GROUP_RANK.get(folded, len(MUSCLE_GROUPS)), folded, name)
+
+
 class Facets(NamedTuple):
     """Оси справочника: по ним строятся чипы фильтров и быстрого создания."""
 
     muscle_groups: list
     equipment: list
+
+    @property
+    def muscle_group_choices(self):
+        """Группы для ввода: стартовый набор плюс свои из данных.
+
+        Только для чипов и нормализации ввода — фильтры справочника берут
+        muscle_groups, иначе там появились бы группы без единого упражнения.
+        Написание набора побеждает своё: при «трицепс» в данных чип один —
+        «Трицепс». Считается в Python, без запроса.
+        """
+        starter = {name.casefold() for name in MUSCLE_GROUPS}
+        own = [name for name in self.muscle_groups if name.casefold() not in starter]
+        return sorted([*MUSCLE_GROUPS, *own], key=muscle_group_order)
 
 
 def facets_for(user):
@@ -341,10 +385,11 @@ def facets_from_pairs(pairs):
     # в конец списка чипов, за все записи с заглавной. Второй ключ — само
     # написание: при «Грудь» и «грудь» порядок множества зависит от хеша и
     # менялся бы от процесса к процессу, а normalize_facet берёт первое.
+    # Группы — тем же правилом, но стартовый набор впереди (muscle_group_order).
     def order(name):
         return (name.casefold(), name)
 
-    return Facets(sorted(groups, key=order), sorted(equipment, key=order))
+    return Facets(sorted(groups, key=muscle_group_order), sorted(equipment, key=order))
 
 
 def collapse_spaces(text):

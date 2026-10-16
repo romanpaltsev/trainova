@@ -918,7 +918,7 @@ class ExerciseQuickForm(forms.ModelForm):
 
     def clean_muscle_group(self):
         """Группа мышц необязательна; выбор чипа и своё поле сводит одно правило."""
-        return chosen_muscle_group(self.data, self.facets().muscle_groups)
+        return chosen_muscle_group(self.data, self.facets().muscle_group_choices)
 
     def clean_equipment(self):
         """Снаряд — вторая ось справочника, правило у него то же."""

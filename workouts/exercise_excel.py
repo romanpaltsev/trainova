@@ -476,7 +476,8 @@ class Catalog:
             ExerciseSettings.objects.filter(user=user).values_list("exercise_id", "weight_step")
         )
         facets = facets_from_pairs((item.muscle_group, item.equipment) for item in exercises)
-        self.groups = list(facets.muscle_groups)
+        # Со стартовым набором: «трицепс» из файла станет «Трицепс».
+        self.groups = list(facets.muscle_group_choices)
         self.equipment = list(facets.equipment)
 
     def find(self, name):

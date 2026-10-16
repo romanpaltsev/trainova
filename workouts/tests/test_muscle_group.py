@@ -7,7 +7,7 @@
 import pytest
 from django.urls import reverse
 
-from workouts.models import Exercise, facets_for, normalize_facet
+from workouts.models import MUSCLE_GROUPS, Exercise, facets_for, normalize_facet
 from workouts.tests.factories import ExerciseFactory, WorkoutFactory
 
 pytestmark = pytest.mark.django_db
@@ -122,7 +122,7 @@ def test_chips_are_offered_only_with_the_create_option(client, user):
     with_offer = client.get(reverse("live_exercises", args=[workout.pk]), {"q": "Совсем новое"})
     without_offer = client.get(reverse("live_exercises", args=[workout.pk]), {"q": "Жим лёжа"})
 
-    assert with_offer.context["muscle_groups"] == ["Грудь"]
+    assert with_offer.context["muscle_groups"] == list(MUSCLE_GROUPS)
     # Список групп на поиске не нужен — и лишнего запроса на каждую букву нет.
     assert without_offer.context["muscle_groups"] == []
 

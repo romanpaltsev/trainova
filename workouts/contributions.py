@@ -92,7 +92,7 @@ def make_global(item, *, contributor=None):
                     .distinct()
                 )
                 facets = facets_from_pairs(pairs)
-                item.muscle_group = normalize_facet(item.muscle_group, facets.muscle_groups)
+                item.muscle_group = normalize_facet(item.muscle_group, facets.muscle_group_choices)
                 item.equipment = normalize_facet(item.equipment, facets.equipment)
                 item.save(update_fields=["muscle_group", "equipment"])
             _publish(item, contributor)

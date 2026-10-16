@@ -9,7 +9,6 @@ import math
 from collections.abc import Callable
 from datetime import date, timedelta
 from decimal import Decimal
-from operator import attrgetter
 from typing import NamedTuple
 from urllib.parse import urlsplit
 
@@ -126,6 +125,7 @@ from workouts.models import (
     measurement_delta,
     measurement_display,
     metric_display,
+    muscle_group_order,
     parse_field_value,
     parse_weight_step,
     rest_display,
@@ -1307,7 +1307,7 @@ class LiveExerciseView(LoginRequiredMixin, View):
             ),
             # Только при предложении создать: на поиске списки фасетов не нужны,
             # и лишний запрос на каждую набранную букву тоже.
-            "muscle_groups": facets.muscle_groups if facets else [],
+            "muscle_groups": facets.muscle_group_choices if facets else [],
             "selected_muscle_group": group.strip(),
             "muscle_group_max_length": MUSCLE_GROUP_MAX_LENGTH,
             "equipment_list": facets.equipment if facets else [],
@@ -2487,7 +2487,7 @@ def exercise_detail_context(request, exercise, *, in_panel):
         **weight_step_context(exercise),
         # Обе оси приезжают одним запросом, поэтому второй блок чипов бюджету
         # страницы (девять запросов) ничего не стоил.
-        "muscle_groups": facets.muscle_groups,
+        "muscle_groups": facets.muscle_group_choices,
         "max_length": MUSCLE_GROUP_MAX_LENGTH,
         **equipment_context(exercise, facets),
         "stats_line": stats_line,
@@ -2592,7 +2592,8 @@ def group_by_muscle(exercises):
     buckets = {}
     for exercise in exercises:
         buckets.setdefault(exercise.muscle_group or "", []).append(exercise)
-    titles = sorted(title for title in buckets if title)
+    # Порядок групп — стартовый набор сверху вниз, свои после: тот же, что у чипов.
+    titles = sorted((title for title in buckets if title), key=muscle_group_order)
     if "" in buckets:
         titles.append("")
     return [{"title": title or NO_MUSCLE_GROUP_TITLE, "items": buckets[title]} for title in titles]
@@ -2637,7 +2638,11 @@ class CatalogSort(NamedTuple):
 CATALOG_SORTS = {
     "name": CatalogSort("Упражнение", "по названию", None, None, False),
     "group": CatalogSort(
-        "Группа", "по группе мышц", attrgetter("muscle_group"), lambda e: not e.muscle_group, False
+        "Группа",
+        "по группе мышц",
+        lambda e: muscle_group_order(e.muscle_group),
+        lambda e: not e.muscle_group,
+        False,
     ),
     "workouts": CatalogSort(
         "Тренировок",
@@ -2809,7 +2814,7 @@ class ExerciseMuscleGroupView(LoginRequiredMixin, View):
         # Общее упражнение правит только админ, чужое личное — никто.
         exercise = get_object_or_404(editable_exercises(request.user), pk=pk)
         exercise.muscle_group = chosen_muscle_group(
-            request.POST, facets_for(request.user).muscle_groups
+            request.POST, facets_for(request.user).muscle_group_choices
         )
         exercise.save(update_fields=["muscle_group"])
         # Список спрашиваем ещё раз уже после сохранения: только что введённая
@@ -2820,7 +2825,7 @@ class ExerciseMuscleGroupView(LoginRequiredMixin, View):
             "workouts/_muscle_group_choice.html",
             {
                 "exercise": exercise,
-                "muscle_groups": facets_for(request.user).muscle_groups,
+                "muscle_groups": facets_for(request.user).muscle_group_choices,
                 "max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "can_edit": True,
                 "saved": True,
@@ -3033,7 +3038,7 @@ class ExerciseCreateView(LoginRequiredMixin, View):
                     if chosen in Exercise.Measurement.values
                     else Exercise.Measurement.WEIGHT_REPS
                 ),
-                "muscle_groups": facets.muscle_groups,
+                "muscle_groups": facets.muscle_group_choices,
                 "selected_muscle_group": chosen_facet_value(request, "muscle_group").strip(),
                 "muscle_group_max_length": MUSCLE_GROUP_MAX_LENGTH,
                 "equipment_list": facets.equipment,

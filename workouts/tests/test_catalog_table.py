@@ -44,7 +44,7 @@ def catalog(user):
     older = ExerciseFactory(name="Становая тяга", muscle_group="Спина")
     recent_a = ExerciseFactory(name="Бжим", muscle_group="Грудь")
     recent_b = ExerciseFactory(name="Ажим", muscle_group="Грудь")
-    legs = ExerciseFactory(name="Присед", muscle_group="Ноги")
+    legs = ExerciseFactory(name="Присед", muscle_group="Квадрицепс")
     ExerciseFactory(name="Планка", muscle_group="Пресс")
     ExerciseFactory(name="Гиперэкстензия", muscle_group="")
     old_workout = WorkoutFactory(user=user, started_at=days_ago(10))
@@ -80,14 +80,16 @@ def test_sort_by_name_both_directions(client, user, catalog):
 
 
 def test_sort_by_group_keeps_ungrouped_last(client, user, catalog):
-    """Без группы — в хвосте при любом направлении, внутри группы — по названию."""
+    """Группы — в порядке стартового набора (сверху вниз: грудь, спина, пресс,
+    квадрицепс), а не по алфавиту; без группы — в хвосте при любом направлении,
+    внутри группы — по названию."""
     client.force_login(user)
 
     ascending = table_names(client, sort="group")
     descending = table_names(client, sort="-group")
 
-    assert ascending == ["Ажим", "Бжим", "Присед", "Планка", "Становая тяга", "Гиперэкстензия"]
-    assert descending == ["Становая тяга", "Планка", "Присед", "Ажим", "Бжим", "Гиперэкстензия"]
+    assert ascending == ["Ажим", "Бжим", "Становая тяга", "Планка", "Присед", "Гиперэкстензия"]
+    assert descending == ["Присед", "Планка", "Становая тяга", "Ажим", "Бжим", "Гиперэкстензия"]
 
 
 def test_sort_by_workouts_keeps_untrained_last(client, user, catalog):
