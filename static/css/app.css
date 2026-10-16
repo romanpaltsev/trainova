@@ -1482,6 +1482,127 @@ a.btn {
   font-weight: 700;
 }
 
+/* ---------- Фото моделей тренажёров ---------- */
+
+/* Строка окна выбора с фото: три цели в ряд — миниатюра (фото крупно),
+   сама строка (выбрать) и фотоаппарат (окно «Фото модели»). Кнопку в кнопку
+   HTML не вкладывает, поэтому строка выбора стала одной из соседок. */
+.app-pick-item {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-1);
+}
+.app-pick-item > .app-pick-row {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+/* Миниатюра — квадрат тач-таргета: в окне выбора, в строке «Моих тренажёров»
+   и в «Моих заявках». Без фото — та же ячейка с иконкой, чтобы названия
+   стояли на одной вертикали; is-spacer держит место у «Модель не знаю». */
+.app-photo-thumb {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: var(--app-tap-target);
+  height: var(--app-tap-target);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-field);
+  background-color: var(--app-raised);
+  color: var(--app-text-muted);
+}
+.app-photo-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.app-photo-thumb.is-add {
+  border-style: dashed;
+  background-color: transparent;
+  color: var(--app-accent-text);
+}
+.app-photo-thumb.is-spacer { visibility: hidden; }
+
+/* Фото крупно поверх окна выбора: внутри фона окна (он fixed на весь экран),
+   а не внутри карточки — у неё своя прокрутка и обрезка. */
+.app-photo-zoom {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--app-space-4) + env(safe-area-inset-top)) var(--app-space-4)
+    calc(var(--app-space-4) + env(safe-area-inset-bottom));
+  background-color: var(--app-bg);
+}
+.app-photo-zoom img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--app-radius-card);
+  object-fit: contain;
+}
+.app-photo-zoom .app-icon-btn {
+  position: absolute;
+  top: calc(var(--app-space-2) + env(safe-area-inset-top));
+  right: var(--app-space-2);
+  background-color: var(--app-raised);
+}
+
+/* Фото крупно в окне «Фото модели» и в заявке у администратора. Заглушка
+   «фото нет» прячется, как только image-resize.js покажет выбранный снимок. */
+.app-photo-large {
+  display: block;
+  width: 100%;
+  max-height: 50vh;
+  border-radius: var(--app-radius-field);
+  background-color: var(--app-raised);
+  object-fit: contain;
+}
+.app-photo-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  padding: var(--app-space-8) var(--app-space-4);
+  border: 1px dashed var(--app-line);
+  border-radius: var(--app-radius-field);
+  color: var(--app-text-muted);
+  font-weight: 600;
+}
+.app-photo-large:not([hidden]) + .app-photo-empty { display: none; }
+
+/* Поле файла спрятано за подписью-кнопкой: системная «Выберите файл» на
+   телефоне выглядит чужой. Фокус с клавиатуры остаётся на поле — рамку рисуем
+   на кнопке вокруг него. */
+.app-file-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-space-2);
+  cursor: pointer;
+}
+.app-file-btn:has(.app-file-input:focus-visible) {
+  outline: var(--app-focus-outline);
+  outline-offset: var(--app-focus-offset);
+}
+.app-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  opacity: 0;
+}
+
 /* Кнопка силовой карточки истории: «Повторить» во всю ширину */
 .app-workout-actions {
   display: flex;
@@ -2626,6 +2747,7 @@ a.btn {
 .app-spotlight,
 .app-queue-row,
 .app-pick-row,
+.app-photo-thumb,
 .app-live-add-tile,
 .app-trained-item,
 .app-stepper-btn,
@@ -2703,6 +2825,8 @@ a.btn {
     color: var(--app-text);
   }
 
+  button.app-photo-thumb:hover { border-color: var(--app-text-muted); }
+
   .app-link:hover {
     color: var(--app-text);
     text-decoration: underline;
@@ -2740,7 +2864,8 @@ a.btn {
 }
 
 /* Внутри прокручиваемого списка обводку снаружи срезает край контейнера. */
-.app-pick-row:focus-visible { outline-offset: -2px; }
+.app-pick-row:focus-visible,
+.app-pick-item > :focus-visible { outline-offset: -2px; }
 
 @media (min-width: 768px) {
   /* Ширины компонентов здесь больше не задаются: их даёт мера страницы

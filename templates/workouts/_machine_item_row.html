@@ -6,8 +6,18 @@
   «Предложить в общий список» и статус последней заявки (item.request_status
   из with_request_status; на рассмотрении — иконки нет); author — почта
   автора общей записи, пришедшей заявкой (только в секции администратора).
+  У модели слева — фото: миниатюра или плитка «добавить» с фотоаппаратом;
+  обе открывают окно «Фото модели» (MachinePhotoView). Колонка слева у всех
+  моделей одна — названия стоят на одной вертикали.
 {% endcomment %}
 <div class="app-row{% if kind == 'model' %} app-machine-model-row{% endif %}">
+  {% if kind == "model" %}
+    <button type="button" class="app-photo-thumb{% if not item.photo %} is-add{% endif %}"
+            hx-get="{% url 'machine_photo' item.pk %}" hx-target="#modal" hx-swap="innerHTML"
+            {% if item.photo %}aria-label="Фото: {{ item.name }}"{% else %}title="Добавить фото" aria-label="Добавить фото: {{ item.name }}"{% endif %}>
+      {% if item.photo %}<img src="{{ item.thumb_url }}" alt="" loading="lazy">{% else %}{% include "includes/camera.html" %}{% endif %}
+    </button>
+  {% endif %}
   <button type="button" class="app-row-text app-location-edit"
           hx-get="{% url 'machine_rename' kind item.pk %}"
           hx-target="#modal" hx-swap="innerHTML"

@@ -8,9 +8,14 @@
   шаг 2. Новое название вводится формой внизу; «Своё / Общее» — только у
   администратора (у остальных поля scope нет), и общая модель — только у общего
   производителя, поэтому у своего производителя чипов нет.
+  Фото моделей (решение 16.10.2026): у строки шага 2 три цели — миниатюра
+  показывает фото крупно поверх окна (zoom, без запроса), название выбирает,
+  фотоаппарат открывает окно «Фото модели» (только у моделей, которые человек
+  правит, item.photo_editable). Колонка миниатюр — только при with_thumbs.
 {% endcomment %}
 {% url 'exercise_machine' exercise.pk location.pk as machine_url %}
-<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+<div class="app-modal-backdrop" x-data="{ zoom: '' }"
+     @keydown.escape.window="zoom ? zoom = '' : $root.remove()">
   <div class="app-card app-modal" role="dialog" aria-modal="true"
        aria-labelledby="machine-modal-title">
     <div class="app-modal-head">
@@ -30,20 +35,42 @@
         ← Другой производитель
       </button>
       <div class="app-pick-list">
-        <button type="button" class="app-pick-row" hx-post="{{ machine_url }}"
-                hx-vals='{"action": "pick", "brand": "{{ brand.pk }}", "model": ""}'
-                hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
-          <span class="app-pick-name">Модель не знаю</span>
-          {% if machine and machine.brand_id == brand.pk and not machine.model_id %}{% include "includes/check.html" %}{% endif %}
-        </button>
-        {% for item in models %}
+        <div class="app-pick-item">
+          {% if with_thumbs %}<span class="app-photo-thumb is-spacer" aria-hidden="true"></span>{% endif %}
           <button type="button" class="app-pick-row" hx-post="{{ machine_url }}"
-                  hx-vals='{"action": "pick", "brand": "{{ brand.pk }}", "model": "{{ item.pk }}"}'
+                  hx-vals='{"action": "pick", "brand": "{{ brand.pk }}", "model": ""}'
                   hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
-            <span class="app-pick-name">{{ item.name }}</span>
-            {% if not item.is_global %}<span class="app-pick-meta">моё</span>{% endif %}
-            {% if machine.model_id == item.pk %}{% include "includes/check.html" %}{% endif %}
+            <span class="app-pick-name">Модель не знаю</span>
+            {% if machine and machine.brand_id == brand.pk and not machine.model_id %}{% include "includes/check.html" %}{% endif %}
           </button>
+        </div>
+        {% for item in models %}
+          <div class="app-pick-item">
+            {% if item.photo %}
+              <button type="button" class="app-photo-thumb" data-photo="{{ item.photo_url }}"
+                      @click="zoom = $el.dataset.photo" aria-label="Фото крупно: {{ item.name }}">
+                <img src="{{ item.thumb_url }}" alt="" loading="lazy">
+              </button>
+            {% elif with_thumbs %}
+              <span class="app-photo-thumb is-empty" aria-hidden="true">{% include "includes/machine.html" %}</span>
+            {% endif %}
+            <button type="button" class="app-pick-row" hx-post="{{ machine_url }}"
+                    hx-vals='{"action": "pick", "brand": "{{ brand.pk }}", "model": "{{ item.pk }}"}'
+                    hx-target="#modal" hx-swap="innerHTML" hx-disabled-elt="this">
+              <span class="app-pick-name">{{ item.name }}</span>
+              {% if not item.is_global %}<span class="app-pick-meta">моё</span>{% endif %}
+              {% if machine.model_id == item.pk %}{% include "includes/check.html" %}{% endif %}
+            </button>
+            {% if item.photo_editable %}
+              <button type="button" class="app-icon-btn"
+                      hx-get="{% url 'machine_photo' item.pk %}?back=picker&amp;exercise={{ exercise.pk }}&amp;location={{ location.pk }}"
+                      hx-target="#modal" hx-swap="innerHTML"
+                      title="{% if item.photo %}Заменить фото{% else %}Добавить фото{% endif %}"
+                      aria-label="{% if item.photo %}Заменить фото{% else %}Добавить фото{% endif %}: {{ item.name }}">
+                {% include "includes/camera.html" %}
+              </button>
+            {% endif %}
+          </div>
         {% endfor %}
       </div>
       <form class="mt-3" hx-post="{{ machine_url }}" hx-target="#modal" hx-swap="innerHTML"
@@ -100,5 +127,14 @@
               hx-vals='{"action": "remove"}' hx-target="#modal" hx-swap="innerHTML"
               hx-disabled-elt="this">{% if is_machine %}Убрать тренажёр{% else %}Убрать производителя{% endif %}</button>
     {% endif %}
+  </div>
+  {% comment %}Фото крупно — поверх окна, внутри фона: тап или Esc закрывают только его.{% endcomment %}
+  <div class="app-photo-zoom" x-show="zoom" x-cloak @click="zoom = ''" role="dialog"
+       aria-modal="true" aria-label="Фото модели">
+    <img :src="zoom" alt="">
+    <button type="button" class="app-icon-btn" aria-label="Закрыть фото">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
 </div>

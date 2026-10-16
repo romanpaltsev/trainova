@@ -17,6 +17,7 @@
       «{{ item.name }}» увидит администратор. Если он примет заявку, запись станет общей:
       ею смогут пользоваться все, а ваши тренировки с ней останутся как есть.
       {% if kind == "model" and not item.brand.is_global %}Вместе с моделью в общий список попадёт производитель «{{ item.brand.name }}».{% endif %}
+      {% if kind == "model" and item.photo %}Фото модели тоже увидят все — администратор посмотрит и его.{% endif %}
     </p>
     <p class="app-queue-hint mb-3">Править запись после этого сможет только администратор. Решение придёт на почту.</p>
     <form hx-post="{% url 'catalog_propose' kind item.pk %}" hx-target="#modal" hx-swap="innerHTML"

@@ -39,6 +39,8 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_date
 from django.views.generic import DeleteView, ListView, TemplateView, View
 
+from uploads.forms import ImageUploadForm
+from uploads.serve import serve_file
 from workouts import (
     contributions,
     excel,
@@ -82,6 +84,7 @@ from workouts.models import (
     LOCATION_NAME_MAX_LENGTH,
     MACHINE_BRAND_MAX_LENGTH,
     MACHINE_MODEL_MAX_LENGTH,
+    MACHINE_PHOTO_DIR,
     MAX_WEIGHT_KG,
     MEASUREMENT_FIELDS,
     METRIC_LABELS,
@@ -2864,8 +2867,8 @@ class ExerciseMachineView(LoginRequiredMixin, View):
     template_name = "workouts/_exercise_machine_modal.html"
 
     def get(self, request, pk, location_pk):
-        exercise, location = self.get_objects(request, pk, location_pk)
-        machine = self.current(request, exercise, location)
+        exercise, location = machine_picker_objects(request, pk, location_pk)
+        machine = current_machine(request.user, exercise, location)
         raw = request.GET.get("brand", "")
         if raw.isdecimal():
             brand = self.visible_brand(request, raw)
@@ -2873,11 +2876,11 @@ class ExerciseMachineView(LoginRequiredMixin, View):
             brand = machine.brand
         else:
             brand = None
-        return self.modal(request, exercise, location, machine, brand)
+        return machine_picker(request, exercise, location, brand, machine=machine)
 
     def post(self, request, pk, location_pk):
-        exercise, location = self.get_objects(request, pk, location_pk)
-        machine = self.current(request, exercise, location)
+        exercise, location = machine_picker_objects(request, pk, location_pk)
+        machine = current_machine(request.user, exercise, location)
         action = request.POST.get("action", "")
         lookup = {"user": request.user, "exercise": exercise, "location": location}
         if action == "remove":
@@ -2886,12 +2889,12 @@ class ExerciseMachineView(LoginRequiredMixin, View):
         if action == "brand_new":
             form = self.name_form(request, MACHINE_BRAND_MAX_LENGTH, prefix="brand")
             if not form.is_valid():
-                return self.modal(request, exercise, location, machine, None, brand_form=form)
+                return machine_picker(request, exercise, location, None, machine=machine, form=form)
             brand = services.machine_brand_for_name(
                 request.user, form.cleaned_data["name"], shared=form.is_global
             )
             # Производитель выбран — дальше его модель; сохранять рано.
-            return self.modal(request, exercise, location, machine, brand)
+            return machine_picker(request, exercise, location, brand, machine=machine)
         brand = self.visible_brand(request, request.POST.get("brand", ""))
         if action == "model_new":
             form = self.name_form(request, MACHINE_MODEL_MAX_LENGTH, prefix="model")
@@ -2903,7 +2906,9 @@ class ExerciseMachineView(LoginRequiredMixin, View):
                 except ValueError as error:
                     form.add_error("name", str(error))
             if form.errors:
-                return self.modal(request, exercise, location, machine, brand, model_form=form)
+                return machine_picker(
+                    request, exercise, location, brand, machine=machine, form=form
+                )
         else:
             raw = request.POST.get("model", "")
             model = None
@@ -2916,18 +2921,6 @@ class ExerciseMachineView(LoginRequiredMixin, View):
             **lookup, defaults={"brand": brand, "model": model}
         )
         return self.refresh()
-
-    def get_objects(self, request, pk, location_pk):
-        exercise = get_object_or_404(Exercise.objects.visible_to(request.user), pk=pk)
-        location = get_object_or_404(Location.objects.filter(owner=request.user), pk=location_pk)
-        return exercise, location
-
-    def current(self, request, exercise, location):
-        return (
-            ExerciseMachine.objects.filter(user=request.user, exercise=exercise, location=location)
-            .select_related("brand", "model")
-            .first()
-        )
 
     def visible_brand(self, request, raw):
         # Чужой свой производитель по прямому id — 404, как чужое место.
@@ -2945,29 +2938,54 @@ class ExerciseMachineView(LoginRequiredMixin, View):
         response["HX-Refresh"] = "true"
         return response
 
-    def modal(
-        self, request, exercise, location, machine, brand, *, brand_form=None, model_form=None
-    ):
-        user = request.user
-        context = {
-            "exercise": exercise,
-            "location": location,
-            "machine": machine,
-            "brand": brand,
-            "is_admin": user.is_admin,
-            "is_machine": is_machine(exercise),
-        }
-        if brand is None:
-            context["brands"] = MachineBrand.objects.visible_to(user)
-            context["form"] = brand_form or MachineNameForm(
-                user=user, max_length=MACHINE_BRAND_MAX_LENGTH, prefix="brand"
-            )
-        else:
-            context["models"] = MachineModel.objects.visible_to(user).filter(brand=brand)
-            context["form"] = model_form or MachineNameForm(
-                user=user, max_length=MACHINE_MODEL_MAX_LENGTH, prefix="model"
-            )
-        return render(request, self.template_name, context)
+
+def machine_picker_objects(request, exercise_pk, location_pk):
+    """Упражнение (любое видимое) и место (только своё) окна «Тренажёр»."""
+    exercise = get_object_or_404(Exercise.objects.visible_to(request.user), pk=exercise_pk)
+    location = get_object_or_404(Location.objects.filter(owner=request.user), pk=location_pk)
+    return exercise, location
+
+
+def current_machine(user, exercise, location):
+    return (
+        ExerciseMachine.objects.filter(user=user, exercise=exercise, location=location)
+        .select_related("brand", "model")
+        .first()
+    )
+
+
+def machine_picker(request, exercise, location, brand, *, machine, form=None):
+    """Окно «Тренажёр»: шаг производителей (brand — None) или моделей brand.
+
+    Отдельной функцией, а не методом ExerciseMachineView: в шаг моделей
+    возвращается и окно «Фото модели», открытое отсюда.
+    """
+    user = request.user
+    context = {
+        "exercise": exercise,
+        "location": location,
+        "machine": machine,
+        "brand": brand,
+        "is_admin": user.is_admin,
+        "is_machine": is_machine(exercise),
+    }
+    if brand is None:
+        context["brands"] = MachineBrand.objects.visible_to(user)
+        context["form"] = form or MachineNameForm(
+            user=user, max_length=MACHINE_BRAND_MAX_LENGTH, prefix="brand"
+        )
+    else:
+        models_ = list(MachineModel.objects.visible_to(user).filter(brand=brand))
+        for item in models_:
+            item.photo_editable = can_edit_machine_item(user, item)
+        context["models"] = models_
+        # Колонка миниатюр — только когда фото есть хоть у одной модели: иначе
+        # строки остаются такими же компактными, как в других окнах выбора.
+        context["with_thumbs"] = any(item.photo for item in models_)
+        context["form"] = form or MachineNameForm(
+            user=user, max_length=MACHINE_MODEL_MAX_LENGTH, prefix="model"
+        )
+    return render(request, ExerciseMachineView.template_name, context)
 
 
 class ExerciseCreateView(LoginRequiredMixin, View):
@@ -3711,6 +3729,20 @@ def editable_machine_items(user, model):
     return items
 
 
+def can_edit_machine_item(user, item):
+    """То же правило, что editable_machine_items, для уже загруженной записи."""
+    return item.owner_id == user.pk or (item.owner_id is None and user.is_admin)
+
+
+def machine_photo_models(user):
+    """Модели, чьё фото человек видит: видимые ему, а администратору — ещё и
+    модели из заявок: он решает по фото, а модель в заявке пока чужая личная."""
+    lookup = Q(owner__isnull=True) | Q(owner=user)
+    if user.is_admin:
+        lookup |= Q(requests__isnull=False)
+    return MachineModel.objects.filter(lookup)
+
+
 class MyMachinesView(LoginRequiredMixin, TemplateView):
     """«Мои тренажёры»: свои производители и модели — переименовать и удалить.
 
@@ -4020,6 +4052,77 @@ class MachineRenameView(MachineItemMixin, View):
             request,
             self.template_name,
             {"item": item, "kind": self.kwargs["kind"], "form": form},
+        )
+
+
+class MachinePhotoView(LoginRequiredMixin, View):
+    """Окно «Фото модели»: загрузить, заменить или убрать фото модели справочника.
+
+    Править можно то же, что на «Моих тренажёрах» (editable_machine_items):
+    своё, а администратору — и общее; чужое — 404. Окно открывают с «Моих
+    тренажёров» и из окна «Тренажёр» (back=picker с упражнением и местом):
+    после сохранения человек возвращается к списку моделей с новой миниатюрой,
+    иначе страница перезагружается. Возврат задаётся словом, а не адресом —
+    открытого редиректа не получится. Старый файл остаётся на диске до ночной
+    уборки (uploads.sweep): удаляет файлы один путь.
+    """
+
+    template_name = "workouts/_machine_photo_modal.html"
+
+    def get(self, request, pk):
+        item = self.get_item(pk)
+        return self.modal(request, item, ImageUploadForm(), self.picker(request))
+
+    def post(self, request, pk):
+        item = self.get_item(pk)
+        picker = self.picker(request)
+        if request.POST.get("action") == "remove":
+            item.photo = item.photo_thumb = ""
+        else:
+            form = ImageUploadForm(request.POST, request.FILES)
+            if not form.is_valid():
+                return self.modal(request, item, form, picker)
+            image = form.cleaned_data["image"]
+            item.photo.save(image.full.name, image.full, save=False)
+            item.photo_thumb.save(image.thumb.name, image.thumb, save=False)
+        item.save(update_fields=["photo", "photo_thumb"])
+        if picker is not None:
+            exercise, location = picker
+            machine = current_machine(request.user, exercise, location)
+            return machine_picker(request, exercise, location, item.brand, machine=machine)
+        response = HttpResponse()
+        response["HX-Refresh"] = "true"
+        return response
+
+    def get_item(self, pk):
+        items = editable_machine_items(self.request.user, MachineModel).select_related("brand")
+        return get_object_or_404(items, pk=pk)
+
+    def picker(self, request):
+        """(упражнение, место) окна «Тренажёр», куда вернуться, или None."""
+        data = request.POST if request.method == "POST" else request.GET
+        if data.get("back") != "picker":
+            return None
+        exercise_pk, location_pk = data.get("exercise", ""), data.get("location", "")
+        if not (exercise_pk.isdecimal() and location_pk.isdecimal()):
+            raise Http404
+        return machine_picker_objects(request, exercise_pk, location_pk)
+
+    def modal(self, request, item, form, picker):
+        exercise, location = picker or (None, None)
+        context = {"item": item, "form": form, "exercise": exercise, "location": location}
+        return render(request, self.template_name, context)
+
+
+class MachinePhotoFileView(LoginRequiredMixin, View):
+    """Файл фото модели — только тому, кто видит модель (uploads.serve):
+    у своей модели фото видит лишь хозяин, у чужой — 404, как у записи."""
+
+    def get(self, request, name):
+        return serve_file(
+            machine_photo_models(request.user),
+            ["photo", "photo_thumb"],
+            f"{MACHINE_PHOTO_DIR}/{name}",
         )
 
 

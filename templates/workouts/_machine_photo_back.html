@@ -1,0 +1,6 @@
+{% comment %}Куда вернуться после сохранения окна «Фото модели» — словом, а не адресом.{% endcomment %}
+{% if exercise %}
+  <input type="hidden" name="back" value="picker">
+  <input type="hidden" name="exercise" value="{{ exercise.pk }}">
+  <input type="hidden" name="location" value="{{ location.pk }}">
+{% endif %}

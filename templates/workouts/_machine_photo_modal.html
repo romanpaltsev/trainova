@@ -1,0 +1,69 @@
+{% comment %}
+  Окно «Фото модели» (MachinePhotoView): текущее фото крупно, выбрать новое,
+  убрать. exercise и location заданы — окно открыто из окна «Тренажёр»: «К
+  моделям» и сохранение возвращают к его списку моделей. Снимок уменьшает
+  браузер (image-resize.js по data-resize у поля), сервер пережимает сам.
+{% endcomment %}
+{% url 'machine_photo' item.pk as photo_url %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="photo-modal-title">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title" id="photo-modal-title">Фото модели</h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="app-queue-hint mb-3">{{ item.brand.name }} · {{ item.name }}</p>
+    {% if exercise %}
+      <button type="button" class="btn btn-quiet mb-3"
+              hx-get="{% url 'exercise_machine' exercise.pk location.pk %}?brand={{ item.brand_id }}"
+              hx-target="#modal" hx-swap="innerHTML">
+        ← К моделям
+      </button>
+    {% endif %}
+
+    <form hx-post="{{ photo_url }}" hx-encoding="multipart/form-data" hx-target="#modal"
+          hx-swap="innerHTML" hx-disabled-elt="find button" novalidate>
+      {% include "workouts/_machine_photo_back.html" %}
+      {% comment %}
+        Превью выбранного снимка рисует image-resize.js в то же <img>, что
+        показывает текущее фото; заглушка за ним прячется, как только он виден.
+      {% endcomment %}
+      <div class="app-photo-frame">
+        <img class="app-photo-large" src="{{ item.photo_url }}" alt="Фото: {{ item.brand.name }} · {{ item.name }}"
+             data-resize-preview{% if not item.photo %} hidden{% endif %}>
+        <div class="app-photo-empty">
+          {% include "includes/machine.html" with size=32 %}
+          <span>Фото пока нет</span>
+        </div>
+      </div>
+      <label class="btn btn-quiet app-btn-fill app-file-btn mt-3">
+        {% include "includes/camera.html" %}
+        {% if item.photo %}Выбрать другое фото{% else %}Выбрать фото{% endif %}
+        {{ form.image }}
+      </label>
+      {% for error in form.image.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
+      <div class="invalid-feedback d-block" data-resize-error hidden></div>
+      <p class="app-queue-hint mt-2 mb-0">
+        {% if item.is_global %}
+          Фото увидят все, кто выбирает эту модель, — снимайте тренажёр, без людей в кадре.
+        {% else %}
+          Фото видите только вы. Если модель станет общей, его увидят все.
+        {% endif %}
+      </p>
+      {% comment %}Включает её image-resize.js, когда снимок выбран и ужат: сохранять до этого нечего.{% endcomment %}
+      <button type="submit" class="btn btn-accent app-btn-fill mt-3" disabled>Сохранить фото</button>
+    </form>
+
+    {% if item.photo %}
+      <form hx-post="{{ photo_url }}" hx-target="#modal" hx-swap="innerHTML"
+            hx-disabled-elt="find button">
+        {% include "workouts/_machine_photo_back.html" %}
+        <input type="hidden" name="action" value="remove">
+        <button type="submit" class="btn btn-danger-quiet app-btn-fill mt-2">Убрать фото</button>
+      </form>
+    {% endif %}
+  </div>
+</div>

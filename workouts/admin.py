@@ -115,6 +115,14 @@ class MachineModelAdmin(CatalogAdmin):
     list_display = ("name", "brand", "owner_display")
     search_fields = ("name", "brand__name")
     autocomplete_fields = ("owner", "brand")
+    # Фото загружают только окном «Фото модели»: там снимок пережимается и
+    # теряет EXIF с координатами, а поле админки сохранило бы файл как есть.
+    exclude = ("photo", "photo_thumb")
+    readonly_fields = ("has_photo",)
+
+    @admin.display(description="фото", boolean=True)
+    def has_photo(self, obj):
+        return bool(obj.photo)
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("brand")

@@ -9,6 +9,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 from django.db.models.functions import Coalesce, Lower
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.timezone import localtime
 
@@ -1319,6 +1320,11 @@ class MachineBrand(CatalogItem):
         ]
 
 
+# Каталог фото моделей в хранилище: имя файла в адресе отдачи — без него
+# (MachinePhotoFileView достраивает имя обратно).
+MACHINE_PHOTO_DIR = "machines"
+
+
 class MachineModel(CatalogItem):
     """Модель тренажёра у производителя — тоже гибридный справочник.
 
@@ -1341,6 +1347,13 @@ class MachineModel(CatalogItem):
     )
     name = models.CharField("название", max_length=MACHINE_MODEL_MAX_LENGTH)
     contributed_by = contributor_field()
+    # Фото модели (решение 16.10.2026): одно на запись, видит его каждый, кто
+    # видит саму модель, — поэтому оно у справочника, а не у тренажёра в месте:
+    # найти модель по картинке должны и другие. Файлы уже пережаты
+    # (uploads.images): крупный и миниатюра с общим именем; пусто — фото нет.
+    # Пишет их только MachinePhotoView, старые файлы убирает ночная уборка.
+    photo = models.FileField("фото", upload_to=MACHINE_PHOTO_DIR, blank=True)
+    photo_thumb = models.FileField("миниатюра фото", upload_to=MACHINE_PHOTO_DIR, blank=True)
 
     class Meta(CatalogItem.Meta):
         abstract = False
@@ -1348,6 +1361,12 @@ class MachineModel(CatalogItem):
         verbose_name_plural = "модели тренажёров"
         ordering = ["name"]
         constraints = [
+            # Миниатюра и крупный кадр приходят и уходят парой: строка с одним
+            # из них показала бы битую картинку в одном из списков.
+            models.CheckConstraint(
+                condition=Q(photo="", photo_thumb="") | (~Q(photo="") & ~Q(photo_thumb="")),
+                name="machine_model_photo_pair",
+            ),
             models.UniqueConstraint(
                 "brand",
                 Lower("name"),
@@ -1363,6 +1382,25 @@ class MachineModel(CatalogItem):
                 violation_error_message="Общая модель с таким названием уже есть.",
             ),
         ]
+
+    @property
+    def photo_url(self):
+        return machine_photo_url(self.photo)
+
+    @property
+    def thumb_url(self):
+        return machine_photo_url(self.photo_thumb)
+
+
+def machine_photo_url(file):
+    """Адрес отдачи фото модели (MachinePhotoFileView) или "" — фото нет.
+
+    В адресе — имя файла, уникальное на каждую загрузку: замена фото меняет
+    адрес, поэтому браузер может кэшировать картинку навсегда.
+    """
+    if not file:
+        return ""
+    return reverse("machine_photo_file", args=[file.name.rsplit("/", 1)[-1]])
 
 
 class ExerciseMachine(models.Model):

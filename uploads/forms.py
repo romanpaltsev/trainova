@@ -14,7 +14,11 @@ class ImageUploadForm(forms.Form):
     image = forms.FileField(
         label="Фото",
         error_messages={"required": "Выберите фото.", "empty": "Файл пустой."},
-        widget=forms.FileInput(attrs={"accept": "image/*", "data-resize": ""}),
+        # app-file-input прячет поле визуально: нажимают подпись-кнопку вокруг
+        # него, а фокус с клавиатуры остаётся на самом поле.
+        widget=forms.FileInput(
+            attrs={"accept": "image/*", "data-resize": "", "class": "app-file-input"}
+        ),
     )
 
     def clean_image(self):

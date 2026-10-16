@@ -79,6 +79,16 @@ urlpatterns = [
         views.MachineDeleteView.as_view(),
         name="machine_delete",
     ),
+    path(
+        "profile/machines/model/<int:pk>/photo/",
+        views.MachinePhotoView.as_view(),
+        name="machine_photo",
+    ),
+    path(
+        "profile/machines/photos/<str:name>",
+        views.MachinePhotoFileView.as_view(),
+        name="machine_photo_file",
+    ),
     path("profile/sports/<int:pk>/delete/", views.SportDeleteView.as_view(), name="sport_delete"),
     path("profile/locations/", views.MyLocationsView.as_view(), name="my_locations"),
     path("profile/gear/", views.MyGearView.as_view(), name="my_gear"),

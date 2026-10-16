@@ -26,6 +26,9 @@
 <div class="app-rows app-rows-board">
   {% for req in items %}
     <div class="app-row">
+      {% if req.kind == "model" and req.model.photo %}
+        <span class="app-photo-thumb"><img src="{{ req.model.thumb_url }}" alt="" loading="lazy"></span>
+      {% endif %}
       <span class="app-row-text">
         <span class="app-row-name">
           {% if req.kind == "exercise" %}
