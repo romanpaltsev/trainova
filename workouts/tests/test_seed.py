@@ -32,7 +32,8 @@ def test_seed_creates_starter_changelog_entries():
     entries = ChangelogEntry.objects.published()
     assert entries.count() == len(CHANGELOG)
     assert entries.filter(kind=ChangelogEntry.Kind.FIX).count() == 1
-    assert entries.first().title == "Тёмная и светлая темы"  # порядок — новые сверху
+    newest = max(CHANGELOG, key=lambda entry: entry[3])
+    assert entries.first().title == newest[1]  # порядок — новые сверху
 
 
 def test_seed_is_idempotent():
@@ -57,7 +58,8 @@ def test_seed_creates_no_exercises():
 def test_seed_keeps_edited_changelog_entry():
     """Правки админа в существующей записи команда не перезаписывает."""
     call_command("seed")
-    entry = ChangelogEntry.objects.get(title="Таймер отдыха")
+    title = CHANGELOG[-1][1]
+    entry = ChangelogEntry.objects.get(title=title)
     entry.body = "Текст, отредактированный админом."
     entry.save(update_fields=["body"])
 
@@ -65,7 +67,7 @@ def test_seed_keeps_edited_changelog_entry():
 
     entry.refresh_from_db()
     assert entry.body == "Текст, отредактированный админом."
-    assert ChangelogEntry.objects.filter(title="Таймер отдыха").count() == 1
+    assert ChangelogEntry.objects.filter(title=title).count() == 1
 
 
 def test_seed_fixes_category_of_existing_global_sport():
