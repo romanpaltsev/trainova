@@ -65,6 +65,11 @@ urlpatterns = [
         name="machine_create",
     ),
     path(
+        "profile/machines/<str:kind>/<int:pk>/",
+        views.MachineDetailView.as_view(),
+        name="machine_detail",
+    ),
+    path(
         "profile/machines/<str:kind>/<int:pk>/make-global/",
         views.MakeGlobalView.as_view(),
         name="machine_make_global",

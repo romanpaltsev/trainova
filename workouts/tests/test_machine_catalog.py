@@ -6,18 +6,25 @@
 """
 
 import importlib
+import re
+from datetime import datetime
 
 import pytest
 from django.urls import reverse
+from django.utils import timezone
 
 from accounts.deletion import delete_user_data
-from workouts.models import ExerciseMachine, MachineBrand, MachineModel
+from workouts.models import ExerciseMachine, MachineBrand, MachineModel, Sport
 from workouts.tests.budgets import SIDEBAR_QUERIES
 from workouts.tests.factories import (
+    CardioPartFactory,
+    ExerciseFactory,
     ExerciseMachineFactory,
     LocationFactory,
     MachineBrandFactory,
     MachineModelFactory,
+    SportFactory,
+    WorkoutFactory,
 )
 
 pytestmark = pytest.mark.django_db
@@ -332,3 +339,227 @@ def test_page_has_create_buttons(client, user):
 
     assert reverse("machine_create", args=["brand"]) in html
     assert f"{reverse('machine_create', args=['model'])}?brand={brand.pk}" in html
+
+
+# ---------- Окно записи: где стоит тренажёр ----------
+
+
+def detail(client, kind, item):
+    return client.get(reverse("machine_detail", args=[kind, item.pk]))
+
+
+def cardio_part(user, sport, brand, model, *, started_at):
+    """Часть кардио с тренажёром; started_at=None — часть плана (черновика)."""
+    workout = WorkoutFactory(
+        user=user,
+        sport=sport,
+        started_at=started_at,
+        duration_min=None if started_at is None else 30,
+    )
+    return CardioPartFactory(workout=workout, brand=brand, model=model)
+
+
+@pytest.fixture
+def hammer(user):
+    """Свой производитель с моделью: жим ногами в двух залах, разгибания без модели."""
+    brand = MachineBrandFactory(name="Hammer Strength", owner=user)
+    model = MachineModelFactory(brand=brand, name="Plate-Loaded Leg Press", owner=user)
+    press = ExerciseFactory(name="Жим ногами")
+    extension = ExerciseFactory(name="Разгибание ног")
+    gym = LocationFactory(owner=user, name="СпортЛайф")
+    home = LocationFactory(owner=user, name="Дом")
+    ExerciseMachineFactory(user=user, exercise=press, location=gym, brand=brand, model=model)
+    ExerciseMachineFactory(user=user, exercise=press, location=home, brand=brand, model=model)
+    ExerciseMachineFactory(user=user, exercise=extension, location=gym, brand=brand, model=None)
+    return brand, model, press, extension
+
+
+def test_rows_open_window_and_rename_lives_in_it(client, user, hammer):
+    brand, model, _, _ = hammer
+    client.force_login(user)
+
+    page = client.get(URL).content.decode()
+    for kind, item in [("brand", brand), ("model", model)]:
+        assert reverse("machine_detail", args=[kind, item.pk]) in page
+        assert reverse("machine_rename", args=[kind, item.pk]) not in page
+
+    window = detail(client, "brand", brand).content.decode()
+    assert reverse("machine_rename", args=["brand", brand.pk]) in window
+
+    # «Отмена» переименования возвращает в окно записи, а не закрывает всё.
+    rename_modal = client.get(reverse("machine_rename", args=["brand", brand.pk]))
+    assert reverse("machine_detail", args=["brand", brand.pk]) in rename_modal.content.decode()
+
+
+def test_brand_window_lists_exercises_with_place_and_model(client, user, hammer):
+    brand, _, press, extension = hammer
+    client.force_login(user)
+
+    html = detail(client, "brand", brand).content.decode()
+
+    assert "Производитель" in html
+    # Строка — упражнение × место: жим в двух залах — две строки, как в подписи.
+    assert html.count(f'href="{reverse("exercise_detail", args=[press.pk])}"') == 2
+    assert f'href="{reverse("exercise_detail", args=[extension.pk])}"' in html
+    assert "Дом · Plate-Loaded Leg Press" in html
+    assert "СпортЛайф · Plate-Loaded Leg Press" in html
+    assert "СпортЛайф · модель не указана" in html
+    assert html.index("Жим ногами") < html.index("Разгибание ног")
+    assert "у 3 упражнений" in client.get(URL).content.decode()
+
+
+def test_model_window_lists_only_its_rows(client, user, hammer):
+    _, model, press, extension = hammer
+    other_model = MachineModelFactory(brand=model.brand, name="ISO Row", owner=user)
+    row = ExerciseFactory(name="Тяга в тренажёре")
+    ExerciseMachineFactory(user=user, exercise=row, brand=model.brand, model=other_model)
+    client.force_login(user)
+
+    html = detail(client, "model", model).content.decode()
+
+    assert "Модель · Hammer Strength" in html
+    assert reverse("exercise_detail", args=[press.pk]) in html
+    assert "Тяга в тренажёре" not in html
+    assert "Разгибание ног" not in html
+    assert "модель не указана" not in html
+    assert "СпортЛайф" in html
+
+
+def test_window_shows_cardio_by_sport_including_plans(client, user):
+    brand = MachineBrandFactory(name="Мой Technogym", owner=user)
+    model = MachineModelFactory(brand=brand, name="Run 1000", owner=user)
+    run = SportFactory(name="Бег", category=Sport.Category.CARDIO)
+    walk = SportFactory(name="Ходьба", category=Sport.Category.CARDIO)
+    moscow = timezone.get_current_timezone()
+    cardio_part(user, run, brand, model, started_at=datetime(2026, 9, 1, 10, 0, tzinfo=moscow))
+    cardio_part(user, run, brand, model, started_at=datetime(2026, 10, 12, 19, 0, tzinfo=moscow))
+    cardio_part(user, run, brand, model, started_at=None)
+    cardio_part(user, walk, brand, model, started_at=None)
+    client.force_login(user)
+
+    html = detail(client, "model", model).content.decode()
+
+    assert "Ни у одного упражнения" in html
+    assert "3 раза · последний 12 окт" in html
+    assert "1 раз · в плане" in html
+    assert html.index("Бег") < html.index("Ходьба")  # свежие первыми, только планы — в конце
+    # Планы с тренажёром держат запись так же, как записанные: сумма сходится с подписью.
+    assert "в 4 кардио" in client.get(URL).content.decode()
+
+
+def test_unused_record_window_says_where_to_pick(client, user):
+    brand = MachineBrandFactory(name="Kettler", owner=user)
+    model = MachineModelFactory(brand=brand, name="Axos", owner=user)
+    client.force_login(user)
+
+    brand_html = detail(client, "brand", brand).content.decode()
+    model_html = detail(client, "model", model).content.decode()
+
+    assert "Пока нигде не указан." in brand_html
+    assert "Пока нигде не указана." in model_html
+    assert "на странице упражнения" in brand_html
+    assert "Кардио" not in brand_html
+
+
+def test_window_isolation(client, user, other_user):
+    theirs = MachineBrandFactory(name="Чужой", owner=other_user)
+    shared = MachineBrandFactory(name="Technogym")
+    shared_model = MachineModelFactory(brand=shared, name="Pure")
+    mine = MachineModelFactory(brand=shared, name="Мой Pure", owner=user)
+    client.force_login(user)
+
+    assert detail(client, "brand", theirs).status_code == 404
+    assert detail(client, "brand", shared).status_code == 404
+    assert detail(client, "model", shared_model).status_code == 404
+    assert detail(client, "model", mine).status_code == 200
+    assert client.get(reverse("machine_detail", args=["nonsense", mine.pk])).status_code == 404
+
+    client.logout()
+    response = detail(client, "model", mine)
+    assert response.status_code == 302
+    assert response.url.startswith(reverse("account_login"))
+
+
+def test_admin_sees_others_of_shared_record_only_as_number(client, admin_user, other_user):
+    shared = MachineBrandFactory(name="Technogym")
+    model = MachineModelFactory(brand=shared, name="Pure")
+    ExerciseMachineFactory(
+        user=admin_user,
+        exercise=ExerciseFactory(name="Жим ногами"),
+        location=LocationFactory(owner=admin_user, name="Мой зал"),
+        brand=shared,
+        model=model,
+    )
+    ExerciseMachineFactory(
+        user=other_user,
+        exercise=ExerciseFactory(name="Чужое упражнение", owner=other_user),
+        location=LocationFactory(owner=other_user, name="Чужой зал"),
+        brand=shared,
+        model=model,
+    )
+    CardioPartFactory(workout__user=other_user, brand=shared, model=model)
+    own = MachineBrandFactory(name="Свой", owner=admin_user)
+    ExerciseMachineFactory(user=admin_user, brand=own, model=None)
+    client.force_login(admin_user)
+
+    html = detail(client, "brand", shared).content.decode()
+
+    assert "Жим ногами" in html
+    assert "Мой зал" in html
+    assert "Чужое упражнение" not in html
+    assert "Чужой зал" not in html
+    assert "У других участников: у 1 упражнения · в 1 кардио" in html
+    assert "У других участников" not in detail(client, "brand", own).content.decode()
+
+
+@pytest.mark.parametrize("count", [1, 5])
+def test_window_query_budget_does_not_grow(client, user, count, django_assert_max_num_queries):
+    brand = MachineBrandFactory(name="Kettler", owner=user)
+    model = MachineModelFactory(brand=brand, name="Axos", owner=user)
+    for number in range(count):
+        ExerciseMachineFactory(
+            user=user,
+            exercise=ExerciseFactory(name=f"Упражнение {number}"),
+            location=LocationFactory(owner=user, name=f"Зал {number}"),
+            brand=brand,
+            model=model,
+        )
+        sport = SportFactory(name=f"Кардио {number}", category=Sport.Category.CARDIO)
+        cardio_part(user, sport, brand, model, started_at=timezone.now())
+    client.force_login(user)
+
+    # Пара SAVEPOINT/RELEASE транзакции запроса, сессия, пользователь, запись со
+    # счётчиками, свои тренажёры упражнений, кардио по видам спорта.
+    with django_assert_max_num_queries(7):
+        html = detail(client, "brand", brand).content.decode()
+
+    assert html.count("Упражнение ") == count
+    assert html.count("Кардио ") == count
+
+
+def test_window_title_keeps_pencil_with_last_word(client, user):
+    """Карандаш заголовка склеен с последним словом, а длинное слово без
+    пробелов — нет: ему нужно переноситься."""
+    brand = MachineBrandFactory(name="Hammer Strength", owner=user)
+    model = MachineModelFactory(brand=brand, name="Супермегатренажёрдляжиманогами", owner=user)
+    client.force_login(user)
+
+    brand_html = detail(client, "brand", brand).content.decode()
+    model_html = detail(client, "model", model).content.decode()
+
+    # Перевод строки перед <svg> — от инклуда карандаша; внутри text-nowrap
+    # он не даёт переноса.
+    assert re.search(r'Hammer <span class="text-nowrap">Strength\s*<svg', brand_html)
+    assert re.search(r'Супермегатренажёрдляжиманогами<span class="text-nowrap">\s*<svg', model_html)
+
+
+def test_shared_record_used_only_by_others_is_not_called_unused(client, admin_user, other_user):
+    shared = MachineBrandFactory(name="Technogym")
+    ExerciseMachineFactory(user=other_user, brand=shared, model=None)
+    client.force_login(admin_user)
+
+    html = detail(client, "brand", shared).content.decode()
+
+    assert "Ни у одного упражнения." in html
+    assert "Пока нигде не" not in html
+    assert "У других участников: у 1 упражнения" in html

@@ -1,0 +1,76 @@
+{% comment %}
+  Окно записи справочника на «Моих тренажёрах» (MachineDetailView): где стоит
+  этот производитель или модель. Упражнения — свои тренажёры упражнений,
+  строка — упражнение × место, как в подписи «у N упражнений»; ссылка ведёт
+  на страницу упражнения, где тренажёр и меняют. Кардио — свои части по видам
+  спорта, без перехода: страницы «пробежки на этой дорожке» нет. others — у
+  общей записи (её видит только администратор): чужое — числом, без подробностей.
+  Заголовок — кнопка переименования с карандашом, приём заголовка упражнения;
+  имя окну даёт текст названия, а не aria-label кнопки («Переименовать …»).
+{% endcomment %}
+<div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
+  <div class="app-card app-modal" role="dialog" aria-modal="true"
+       aria-labelledby="machine-detail-name">
+    <div class="app-modal-head">
+      <h2 class="app-modal-title">
+        <button type="button" class="app-title-edit"
+                hx-get="{% url 'machine_rename' kind item.pk %}" hx-target="#modal" hx-swap="innerHTML"
+                aria-label="Переименовать {{ item.name }}">
+          <span id="machine-detail-name">{{ name_head }}{% if name_head and name_tail %} {% endif %}<span class="text-nowrap">{{ name_tail }}{% include "includes/pencil.html" %}</span></span>
+        </button>
+      </h2>
+      <button type="button" class="app-icon-btn" aria-label="Закрыть" @click="$root.remove()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="app-queue-hint mb-3">{% if kind == "model" %}Модель · {{ item.brand.name }}{% else %}Производитель{% endif %}</p>
+
+    {% comment %}
+      Одна прокрутка на оба блока: у шторки телефона нет предела высоты, и два
+      списка со своими пределами выталкивали шапку окна за верх экрана.
+    {% endcomment %}
+    <div class="app-machine-uses">
+      <h3 class="app-section-title">Упражнения</h3>
+      {% if machines %}
+        <div class="app-pick-list">
+          {% for machine in machines %}
+            <a class="app-pick-row" href="{% url 'exercise_detail' machine.exercise_id %}">
+              <span class="app-row-text">
+                <span class="app-pick-name is-wrap">{{ machine.exercise.name }}</span>
+                <span class="app-row-meta">{{ machine.location.name }}{% if kind == "brand" %} · {{ machine.model.name|default:"модель не указана" }}{% endif %}</span>
+              </span>
+              {% include "includes/chevron.html" %}
+            </a>
+          {% endfor %}
+        </div>
+      {% elif sports or others %}
+        <p class="app-queue-hint">Ни у одного упражнения.</p>
+      {% else %}
+        <p class="app-queue-hint mb-0">
+          Пока нигде не {% if kind == "model" %}указана{% else %}указан{% endif %}. Тренажёр
+          выбирают на странице упражнения — для каждого места, а в кардио — в блоке «Тренажёр».
+        </p>
+      {% endif %}
+
+      {% if sports %}
+        <h3 class="app-section-title mt-3">Кардио</h3>
+        <div class="app-pick-list">
+          {% for sport in sports %}
+            <div class="app-pick-row is-static">
+              <span class="app-sport-dot" style="--dot: var(--app-sport-{{ sport.color_key }})"></span>
+              <span class="app-row-text">
+                <span class="app-pick-name is-wrap">{{ sport.name }}</span>
+                <span class="app-row-meta">{{ sport.parts_label }} · {% if sport.last_at %}последний {{ sport.last_at|date:"j b" }}{% else %}в плане{% endif %}</span>
+              </span>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+      {% if others %}
+        <p class="app-queue-hint mt-3 mb-0">У других участников: {{ others }}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>

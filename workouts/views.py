@@ -3716,6 +3716,32 @@ MACHINE_USES = {
 }
 
 
+def machine_field(item):
+    """Поле, которым тренажёр упражнения и кардио-часть ссылаются на запись."""
+    return "brand" if isinstance(item, MachineBrand) else "model"
+
+
+def machine_cardio_by_sport(user, item):
+    """Свои кардио-части с записью справочника — по видам спорта: сколько и когда.
+
+    Один запрос от Sport, а не от частей: точке цвета вида спорта нужен сам
+    объект. Фильтр стоит до annotate, поэтому Count и Max считают только те
+    части, что прошли фильтр, — Django берёт для них тот же JOIN. Части — в
+    любом состоянии тренировки, как в подписи «в M кардио»: план с тренажёром
+    держит запись так же, как записанная тренировка. У черновика started_at
+    пуст, и Max его пропускает — у вида спорта только с планами даты нет.
+    """
+    lookup = {f"cardio_parts__{machine_field(item)}": item}
+    sports = list(
+        Sport.objects.filter(cardio_parts__workout__user=user, **lookup)
+        .annotate(parts=Count("cardio_parts"), last_at=Max("cardio_parts__workout__started_at"))
+        .order_by(F("last_at").desc(nulls_last=True), "name")
+    )
+    for sport in sports:
+        sport.parts_label = f"{sport.parts} {ru_plural(sport.parts, 'раз', 'раза', 'раз')}"
+    return sports
+
+
 def label_machine_uses(items):
     """Подписи использования — производителям и их моделям из prefetch."""
     items = list(items)
@@ -3755,7 +3781,8 @@ class MyMachinesView(LoginRequiredMixin, TemplateView):
     производителя человек не может, а свою модель у него — может. Администратор
     ниже видит общий список с теми же действиями. Число использований — числом
     тренажёров упражнений (любого пользователя: им держится удаление),
-    аннотацией в тех же запросах.
+    аннотацией в тех же запросах. Каких именно — показывает окно записи
+    (MachineDetailView), и там только своё.
     """
 
     template_name = "workouts/my_machines.html"
@@ -4000,17 +4027,75 @@ class MyRequestsView(LoginRequiredMixin, TemplateView):
 class MachineItemMixin(LoginRequiredMixin):
     """Запись справочника тренажёров по kind (brand | model) и pk.
 
-    Чужая запись — 404, общая — 404 всем, кроме администратора.
+    Чужая запись — 404, общая — 404 всем, кроме администратора. annotations
+    добавляются к тому же запросу (окну записи — счётчики использования).
     """
 
-    def get_item(self):
+    def get_item(self, **annotations):
         model = MACHINE_KINDS.get(self.kwargs["kind"])
         if model is None:
             raise Http404
         items = editable_machine_items(self.request.user, model)
         if model is MachineModel:
             items = items.select_related("brand")
+        if annotations:
+            items = items.annotate(**annotations)
         return get_object_or_404(items, pk=self.kwargs["pk"])
+
+
+# Слово длиннее не склеивается с карандашом заголовка окна: строка заголовка на
+# телефоне — около двадцати знаков, и склейка вытолкнула бы слово за край.
+TITLE_GLUE_CHARS = 16
+
+
+class MachineDetailView(MachineItemMixin, View):
+    """Окно записи на «Моих тренажёрах»: где стоит этот производитель или модель.
+
+    Упражнения — свои тренажёры упражнений с этой записью, строка — упражнение
+    × место: ровно это считает подпись «у N упражнений». Кардио — свои части по
+    видам спорта. Фильтр по request.user — точка изоляции: подпись строки
+    считает всех пользователей (ею держится удаление), поэтому у общей записи
+    администратор видит своё списком, а чужое — только числом (пункт 7).
+    Счётчики приходят вместе с записью, и пустой счётчик запроса не делает.
+    Переименование — тапом по заголовку окна.
+    """
+
+    template_name = "workouts/_machine_detail_modal.html"
+
+    def get(self, request, kind, pk):
+        item = self.get_item(**MACHINE_USES)
+        machines = []
+        if item.uses:
+            machines = list(
+                ExerciseMachine.objects.filter(user=request.user, **{machine_field(item): item})
+                .select_related("exercise", "location", "model")
+                .order_by("exercise__name", "location__name", "pk")
+            )
+        sports = machine_cardio_by_sport(request.user, item) if item.cardio_uses else []
+        others = ""
+        if item.is_global:
+            # max — на случай чужой записи, попавшей между двумя запросами.
+            rest_machines = max(0, item.uses - len(machines))
+            rest_cardio = max(0, item.cardio_uses - sum(sport.parts for sport in sports))
+            if rest_machines or rest_cardio:
+                others = machine_uses_label(rest_machines, rest_cardio)
+        # Карандаш заголовка — неразрывно с последним словом: перед картинкой
+        # браузер переносит строку где угодно, и под названием во всю ширину
+        # окна карандаш уезжал на строку один. Длинное слово без пробелов не
+        # склеивается — ему нужно переноситься.
+        head, _, tail = item.name.rpartition(" ")
+        if len(tail) > TITLE_GLUE_CHARS:
+            head, tail = item.name, ""
+        context = {
+            "item": item,
+            "kind": kind,
+            "machines": machines,
+            "sports": sports,
+            "others": others,
+            "name_head": head,
+            "name_tail": tail,
+        }
+        return render(request, self.template_name, context)
 
 
 class MachineRenameView(MachineItemMixin, View):
@@ -4158,7 +4243,7 @@ class MachineDeleteView(MachineItemMixin, View):
 
     def uses_split(self, item):
         """(тренажёров упражнений, кардио-частей) с этой записью."""
-        lookup = {"brand" if isinstance(item, MachineBrand) else "model": item}
+        lookup = {machine_field(item): item}
         return (
             ExerciseMachine.objects.filter(**lookup).count(),
             CardioPart.objects.filter(**lookup).count(),

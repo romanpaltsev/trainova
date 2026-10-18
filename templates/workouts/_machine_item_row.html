@@ -1,6 +1,9 @@
 {% comment %}
-  Строка записи справочника тренажёров на «Моих тренажёрах»: название —
-  кнопка переименования (карандаш внутри, приём строк мест), справа удаление.
+  Строка записи справочника тренажёров на «Моих тренажёрах»: название
+  открывает окно записи — где она стоит (MachineDetailView), переименование
+  живёт там, в заголовке. Шеврон у названия — та же встроенная подсказка, что
+  карандаш у строки места (класс, размер и отступ его), поэтому строка не
+  сдвинулась ни на пиксель. Справа удаление.
   Ждёт item, kind (brand | model), uses, meta (необязательна); share="global" —
   иконка «Сделать общим» (администратору у своих записей), share="propose" —
   «Предложить в общий список» и статус последней заявки (item.request_status
@@ -19,10 +22,13 @@
     </button>
   {% endif %}
   <button type="button" class="app-row-text app-location-edit"
-          hx-get="{% url 'machine_rename' kind item.pk %}"
-          hx-target="#modal" hx-swap="innerHTML"
-          aria-label="Переименовать {{ item.name }}">
-    <span class="app-row-name">{{ item.name }}{% include "includes/pencil.html" %}</span>
+          hx-get="{% url 'machine_detail' kind item.pk %}"
+          hx-target="#modal" hx-swap="innerHTML" aria-haspopup="dialog">
+    {% comment %}Перевод строки перед <svg> — тот же пробел, что давал инклуд карандаша.{% endcomment %}
+    <span class="app-row-name">{{ item.name }}
+      <svg class="app-note-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span>
     <span class="app-row-meta">{% if meta %}{{ meta }} · {% endif %}{{ uses }}{% if author %} · добавил {{ author }}{% endif %}{% if share == "propose" and item.request_status == "pending" %} · заявка на рассмотрении{% elif share == "propose" and item.request_status == "rejected" %} · отклонено: {{ item.request_reason }}{% endif %}</span>
   </button>
   {% if share == "global" %}

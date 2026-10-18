@@ -1474,6 +1474,25 @@ a.btn {
 
 .app-pick-name + .app-pick-chevron { margin-left: auto; }
 
+/* Окно записи «Моих тренажёров»: упражнения и кардио — одной прокруткой под
+   шапкой. У шторки телефона предела высоты нет, и два списка со своими
+   пределами (по 50vh у .app-pick-list) выталкивали шапку с крестиком за верх
+   экрана. dvh — видимая высота: на iPhone vh считает и спрятанные панели. */
+.app-machine-uses {
+  max-height: 60vh;
+  max-height: 60dvh;
+  overflow-y: auto;
+}
+.app-machine-uses .app-pick-list {
+  max-height: none;
+  overflow: visible;
+}
+
+/* Строка-сведение без перехода (кардио в окне записи «Моих тренажёров»):
+   ритм строк списка, но без подсветки при наведении — см. блок hover. Точка
+   вида спорта не сжимается, когда длинное название переносится. */
+.app-pick-row.is-static > .app-sport-dot { flex: none; }
+
 .app-pick-meta ~ .app-pick-chevron { margin-left: 0.5rem; }
 
 .app-pick-create {
@@ -2418,6 +2437,16 @@ a.btn {
   text-align: left;
 }
 
+/* В шапке окна (окно записи «Моих тренажёров») заголовок-кнопка — мелкий
+   шрифт 1.25rem: до тач-таргета её дотягивает высота, а не шрифт. Шапку это не
+   растит — крестик рядом уже 44px. Длинное имя без пробелов переносится, а не
+   распирает окно. Чтобы карандаш не уезжал на строку один, шаблон склеивает
+   его с последним словом (text-nowrap). */
+.app-modal-title .app-title-edit {
+  min-height: var(--app-tap-target);
+  overflow-wrap: anywhere;
+}
+
 /* Звезда «место по умолчанию»: приглушённая у обычного места, акцентная у
    выбранного. Заливку переключает атрибут fill в разметке — иначе пустой и
    залитый контур пришлось бы держать двумя SVG. */
@@ -2824,6 +2853,9 @@ a.btn {
     background-color: var(--app-raised);
     color: var(--app-text);
   }
+
+  /* Строка без перехода не подсвечивается: подсветка обещала бы клик. */
+  .app-pick-row.is-static:hover { background-color: transparent; }
 
   button.app-photo-thumb:hover { border-color: var(--app-text-muted); }
 

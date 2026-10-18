@@ -1,6 +1,8 @@
 {% comment %}
   Переименование производителя или модели (MachineRenameView). Успех —
-  HX-Refresh, ошибка — это же окно с подсказкой.
+  HX-Refresh, ошибка — это же окно с подсказкой. Открывается из окна записи
+  (заголовок с карандашом), поэтому «Отмена» возвращает туда, как «← К
+  моделям» в окне фото; крестик и Esc закрывают всё.
 {% endcomment %}
 <div class="app-modal-backdrop" x-data @keydown.escape.window="$root.remove()">
   <div class="app-card app-modal" role="dialog" aria-modal="true"
@@ -24,7 +26,8 @@
       {% for error in form.name.errors %}<div class="invalid-feedback d-block">{{ error }}</div>{% endfor %}
       <div class="d-flex gap-2 mt-3">
         <button type="submit" class="btn btn-accent flex-fill">Сохранить</button>
-        <button type="button" class="btn btn-quiet" @click="$root.remove()">Отмена</button>
+        <button type="button" class="btn btn-quiet" hx-get="{% url 'machine_detail' kind item.pk %}"
+                hx-target="#modal" hx-swap="innerHTML">Отмена</button>
       </div>
     </form>
   </div>
